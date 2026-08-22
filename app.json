@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "Mojito Wallet",
+    "slug": "mojito-me",
+    "version": "2.4.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b0a09",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0b0a09"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}

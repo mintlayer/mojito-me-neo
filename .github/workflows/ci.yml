@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Test, types, lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # theme.test.js + tsc --noEmit + eslint . — the same command contributors
+      # are asked to run locally, so CI can't disagree with the README.
+      - run: npm run check
+
+      # Catches anything that typechecks but won't bundle (native module
+      # resolution, Metro config drift).
+      - name: Bundle
+        run: npx expo export --platform android --output-dir .ci-export

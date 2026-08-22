@@ -1,0 +1,225 @@
+import React, { useState } from 'react';
+import type { Sheet } from './types';
+import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, CONTACTS, FEES } from '../data';
+import { C, G, alpha, white } from '../theme';
+import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, hairlineTop } from '../ui';
+
+export function SendScreen({ onClose }: Sheet) {
+  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [token, setToken] = useState(ASSETS.find((a) => a.sym === 'ML') ?? ASSETS[0]);
+  const [picker, setPicker] = useState(false);
+  const [address, setAddress] = useState('');
+  const [amount, setAmount] = useState('');
+  const [feeTier, setFeeTier] = useState<keyof typeof FEES>('standard');
+  const fee = FEES[feeTier];
+
+  if (step === 2) {
+    return (
+      <SuccessScreen
+        title="Sent"
+        summary={`${amount} ${token.sym} → ${address.slice(0, 10)}…`}
+        onDone={onClose}
+        header={<SheetHeader onClose={onClose} />}
+        secondary={
+          <Btn
+            tone="ghost"
+            className="w-full mt-1"
+            onPress={() => Linking.openURL('https://explorer.mintlayer.org/tx/0x4f2ab91c')}>
+            View on explorer →
+          </Btn>
+        }>
+        <Card className="w-full mt-6 p-3.5 rounded-[14px] gap-2">
+          <KVRow k="TX HASH" v="0x4f2a…b91c" tone={C.text1} />
+          <KVRow k="STATUS" v="● Confirming · 1/12" tone={C.amber} />
+        </Card>
+      </SuccessScreen>
+    );
+  }
+
+  if (step === 1) {
+    const usd = (parseFloat(amount || '0') * token.price).toFixed(2);
+    const rows: [string, React.ReactNode][] = [
+      ['To', <Txt key="to" mono className="text-[12px]">{address}</Txt>],
+      ['Network', <ChainBadge key="net" chain={token.chain} />],
+      ['Network fee', `${fee.cost} ${token.sym} · ~$0.00`],
+      ['Arrival', <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{fee.eta}</Txt>],
+      ['Total', `${(parseFloat(amount || '0') + fee.cost).toFixed(5)} ${token.sym}`],
+    ];
+    return (
+      <Screen>
+        <SheetHeader title="Review" onClose={onClose} onBack={() => setStep(0)} />
+        <View className="px-6 pt-5">
+          <View className="items-center mb-4">
+            <Label>You send</Label>
+            <View className="flex-row items-baseline gap-1.5 mt-1.5">
+              <Txt mono className="text-[38px] font-bold tracking-tightest">
+                {amount}
+              </Txt>
+              <Txt className="text-[18px] text-text2">{token.sym}</Txt>
+            </View>
+            <Txt mono className="text-[13px] text-text2 mt-1">
+              ≈ ${usd}
+            </Txt>
+          </View>
+
+          <Card className="p-3.5 rounded-[14px]">
+            {rows.map(([k, v], i) => (
+              <View key={k} className="py-2.5" style={i > 0 ? hairlineTop : undefined}>
+                <KVRow k={k} v={v} tone={C.text0} />
+              </View>
+            ))}
+          </Card>
+
+          <Callout icon="fingerprint" className="mt-3.5">
+            <Txt className="text-[12px]">Authenticate with Face ID to send</Txt>
+          </Callout>
+
+          <Btn tone="primary" icon="lock" className="mt-4" onPress={() => setStep(2)}>
+            Hold to confirm · Send {amount} {token.sym}
+          </Btn>
+        </View>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen>
+      <SheetHeader title="Send" onClose={onClose} />
+
+      {/* Asset */}
+      <View className="px-6 pt-2">
+        <Label className="mb-2">Asset</Label>
+        <Pressable onPress={() => setPicker(true)}>
+          <Card className="p-3.5 rounded-[14px] flex-row items-center gap-3">
+            <TokenIcon symbol={token.sym} size={36} />
+            <View className="flex-1">
+              <View className="flex-row items-center gap-1.5">
+                <Txt className="text-[14px] font-semibold">{token.sym}</Txt>
+                <ChainBadge chain={token.chain} />
+              </View>
+              <Txt mono className="text-[11px] text-text2 mt-0.5">
+                Bal {token.amt.toLocaleString()} {token.sym}
+              </Txt>
+            </View>
+            <Icon name="chevron_r" size={14} color={C.text2} />
+          </Card>
+        </Pressable>
+      </View>
+
+      <TokenPicker
+        open={picker}
+        onClose={() => setPicker(false)}
+        symbols={ASSET_SYMBOLS}
+        value={token.sym}
+        balances={ASSET_BALANCES}
+        onSelect={(s) => {
+          const next = ASSETS.find((a) => a.sym === s);
+          if (next) {
+            setToken(next);
+            setAmount('');
+          }
+        }}
+      />
+
+      {/* Amount */}
+      <View className="px-6 pt-5 items-center">
+        <View className="flex-row items-baseline gap-1.5">
+          <TextInput
+            value={amount}
+            onChangeText={setAmount}
+            placeholder="0"
+            placeholderTextColor={C.text3}
+            keyboardType="decimal-pad"
+            accessibilityLabel="Amount to send"
+            className="font-mono text-[56px] font-bold text-text0 text-center p-0 min-w-[80px]"
+          />
+          <Txt className="text-[20px] text-text2 font-medium">{token.sym}</Txt>
+        </View>
+        <Txt mono className="text-[13px] text-text2 mt-1">
+          ≈ ${(parseFloat(amount || '0') * token.price).toFixed(2)} USD
+        </Txt>
+        <View className="w-full mt-3.5">
+          <PctButtons onPick={(f) => setAmount(String(token.amt * f))} />
+        </View>
+      </View>
+
+      {/* Recipient */}
+      <View className="px-6 pt-6">
+        <View className="flex-row justify-between mb-2">
+          <Label>Recipient</Label>
+          <Txt className="text-[11px]" style={{ color: C.amber }}>
+            Address book
+          </Txt>
+        </View>
+        <Card className="p-3.5 rounded-[14px] flex-row items-center gap-2.5">
+          <TextInput
+            value={address}
+            onChangeText={setAddress}
+            placeholder="0x… · mtc1q… · ENS"
+            placeholderTextColor={C.text3}
+            autoCapitalize="none"
+            accessibilityLabel="Recipient address"
+            className="flex-1 font-mono text-[13px] text-text0 p-0"
+          />
+          <Icon name="scan" size={18} color={C.amber} />
+          <Icon name="qr" size={18} color={C.text2} />
+        </Card>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
+          {CONTACTS.map((c) => (
+            <Pressable
+              key={c.name}
+              onPress={() => setAddress(c.address)}
+              className="flex-row items-center gap-2 px-3 py-2 rounded-full"
+              style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+              <Avatar letter={c.name[0]} size={22} radius={11} colors={G.avatar} />
+              <Txt className="text-[12px] font-medium">{c.name}</Txt>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* Fee tier */}
+      <View className="px-6 pt-5">
+        <Label className="mb-2">Network fee</Label>
+        <View className="flex-row gap-1.5">
+          {(Object.keys(FEES) as (keyof typeof FEES)[]).map((k) => {
+            const on = feeTier === k;
+            return (
+              <Pressable
+                key={k}
+                onPress={() => setFeeTier(k)}
+                className="flex-1 p-3 rounded-xl"
+                style={{
+                  backgroundColor: on ? alpha(C.amber, 0.08) : white(0.03),
+                  borderWidth: 1,
+                  borderColor: on ? alpha(C.amber, 0.4) : C.lineSoft,
+                }}>
+                <Txt className="text-[12px] font-semibold capitalize" style={{ color: on ? C.amber : C.text0 }}>
+                  {k}
+                </Txt>
+                <Txt mono className="text-[10px] text-text2 mt-0.5">
+                  {FEES[k].eta}
+                </Txt>
+                <Txt mono className="text-[10px] text-text3 mt-0.5">
+                  {FEES[k].cost} {token.sym}
+                </Txt>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+
+      <View className="px-6 pt-6">
+        <Btn tone="primary" disabled={!amount || !address} onPress={() => setStep(1)}>
+          Review send
+        </Btn>
+      </View>
+    </Screen>
+  );
+}
+
+/* ══ Receive ════════════════════════════════════════════════ */
+
+/* ══ Send ═══════════════════════════════════════════════════ */
