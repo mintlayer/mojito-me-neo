@@ -115,7 +115,7 @@ export function FlowX({
     <Animated.View
       pointerEvents="none"
       style={[
-        StyleSheet.absoluteFillObject,
+        StyleSheet.absoluteFill,
         {
           opacity: v.interpolate({ inputRange: [0, 0.2, 0.8, 1], outputRange: [0, 1, 1, 0] }),
           transform: [{ translateX: v.interpolate({ inputRange: [0, 1], outputRange: [-track * 0.3, track * 1.3] }) }],
