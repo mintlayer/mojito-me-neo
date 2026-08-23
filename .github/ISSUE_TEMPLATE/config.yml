@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/mintlayer/mojito-me-neo/security/policy
+    about: Do not open a public issue. Email security@mintlayer.org — see our security policy.
+  - name: 💬 Mintlayer community
+    url: https://www.mintlayer.org
+    about: General questions about Mojito or Mintlayer.

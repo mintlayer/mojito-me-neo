@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+.expo-export/
+.expo-export-web/
+dist/
+ios/
+android/
+*.log
+.DS_Store

@@ -1,0 +1,77 @@
+name: 🐛 Bug report
+description: Something in the app behaves incorrectly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file this.
+
+        **Before you start:** Mojito ME is pre-production and its cryptography is deliberately
+        mocked — the demo recovery phrase, the stand-in checksum, the truncated BIP39 list and
+        the simulated biometrics are all expected. See the README's *Project status* section.
+
+        **Security issues:** do not file them here. Email security@mintlayer.org.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the Bridge tab
+        2. Tap the destination chain
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Android (emulator)
+        - Android (device)
+        - iOS (simulator)
+        - iOS (device)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: OS version / device
+      placeholder: Android 15, Pixel 7 emulator
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Metro output or screenshots
+      description: Paste any red-screen error or relevant Metro logs. Drag images in directly.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I ran `npm run check` and it passes on my machine
+        - label: This is not about the deliberately mocked cryptography
+          required: true

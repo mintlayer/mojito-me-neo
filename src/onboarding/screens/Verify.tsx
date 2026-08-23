@@ -1,0 +1,105 @@
+import React, { useState } from 'react';
+import { Pressable, View } from 'react-native';
+import { BIP39, SEED } from '.././data';
+import { C, alpha, white } from '../../theme';
+import { Btn, Icon, Txt } from '../../ui';
+import { Body, Column, StepHeader, WordChip, useSeedProtection } from '.././ui';
+import type { Ctx } from '../context';
+
+export function Verify({ ctx }: { ctx: Ctx }) {
+  // The chips and filled slots expose 3 of the 24 words — protect it too.
+  useSeedProtection();
+  // Lazy useState, not useMemo: React treats useMemo as a performance hint it
+  // may discard, which would reshuffle the answer key mid-quiz. useState's
+  // initialiser is guaranteed to run exactly once.
+  const [quiz] = useState(() => {
+    const shuffle = <T,>(xs: T[]) => [...xs].sort(() => Math.random() - 0.5);
+    const idx = shuffle([...Array(SEED.length).keys()])
+      .slice(0, 3)
+      .sort((a, b) => a - b);
+    const distractors = shuffle(BIP39.filter((w) => !SEED.includes(w))).slice(0, 6);
+    return { idx, chips: shuffle([...idx.map((i) => SEED[i]), ...distractors]) };
+  });
+
+  const [fills, setFills] = useState<Record<number, string>>({});
+  const [err, setErr] = useState<string | null>(null);
+  const [wrongChip, setWrongChip] = useState<string | null>(null);
+
+  const active = quiz.idx.find((i) => fills[i] === undefined);
+  const done = active === undefined;
+
+  const pick = (w: string) => {
+    if (done || Object.values(fills).includes(w)) return;
+    if (w === SEED[active]) {
+      setFills((f) => ({ ...f, [active]: w }));
+      setErr(null);
+      return;
+    }
+    setErr(`That's not word ${active + 1} — check your written backup`);
+    setWrongChip(w);
+    setTimeout(() => setWrongChip(null), 500);
+  };
+
+  return (
+    <Column>
+      <StepHeader onBack={ctx.pop} step={4} />
+      <Body className="px-[22px] pt-4 pb-7">
+        <Txt className="text-[24px] font-bold tracking-tightest">Verify your backup</Txt>
+        <Txt className="text-[13px] text-text2 mt-1.5">Pick the right word for each position.</Txt>
+
+        <View className="gap-2.5 mt-5">
+          {quiz.idx.map((i) => {
+            const filled = fills[i] !== undefined;
+            const isActive = i === active;
+            return (
+              <View
+                key={i}
+                className="flex-row items-center gap-2.5 px-3.5 py-3 rounded-xl"
+                style={{
+                  backgroundColor: white(0.03),
+                  borderWidth: 1,
+                  borderColor: filled ? alpha(C.green, 0.4) : isActive ? (err ? C.red : C.amber) : C.lineSoft,
+                }}>
+                <Txt mono className="text-[11px] text-text3 min-w-[52px]">
+                  Word {i + 1}
+                </Txt>
+                <Txt mono className="flex-1 text-[14px] font-medium" style={{ color: filled ? C.text0 : C.text3 }}>
+                  {fills[i] ?? (isActive ? '· · ·' : '—')}
+                </Txt>
+                {filled && <Icon name="check" size={14} color={C.green} stroke={2.5} />}
+                {filled && (
+                  <Pressable
+                    onPress={() =>
+                      setFills((f) => {
+                        const n = { ...f };
+                        delete n[i];
+                        return n;
+                      })
+                    }>
+                    <Icon name="close" size={12} color={C.text3} />
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        <Txt className="text-[12px] text-center mt-3 h-4" style={{ color: C.red }}>
+          {err ?? ''}
+        </Txt>
+
+        <View className="flex-row flex-wrap gap-[7px] justify-center mt-2.5">
+          {quiz.chips.map((w) => (
+            <WordChip key={w} word={w} used={Object.values(fills).includes(w)} wrong={wrongChip === w} onPress={() => pick(w)} />
+          ))}
+        </View>
+
+        <Btn tone="primary" className="mt-6" disabled={!done} onPress={() => ctx.finish(false)}>
+          {done ? 'Backup verified · Continue' : 'Continue'}
+        </Btn>
+      </Body>
+    </Column>
+  );
+}
+
+/* ══ 3b · Import ════════════════════════════════════════════ */
