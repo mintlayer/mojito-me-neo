@@ -4,6 +4,8 @@
 export const en = {
   // common
   'common.cancel': 'Cancel',
+  'common.back': 'Go back',
+  'common.delete': 'Delete',
   'common.done': 'Done',
   'common.copy': 'Copy',
   'common.copied': '✓ Copied',

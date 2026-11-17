@@ -1,6 +1,7 @@
 import React, { forwardRef } from 'react';
 import { C, alpha, white } from '../../theme';
 import { TextInput, View } from 'react-native';
+import { t } from '../../i18n';
 import { Txt } from '../../ui';
 
 export const WordSlot = forwardRef<
@@ -39,7 +40,7 @@ export const WordSlot = forwardRef<
         onChangeText={onChangeText}
         onFocus={onFocus}
         onSubmitEditing={onSubmit}
-        accessibilityLabel={`Word ${index + 1}`}
+        accessibilityLabel={t('onboarding.verify.word', { n: index + 1 })}
         blurOnSubmit={false}
         autoCapitalize="none"
         autoCorrect={false}

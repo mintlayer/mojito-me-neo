@@ -1,13 +1,14 @@
 // Back chevron + segmented progress + `n/total`. Omit `step` for back only.
 import React from 'react';
 import { View } from 'react-native';
+import { t } from '../../i18n';
 import { C, white } from '../../theme';
 import { IconBtn, Txt } from '../../ui';
 
 export function StepHeader({ onBack, step, total = 4 }: { onBack?: () => void; step?: number; total?: number }) {
   return (
     <View className="flex-row items-center gap-2.5 px-5">
-      <IconBtn name="arrow_l" size={32} iconSize={16} stroke={2} onPress={onBack} label="Go back" />
+      <IconBtn name="arrow_l" size={32} iconSize={16} stroke={2} onPress={onBack} label={t('common.back')} />
       {step ? (
         <>
           <View className="flex-1 flex-row gap-1">

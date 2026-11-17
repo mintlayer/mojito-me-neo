@@ -2,6 +2,7 @@ import React from 'react';
 import { C } from '../../theme';
 import { Icon, Txt, tile } from '../../ui';
 import { Pressable, View } from 'react-native';
+import { t } from '../../i18n';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
@@ -13,7 +14,7 @@ function Key({ label, onPress, children }: { label?: string; onPress: () => void
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label ?? 'Delete'}
+      accessibilityLabel={label ?? t('common.delete')}
       className="h-14 rounded-[14px] items-center justify-center"
       style={[tile(), { width: '31%' }]}>
       {children ?? <Txt className="text-[22px] font-medium">{label}</Txt>}
