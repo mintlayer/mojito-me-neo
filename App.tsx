@@ -9,9 +9,10 @@ import './global.css';
 
 import { t } from './src/i18n';
 import { ProvidersProvider } from './src/data/providers/context';
+import { VaultAuthRequiredError } from './modules/mojito-core';
 import { walletVault, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
-import { detectBio } from './src/onboarding/ui/useBioScan';
+import { detectBio, stepUpDeviceAuth } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, type OnboardingResult, UnlockScreen } from './src/onboarding';
@@ -129,13 +130,27 @@ function Shell() {
   }, []);
 
   const unlock = () => {
-    void walletVault
-      .meta()
-      .then((meta) => {
+    void (async () => {
+      try {
+        const meta = await walletVault.meta();
         setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
         setLocked(false);
-      })
-      .catch(() => setLocked(true));
+      } catch (e) {
+        // The native key gate can refuse the decrypt without a fresh
+        // biometric: one device step-up prompt, then a single retry.
+        if (e instanceof VaultAuthRequiredError && (await stepUpDeviceAuth())) {
+          try {
+            const meta = await walletVault.meta();
+            setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
+            setLocked(false);
+            return;
+          } catch {
+            // fall through to staying locked
+          }
+        }
+        setLocked(true);
+      }
+    })();
   };
 
   const finishOnboarding = (r: OnboardingResult) => {

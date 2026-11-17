@@ -3,6 +3,8 @@ import { Enter } from '../ui';
 import type { Bio } from './ui';
 import type { Ctx, ScreenId } from './context';
 import { walletVault, type VaultMeta } from '../storage/walletVault';
+import { VaultAuthRequiredError } from '../../modules/mojito-core';
+import { stepUpDeviceAuth } from './ui';
 import { Welcome } from './screens/Welcome';
 import { Secure } from './screens/Secure';
 import { PinSet } from './screens/PinSet';
@@ -75,7 +77,17 @@ export function Onboarding({
             wordCount: words.length === 12 ? 12 : 24,
             hasPassphrase: false,
           };
-          await walletVault.save(words, meta);
+          try {
+            await walletVault.save(words, meta);
+          } catch (e) {
+            // The native key gate can refuse the first seal without a fresh
+            // biometric: one device step-up prompt, then a single retry.
+            // Anything else fails loudly: the wallet would otherwise not
+            // survive a relaunch.
+            if (!(e instanceof VaultAuthRequiredError)) throw e;
+            if (!(await stepUpDeviceAuth())) throw e;
+            await walletVault.save(words, meta);
+          }
         }
         onDone({ deferred, bio, biometrics });
       })();

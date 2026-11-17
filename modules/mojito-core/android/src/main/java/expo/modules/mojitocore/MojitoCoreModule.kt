@@ -1,7 +1,10 @@
 package expo.modules.mojitocore
 
+import android.hardware.biometrics.BiometricManager
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.security.keystore.UserNotAuthenticatedException
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -55,6 +58,8 @@ class MojitoCoreModule : Module() {
             "tag" to hex(tag),
           ),
         )
+      } catch (e: UserNotAuthenticatedException) {
+        promise.reject(AUTH_REQUIRED_CODE, "user authentication required for $keyId", e)
       } catch (e: Exception) {
         promise.reject(ERR_CODE, "seal failed for $keyId", e)
       }
@@ -68,6 +73,11 @@ class MojitoCoreModule : Module() {
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, unhex(iv)))
         val joined = unhex(ct) + unhex(tag)
         promise.resolve(cipher.doFinal(joined))
+      } catch (e: UserNotAuthenticatedException) {
+        // Auth-gated key without a fresh biometric (covers the invalidated
+        // key after new biometric enrolment, which is a subclass). The TS
+        // facade maps this code to VaultAuthRequiredError and re-prompts.
+        promise.reject(AUTH_REQUIRED_CODE, "user authentication required for $keyId", e)
       } catch (e: Exception) {
         // Wrong key or tampered blob: surface as a failure, never log bytes.
         promise.reject(ERR_CODE, "open failed for $keyId", e)
@@ -190,24 +200,39 @@ class MojitoCoreModule : Module() {
 
   private fun alias(keyId: String) = keyAliasPrefix + keyId
 
-  // M1 note: once biometric gating lands, regenerate keys with
-  // setUserAuthenticationRequired(true) when biometrics are enrolled.
+  // Enrolled biometrics gate the vault key on creation: auth-per-use keys
+  // cannot be satisfied by the in-app PIN, so a PIN-only wallet (no
+  // biometrics enrolled) keeps the app-level PIN as its gate.
+  private fun biometricsEnrolled(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+    val context = appContext.reactContext ?: return false
+    val manager = context.getSystemService(BiometricManager::class.java) ?: return false
+    return manager.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
+      BiometricManager.BIOMETRIC_SUCCESS
+  }
+
   private fun loadOrCreateKey(keyId: String): java.security.Key {
     val ks = keyStore()
     if (ks.containsAlias(alias(keyId))) {
       ks.getKey(alias(keyId), null)?.let { return it }
     }
-    val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
-    generator.init(
-      KeyGenParameterSpec.Builder(
-        alias(keyId),
-        KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
-      )
-        .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-        .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-        .setKeySize(256)
-        .build(),
+    val builder = KeyGenParameterSpec.Builder(
+      alias(keyId),
+      KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
     )
+      .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+      .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+      .setKeySize(256)
+    // Real user-auth gating: every cipher use needs a fresh biometric, and
+    // enrolling new biometrics invalidates the key (the sealed blob stays;
+    // the wallet recovers only via the app wipe). Keys created before this
+    // gate shipped stay ungated until the next wipe and re-onboarding.
+    if (biometricsEnrolled()) {
+      builder.setUserAuthenticationRequired(true)
+      builder.setInvalidatedByBiometricEnrollment(true)
+    }
+    val generator = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE)
+    generator.init(builder.build())
     generator.generateKey()
     return ks.getKey(alias(keyId), null)
   }
@@ -231,6 +256,7 @@ class MojitoCoreModule : Module() {
 
   companion object {
     private const val ERR_CODE = "MOJITO_CORE"
+    private const val AUTH_REQUIRED_CODE = "MOJITO_AUTH_REQUIRED"
     private const val BINDINGS_CODE = "BINDINGS_NOT_IMPLEMENTED"
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val TRANSFORM = "AES/GCM/NoPadding"

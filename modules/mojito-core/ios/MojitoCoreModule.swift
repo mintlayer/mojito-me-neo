@@ -1,5 +1,6 @@
 import CryptoKit
 import ExpoModulesCore
+import LocalAuthentication
 import Security
 
 // Mojito core facade. The crypto half is real: AES-256-GCM (CryptoKit) with a
@@ -15,6 +16,7 @@ public class MojitoCoreModule: Module {
   enum CoreError: Error {
     case status(OSStatus)
     case crypto(String)
+    case authRequired
   }
 
   public func definition() -> ModuleDefinition {
@@ -45,6 +47,8 @@ public class MojitoCoreModule: Module {
           "ct": hex(box.ciphertext),
           "tag": hex(box.tag),
         ])
+      } catch CoreError.authRequired {
+        promise.reject(AUTH_REQUIRED_CODE, "user authentication required for \(keyId)", CoreError.authRequired)
       } catch {
         promise.reject(ERR_CODE, "seal failed for \(keyId)", error)
       }
@@ -63,6 +67,11 @@ public class MojitoCoreModule: Module {
         let box = try AES.GCM.SealedBox(nonce: nonce, ciphertext: try unhex(ct), tag: try unhex(tag))
         let plain = try AES.GCM.open(box, using: key)
         promise.resolve(plain)
+      } catch CoreError.authRequired {
+        // Auth-gated key without a fresh biometric (cancelled prompt or a
+        // key invalidated by new enrolment). The TS facade maps this code to
+        // VaultAuthRequiredError and re-prompts.
+        promise.reject(AUTH_REQUIRED_CODE, "user authentication required for \(keyId)", CoreError.authRequired)
       } catch {
         // Wrong key or tampered blob: surface as a failure, never log bytes.
         promise.reject(ERR_CODE, "open failed for \(keyId)", error)
@@ -194,8 +203,21 @@ public class MojitoCoreModule: Module {
     var result: AnyObject?
     let status = SecItemCopyMatching(item as CFDictionary, &result)
     if status == errSecItemNotFound { return nil }
+    // An access-controlled item denied the read: the system biometric prompt
+    // was cancelled (errSecAuthFailed) or interaction is not allowed right
+    // now (errSecInteractionNotAllowed). Both map to the auth-required code.
+    if status == errSecAuthFailed || status == errSecInteractionNotAllowed {
+      throw CoreError.authRequired
+    }
     if status != errSecSuccess { throw CoreError.status(status) }
     return result as? Data
+  }
+
+  // Enrolled biometrics gate the vault key on creation: access-controlled
+  // items cannot be read with the in-app PIN, so a PIN-only wallet (no
+  // biometrics enrolled) keeps the app-level PIN as its gate.
+  private func biometricsEnrolled() -> Bool {
+    LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
   }
 
   private func loadOrCreateKey(_ keyId: String) throws -> SymmetricKey {
@@ -206,6 +228,20 @@ public class MojitoCoreModule: Module {
     var add = keyQuery(for: keyId)
     add[kSecValueData as String] = raw
     add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+    // Real user-auth gating: with enrolled biometrics the key item carries
+    // kSecAccessControlBiometryCurrentSet, so every Keychain read (and hence
+    // every seal/open) runs the system biometric prompt, and enrolling new
+    // biometrics invalidates the binding. Keys created before this gate
+    // shipped stay ungated until the next wipe and re-onboarding.
+    if biometricsEnrolled(),
+       let access = SecAccessControlCreateWithFlags(
+         kCFAllocatorDefault,
+         kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+         .biometryCurrentSet,
+         nil
+       ) {
+      add[kSecAttrAccessControl as String] = access
+    }
     let status = SecItemAdd(add as CFDictionary, nil)
     if status == errSecDuplicateItem {
       // First-use race: a concurrent seal() created the key; use the stored one.
@@ -254,4 +290,5 @@ private func unhex(_ value: String) throws -> Data {
 }
 
 private let ERR_CODE = "MOJITO_CORE"
+private let AUTH_REQUIRED_CODE = "MOJITO_AUTH_REQUIRED"
 private let BINDINGS_CODE = "BINDINGS_NOT_IMPLEMENTED"

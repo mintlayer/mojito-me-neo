@@ -15,5 +15,5 @@ export { StepHeader } from './StepHeader';
 export { Striped } from './Striped';
 export { WordChip } from './WordChip';
 export { WordSlot } from './WordSlot';
-export { useBioScan } from './useBioScan';
+export { stepUpDeviceAuth, useBioScan } from './useBioScan';
 export { usePinEntry } from './usePinEntry';

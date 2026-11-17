@@ -1,6 +1,8 @@
 // Expo module registration and the MojitoCore type surface. The native module
 // ships the crypto facade for real (secure random, AES-256-GCM seal and open
-// over Keychain or Keystore resident keys).
+// over Keychain or Keystore resident keys, with the vault key gated on user
+// authentication whenever biometrics are enrolled; the TS facade maps the
+// native auth-required rejection to VaultAuthRequiredError).
 //
 // Bindings implementation status (M1): the artifacts are vendored
 // (vendor/mintlayer, release wallet-bindings-v0.1.0) and linked from the
@@ -32,6 +34,20 @@ export type {
 
 /** Hex-string fields of an encrypted blob, versioned for future migrations. */
 export type SealedBlob = { v: 1; iv: string; ct: string; tag: string };
+
+/** The sealed-key surface requires user authentication (the native biometric
+ *  gate on Keychain/Keystore) and the OS denied or never ran the prompt.
+ *  Callers recover by running a device biometric step-up prompt and retrying
+ *  the failing operation once. */
+export class VaultAuthRequiredError extends Error {}
+
+/** Expo promise rejections carry their native code; the message is matched as
+ *  a fallback so a bridge that drops the code still maps to the typed error. */
+function isAuthRequiredRejection(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null;
+  if (err?.code === 'MOJITO_AUTH_REQUIRED') return true;
+  return /user authentication required/.test(err?.message ?? '');
+}
 
 type NativeCore = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
@@ -128,7 +144,13 @@ export const MojitoCore: MojitoCore = {
   async seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob> {
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
-    const blob = (await native['seal'](keyId, plaintext)) as { iv: string; ct: string; tag: string };
+    let blob: { iv: string; ct: string; tag: string };
+    try {
+      blob = (await native['seal'](keyId, plaintext)) as { iv: string; ct: string; tag: string };
+    } catch (e) {
+      if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to seal ' + keyId);
+      throw e;
+    }
     return { v: 1, iv: blob.iv, ct: blob.ct, tag: blob.tag };
   },
 
@@ -136,7 +158,12 @@ export const MojitoCore: MojitoCore = {
     requireIv(blob.iv);
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
-    return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
+    try {
+      return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
+    } catch (e) {
+      if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to open ' + keyId);
+      throw e;
+    }
   },
 
   async wipe(keyId: string): Promise<void> {
