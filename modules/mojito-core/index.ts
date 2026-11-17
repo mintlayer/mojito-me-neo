@@ -101,11 +101,26 @@ export interface MojitoCore extends MintlayerBindings {
   keyExists(keyId: string): Promise<boolean>;
 }
 
+/** Bridge-side guard: a negative count crashes iOS unrecoverably; keep the
+ *  requests bounded so a JS-side bug fails as a normal rejection. */
+const MAX_RANDOM_BYTES = 64 * 1024;
+
+function requireRandomLength(length: number): void {
+  if (!Number.isInteger(length) || length < 0 || length > MAX_RANDOM_BYTES) {
+    throw bindingsError(`secureRandom length must be an integer in 0..${MAX_RANDOM_BYTES}`);
+  }
+}
+
+function requireIv(iv: string): void {
+  if (iv.length !== 24 || !/^[0-9a-f]+$/i.test(iv)) throw bindingsError('iv must be 12 hex bytes');
+}
+
 // The interface and the concrete facade share the MojitoCore name on purpose:
 // the import gives callers the full typed surface and the callable singleton.
 // eslint-disable-next-line @typescript-eslint/no-redeclare
 export const MojitoCore: MojitoCore = {
   async secureRandom(length: number): Promise<Uint8Array> {
+    requireRandomLength(length);
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
     return toBytes(await native['secureRandom'](length));
@@ -119,6 +134,7 @@ export const MojitoCore: MojitoCore = {
   },
 
   async open(keyId: string, blob: SealedBlob): Promise<Uint8Array> {
+    requireIv(blob.iv);
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
     return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
