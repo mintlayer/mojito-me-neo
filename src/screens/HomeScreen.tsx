@@ -149,6 +149,10 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           <Enter key={a.labelKey} delay={i * 80} style={{ flex: 1 }}>
             <Pressable
               onPress={a.press}
+              accessibilityRole="button"
+              accessibilityLabel={t(a.labelKey)}
+              accessibilityHint={a.locked ? t('home.backup.banner') : undefined}
+              accessibilityState={a.locked ? { disabled: true } : undefined}
               className="py-3.5 rounded-2xl items-center gap-1.5"
               style={[tile(), { opacity: a.locked ? 0.45 : 1 }]}>
               <Icon name={a.icon} size={20} color={a.color} />
