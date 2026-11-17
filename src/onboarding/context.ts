@@ -20,6 +20,9 @@ export type Ctx = {
   /** Ends onboarding and hands the result back to the app. */
   finish: (deferred: boolean) => void;
   bio: Bio;
+  /** Device biometric capability, probed once per onboarding mount. False
+   *  means the PIN is the only lock: copy must not offer a bio fallback. */
+  bioAvailable: boolean;
   pin: string;
   setPin: (p: string) => void;
   flow: 'create' | 'import';

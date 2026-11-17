@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 import { Enter } from '../ui';
 import { t } from '../i18n';
@@ -6,6 +6,7 @@ import type { Bio } from './ui';
 import type { Ctx, ScreenId } from './context';
 import { walletVault, type VaultMeta } from '../storage/walletVault';
 import { SUPPORTED_COUNTS, type WordCount } from '../keys/bip39';
+import { detectBio } from './ui/useBioScan';
 import { Welcome } from './screens/Welcome';
 import { Secure } from './screens/Secure';
 import { PinSet } from './screens/PinSet';
@@ -39,7 +40,7 @@ const SCREENS: Record<ScreenId, React.ComponentType<{ ctx: Ctx }>> = {
 
 export function Onboarding({
   initial = 'welcome',
-  bio = 'face',
+  bio: bioProp,
   pinOnly = false,
   /** Backup re-entry: screens read the vault phrase instead of generating. */
   backup = false,
@@ -66,6 +67,29 @@ export function Onboarding({
   const [biometrics, setBiometrics] = useState(false);
   const [seedWords, setSeedWords] = useState<string[] | null>(null);
   const [seedEntropy, setSeedEntropy] = useState<Uint8Array | null>(null);
+  /** The biometric noun for copy and glyphs; null until the mount probe
+   *  lands (re-entries get the real value from the app session up front). */
+  const [bioState, setBioState] = useState<Bio | null>(bioProp ?? null);
+  /** Device capability, probed once per mount; drives the PIN-only copy. */
+  const [bioAvailable, setBioAvailable] = useState(false);
+  const bio = bioState ?? 'face';
+
+  // One capability probe per mount: the Secure and PinSet copy and glyphs
+  // must match the device (a fingerprint-only phone must never read
+  // "Face ID", and a device without biometrics must not be offered a bio
+  // fallback at all). Backup and change-PIN re-entries re-probe cheaply and
+  // converge on the same value the app session detected.
+  useEffect(() => {
+    let alive = true;
+    void detectBio().then((detected) => {
+      if (!alive) return;
+      if (detected) setBioState(detected);
+      setBioAvailable(detected !== null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const finish = useCallback(
     (deferred: boolean) => {
@@ -131,6 +155,7 @@ export function Onboarding({
     pop: () => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)),
     finish,
     bio,
+    bioAvailable,
     pin,
     setPin,
     flow,
