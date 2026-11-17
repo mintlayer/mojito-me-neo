@@ -113,10 +113,13 @@ export function Onboarding({
           const words = seedWords ?? [];
           if (words.length === 0) throw new Error('finish without a seed phrase');
           // Membership guard: imports accept 15/18/21-word phrases, so the
-          // stored count is the real length, never collapsed to 12 or 24.
-          const count = SUPPORTED_COUNTS.includes(words.length as WordCount)
-            ? (words.length as WordCount)
-            : 24;
+          // stored count is the real length. Anything outside the supported
+          // counts is a bug upstream and must not silently mislabel the
+          // metadata as 24 words.
+          if (!SUPPORTED_COUNTS.includes(words.length as WordCount)) {
+            throw new Error(`unsupported phrase length: ${words.length}`);
+          }
+          const count = words.length as WordCount;
           const meta: VaultMeta = {
             v: 1,
             createdAt: Date.now(),

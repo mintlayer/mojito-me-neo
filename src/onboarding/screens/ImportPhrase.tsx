@@ -3,7 +3,7 @@ import { TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { t } from '../../i18n';
 import { PHRASE_LENGTHS } from '../data';
-import { validateMnemonic } from '../../keys/bip39';
+import { isWordlistWord, normalizeWords, validateMnemonic } from '../../keys/bip39';
 import { BIP39_WORDS } from '../../keys/bip39Words';
 import { C, alpha } from '../../theme';
 import { Btn, Callout, hairlineTop, Txt } from '../../ui';
@@ -13,7 +13,6 @@ import type { Ctx } from '../context';
 const EMPTY_PHRASE: string[] = Array(24).fill('');
 
 const WORDLIST: readonly string[] = BIP39_WORDS;
-const WORD_SET = new Set(WORDLIST);
 
 /**
  * Import with real BIP39 validation: per-word membership over the complete
@@ -34,12 +33,12 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
 
   const slice = words.slice(0, len);
   const filled = slice.filter(Boolean).length;
-  const complete = filled === len && slice.every((w) => WORD_SET.has(w));
+  const complete = filled === len && slice.every(isWordlistWord);
 
   // Real checksum per keystroke batch: cheap (no PBKDF2), exact.
   useEffect(() => {
     const current = words.slice(0, len);
-    if (!(current.length > 0 && current.every((w) => WORD_SET.has(w)))) {
+    if (!(current.length > 0 && current.every(isWordlistWord))) {
       setSumState('pending');
       return;
     }
@@ -58,7 +57,9 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
   const suggestions = cur.length >= 1 ? WORDLIST.filter((w) => w.startsWith(cur) && w !== cur).slice(0, 8) : [];
 
   const applyPaste = (text: string) => {
-    const parts = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    // Same normalization as validation (NFKD, lowercase, whitespace split):
+    // pasting and typing must land on identical words.
+    const parts = normalizeWords(text);
     const L = PHRASE_LENGTHS.includes(parts.length) ? parts.length : 24;
     setLen(L);
     setWords(EMPTY_PHRASE.map((_, i) => parts[i] ?? ''));
@@ -82,7 +83,7 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
     refs.current[target]?.focus();
   };
 
-  const badWords = slice.some((w, i) => w && i !== active && !WORD_SET.has(w));
+  const badWords = slice.some((w, i) => w && i !== active && !isWordlistWord(w));
 
   /** Specific rejection copy: wrong count, unknown word, or bad checksum. */
   const submit = () => {
@@ -122,7 +123,7 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
         <View className="flex-row flex-wrap -m-[3px] mt-4">
           {slice.map((w, i) => {
             const isActive = i === active;
-            const bad = !!w && (isActive ? !WORDLIST.some((b) => b.startsWith(w)) : !WORD_SET.has(w));
+            const bad = !!w && (isActive ? !WORDLIST.some((b) => b.startsWith(w)) : !isWordlistWord(w));
             return (
               <View key={i} style={{ width: '33.333%', padding: 3 }}>
                 <WordSlot

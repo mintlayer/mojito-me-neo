@@ -88,6 +88,16 @@ const nativeStore: SecureStore = {
   },
 };
 
+/** One xorshift step; the double's two generators (seed, keystream) share it. */
+function xorshiftNext(state: number): number {
+  state ^= state << 13;
+  state >>>= 0;
+  state ^= state >>> 17;
+  state ^= state << 5;
+  state >>>= 0;
+  return state;
+}
+
 function randomBytes(length: number): Uint8Array {
   const globalCrypto = (globalThis as { crypto?: { getRandomValues(b: Uint8Array): Uint8Array } }).crypto;
   if (globalCrypto?.getRandomValues) return globalCrypto.getRandomValues(new Uint8Array(length));
@@ -96,11 +106,7 @@ function randomBytes(length: number): Uint8Array {
   const out = new Uint8Array(length);
   let state = (Date.now() ^ 0x9e3779b9) >>> 0 || 1;
   for (let i = 0; i < length; i++) {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state >>>= 0;
+    state = xorshiftNext(state);
     out[i] = state & 0xff;
   }
   return out;
@@ -123,11 +129,7 @@ function keystream(key: Uint8Array, iv: Uint8Array, length: number): Uint8Array 
   const out = new Uint8Array(length);
   let state = seed;
   for (let i = 0; i < length; i++) {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state >>>= 0;
+    state = xorshiftNext(state);
     out[i] = state & 0xff;
   }
   return out;

@@ -88,7 +88,9 @@ export async function btcReceiveAddresses(
 
 /**
  * Extended private key at a path under the account (m/branch/index), for the
- * M3 signing path. Never leaves a KeySession closure in callers.
+ * M3 signing path (decisions.md D11): no production caller in M1, only the
+ * parity tests; it lands with M3's BtcTxBuilder and must not grow callers
+ * before then.
  */
 export function btcPrivateKeyAt(
   words: string[],

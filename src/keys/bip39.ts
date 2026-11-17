@@ -7,7 +7,7 @@
 // fails loudly instead of generating keys from an unverified source.
 import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { BIP39_WORDS } from './bip39Words';
 import { devFallbackAllowed } from '../config/runtime';
@@ -65,6 +65,11 @@ export function normalizeWords(raw: string): string[] {
     .trim()
     .split(/\s+/)
     .filter((w) => w.length > 0);
+}
+
+/** Exact wordlist membership for the import UIs (slots, paste, badges). */
+export function isWordlistWord(word: string): boolean {
+  return WORD_INDEX.has(word);
 }
 
 /** 11 bits per word over the 2048-entry list. */
@@ -176,11 +181,7 @@ export async function mnemonicToSeed(words: string[], passphrase?: string): Prom
 /** 256-bit checksum over the bundled wordlist; asserted in bip39.test.ts so
  *  a corrupted or truncated list fails the build. */
 export function wordlistChecksum(): string {
-  let hex = '';
-  for (const byte of sha256(utf8ToBytes(WORDLIST.join(' ')))) {
-    hex += byte.toString(16).padStart(2, '0');
-  }
-  return hex;
+  return bytesToHex(sha256(utf8ToBytes(WORDLIST.join(' '))));
 }
 
 export { isBip39Error, SUPPORTED_COUNTS };

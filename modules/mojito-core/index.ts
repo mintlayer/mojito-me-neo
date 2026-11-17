@@ -61,6 +61,18 @@ function isKeyInvalidatedRejection(e: unknown): boolean {
   return err?.code === 'MOJITO_KEY_INVALIDATED';
 }
 
+/** Map a native seal/open rejection to the typed vault errors; null means
+ *  the rejection is not one of ours and passes through unchanged. */
+function mapVaultRejection(e: unknown, op: 'seal' | 'open', keyId: string): Error | null {
+  if (isAuthRequiredRejection(e)) {
+    return new VaultAuthRequiredError(`user authentication required to ${op} ${keyId}`);
+  }
+  if (isKeyInvalidatedRejection(e)) {
+    return new VaultKeyInvalidatedError(`vault key for ${keyId} is invalidated; restore from the recovery phrase`);
+  }
+  return null;
+}
+
 type NativeCore = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
 let nativeModule: NativeCore | null | undefined;
@@ -164,8 +176,8 @@ export const MojitoCore: MojitoCore = {
     try {
       blob = (await native['seal'](keyId, plaintext, gated)) as { iv: string; ct: string; tag: string };
     } catch (e) {
-      if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to seal ' + keyId);
-      if (isKeyInvalidatedRejection(e)) throw new VaultKeyInvalidatedError('vault key for ' + keyId + ' is invalidated; restore from the recovery phrase');
+      const mapped = mapVaultRejection(e, 'seal', keyId);
+      if (mapped) throw mapped;
       throw e;
     }
     return { v: 1, iv: blob.iv, ct: blob.ct, tag: blob.tag };
@@ -178,8 +190,8 @@ export const MojitoCore: MojitoCore = {
     try {
       return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
     } catch (e) {
-      if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to open ' + keyId);
-      if (isKeyInvalidatedRejection(e)) throw new VaultKeyInvalidatedError('vault key for ' + keyId + ' is invalidated; restore from the recovery phrase');
+      const mapped = mapVaultRejection(e, 'open', keyId);
+      if (mapped) throw mapped;
       throw e;
     }
   },
