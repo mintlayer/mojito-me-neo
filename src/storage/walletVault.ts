@@ -76,8 +76,10 @@ export const walletVault = {
     return payload.meta;
   },
 
-  /** The decrypted phrase. Callers: the KeySession unlock flow only; no
-   *  screen or state may hold the result. */
+  /** The decrypted phrase. Callers: the KeySession unlock flow, and the
+   *  backup reveal screen, which is the one sanctioned UI exception: it
+   *  holds the words in onboarding state for the reveal and verify UI and
+   *  clears them when the backup layer closes. */
   async openWords(): Promise<string[]> {
     const { store } = await getSecureStore();
     const { store: blobs } = await getBlobStore();

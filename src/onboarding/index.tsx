@@ -43,6 +43,10 @@ export function Onboarding({
   pinOnly = false,
   /** Backup re-entry: screens read the vault phrase instead of generating. */
   backup = false,
+  /** Whether the app lock is armed; backup re-entry renders under the lock
+   *  layer, and the stored phrase must not decrypt until the user has
+   *  re-unlocked. */
+  locked = false,
   onDone,
 }: {
   /** 'seed' re-enters just the backup flow from the deferred-backup banner. */
@@ -52,6 +56,8 @@ export function Onboarding({
   pinOnly?: boolean;
   /** Settings > Recovery phrase: reveal the stored phrase, never re-seal. */
   backup?: boolean;
+  /** Lock layer state; Seed defers the stored-phrase decrypt until false. */
+  locked?: boolean;
   onDone: (r: OnboardingResult) => void;
 }) {
   const [stack, setStack] = useState<ScreenId[]>([initial]);
@@ -105,6 +111,9 @@ export function Onboarding({
             return;
           }
         }
+        // The phrase leaves onboarding state exactly when the backup layer
+        // closes: the reveal and verify UI never outlives the layer.
+        if (backup && !pinOnly) setSeedWords(null);
         onDone({ deferred, bio, biometrics });
       })();
     },
@@ -134,7 +143,7 @@ export function Onboarding({
   // Keyed so each screen replays its entrance on navigation.
   return (
     <Enter key={screen} duration={240} offset={0} style={{ flex: 1 }}>
-      {screen === 'seed' ? <Seed ctx={ctx} backup={backup} /> : <Current ctx={ctx} />}
+      {screen === 'seed' ? <Seed ctx={ctx} backup={backup} locked={locked} /> : <Current ctx={ctx} />}
     </Enter>
   );
 }

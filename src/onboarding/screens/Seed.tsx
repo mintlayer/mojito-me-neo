@@ -15,7 +15,7 @@ import type { Ctx } from '../context';
  * words land in onboarding state only and are sealed at finish; nothing else
  * sees them.
  */
-export function Seed({ ctx, backup }: { ctx: Ctx; backup?: boolean }) {
+export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boolean; locked?: boolean }) {
   useSeedProtection();
   const [revealed, setRevealed] = useState(false);
   const [skipSheet, setSkipSheet] = useState(false);
@@ -24,11 +24,16 @@ export function Seed({ ctx, backup }: { ctx: Ctx; backup?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Backup re-entry: show the stored phrase, never generate or re-seal. The
-  // native key gate prompts inside the module when the key is gated; a
-  // cancelled prompt lands in the load error, and a retry re-runs it.
+  // Backup re-entry: show the stored phrase, never generate or re-seal. One
+  // load per mount: the effect waits for the lock layer to clear (the backup
+  // layer renders underneath it), skips once the words already sit in
+  // onboarding state, and depends on stable inputs, so the fresh ctx object
+  // identity per render cannot re-run the decrypt (the old [backup, ctx]
+  // deps re-decrypted and re-prompted in a loop). The native key gate
+  // prompts inside the module when the key is gated; a cancelled prompt
+  // lands in the load error, and the next re-entry retries it.
   useEffect(() => {
-    if (!backup) return;
+    if (!backup || locked || ctx.seedWords) return;
     let alive = true;
     walletVault
       .openWords()
@@ -39,7 +44,9 @@ export function Seed({ ctx, backup }: { ctx: Ctx; backup?: boolean }) {
     return () => {
       alive = false;
     };
-  }, [backup, ctx]);
+    // setSeedWords is a stable state setter; only the value gates the load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backup, locked, ctx.seedWords]);
 
   // Create mode: generate once on entry, and again whenever the word count
   // changes or the Entropy screen hands back mixed entropy.

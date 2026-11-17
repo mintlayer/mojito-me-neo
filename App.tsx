@@ -299,6 +299,7 @@ function Shell() {
             initial="seed"
             backup
             bio={session.bio}
+            locked={locked}
             onDone={(r) => {
               setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
               setBackup(false);
@@ -314,6 +315,7 @@ function Shell() {
             pinOnly
             backup
             bio={session.bio}
+            locked={locked}
             onDone={() => setChangePin(false)}
           />
         </Layer>
