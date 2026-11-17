@@ -28,4 +28,6 @@ export type Nav = {
   onBackUp?: () => void;
   /** Locks the app and shows the unlock screen. */
   onLock?: () => void;
+  /** False while the session is locked: data screens stop polling. */
+  active?: boolean;
 };

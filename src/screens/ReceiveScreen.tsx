@@ -2,18 +2,28 @@ import React, { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
-import { t } from '../i18n';
-import { useData } from '../data/providers/context';
+import { t, type I18nKey } from '../i18n';
+import { useData, useDataState } from '../data/providers/context';
 import { C, CHAINS, type ChainName } from '../theme';
 import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
+/** Chain segment labels from i18n; unknown chains fall back to the raw key. */
+const CHAIN_LABELS: Partial<Record<ChainName, I18nKey>> = {
+  Mintlayer: 'receive.chain.ml',
+  Bitcoin: 'receive.chain.btc',
+};
+
 export function ReceiveScreen({ onClose }: Sheet) {
-  const addresses = useData((d) => d.getAddresses());
+  const addresses = useDataState((d) => d.getAddresses(), 0);
   const chainGlyphs = useData((d) => d.getChainGlyphs());
   const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
-  const addr = addresses?.[chain] ?? '';
+  const addr = addresses.data?.[chain] ?? '';
   const accent = CHAINS[chain];
+  const label = (name: ChainName): string => {
+    const key = CHAIN_LABELS[name];
+    return key ? t(key) : name;
+  };
 
   // Write first, confirm second: the label must never claim a copy that failed.
   const copy = async () => {
@@ -32,8 +42,10 @@ export function ReceiveScreen({ onClose }: Sheet) {
     });
   };
 
-  if (!addresses || !chainGlyphs || !addr) return <Screen />;
-  const chainKeys = Object.keys(addresses) as ChainName[];
+  if (!chainGlyphs) return <Screen />;
+  const chainKeys = addresses.data ? (Object.keys(addresses.data) as ChainName[]) : ['Mintlayer', 'Bitcoin'] as ChainName[];
+
+  const addressMissing = addresses.error !== null || (addresses.data !== null && addr === '');
 
   return (
     <Screen>
@@ -46,64 +58,77 @@ export function ReceiveScreen({ onClose }: Sheet) {
           onChange={setChain}
           variant="pill"
           accents={Object.fromEntries(chainKeys.map((k) => [k, CHAINS[k]]))}
+          labels={Object.fromEntries(chainKeys.map((k) => [k, label(k)]))}
         />
       </ScrollView>
 
-      {/* QR */}
-      <View className="px-6 pt-6">
-        <View className="p-6 rounded-[24px] items-center justify-center" style={{ backgroundColor: C.text0 }}>
-          <FakeQR seed={addr} />
-          <View
-            className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
-            style={{ backgroundColor: accent }}>
-            <Txt className="text-[18px] font-extrabold" style={{ color: C.ink }}>
-              {chainGlyphs[chain]}
-            </Txt>
-          </View>
+      {addressMissing ? (
+        // Derivation unavailable (locked vault, missing keys): honest state
+        // instead of a QR for an address that does not exist yet.
+        <View className="px-6 pt-8">
+          <Callout tone={C.amber} glyph="!">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('receive.address.none')}</Txt>
+          </Callout>
         </View>
-      </View>
-
-      {/* Address */}
-      <View className="px-6 pt-6">
-        <Label className="mb-2 text-center">{t('receive.address.label', { chain })}</Label>
-        <Card className="px-4 py-3.5 rounded-[14px]">
-          <Txt mono className="text-[12px]">
-            {addr}
-          </Txt>
-        </Card>
-        <View className="flex-row gap-2 mt-2.5">
-          <View className="flex-1">
-            <Btn tone={copied ? 'green' : 'default'} onPress={copy}>
-              {copied ? t('common.copied') : t('common.copy')}
-            </Btn>
+      ) : (
+        <>
+          {/* QR */}
+          <View className="px-6 pt-6">
+            <View className="p-6 rounded-[24px] items-center justify-center" style={{ backgroundColor: C.text0 }}>
+              <FakeQR seed={addr} />
+              <View
+                className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
+                style={{ backgroundColor: accent }}>
+                <Txt className="text-[18px] font-extrabold" style={{ color: C.ink }}>
+                  {chainGlyphs[chain]}
+                </Txt>
+              </View>
+            </View>
           </View>
-          <View className="flex-1">
-            <Btn onPress={share}>{t('common.share')}</Btn>
+
+          {/* Address */}
+          <View className="px-6 pt-6">
+            <Label className="mb-2 text-center">{t('receive.address.label', { chain: label(chain) })}</Label>
+            <Card className="px-4 py-3.5 rounded-[14px]">
+              <Txt mono className="text-[12px]">
+                {addr}
+              </Txt>
+            </Card>
+            <View className="flex-row gap-2 mt-2.5">
+              <View className="flex-1">
+                <Btn tone={copied ? 'green' : 'default'} onPress={copy}>
+                  {copied ? t('common.copied') : t('common.copy')}
+                </Btn>
+              </View>
+              <View className="flex-1">
+                <Btn onPress={share}>{t('common.share')}</Btn>
+              </View>
+            </View>
           </View>
-        </View>
-      </View>
 
-      {/* Request amount */}
-      <View className="px-6 pt-5">
-        <Card className="rounded-[14px]">
-          <ListRow
-            icon="plus"
-            iconColor={C.amber}
-            label={t('receive.request')}
-            sub={t('receive.requestSub')}
-            trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
-          />
-        </Card>
-      </View>
+          {/* Request amount */}
+          <View className="px-6 pt-5">
+            <Card className="rounded-[14px]">
+              <ListRow
+                icon="plus"
+                iconColor={C.amber}
+                label={t('receive.request')}
+                sub={t('receive.requestSub')}
+                trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
+              />
+            </Card>
+          </View>
 
-      {/* Warning */}
-      <View className="px-6 pt-5">
-        <Callout tone={accent} glyph="ⓘ">
-          <Txt className="text-[11px] text-text1 leading-[17px]">
-            {t('receive.warning', { chain })}
-          </Txt>
-        </Callout>
-      </View>
+          {/* Warning */}
+          <View className="px-6 pt-5">
+            <Callout tone={accent} glyph="ⓘ">
+              <Txt className="text-[11px] text-text1 leading-[17px]">
+                {t('receive.warning', { chain: label(chain) })}
+              </Txt>
+            </Callout>
+          </View>
+        </>
+      )}
     </Screen>
   );
 }

@@ -344,6 +344,7 @@ function Shell() {
             deferred={session.deferred}
             onBackUp={revealBackup}
             onLock={() => setLocked(true)}
+            active={!locked}
           />
 
           {Sheet && (

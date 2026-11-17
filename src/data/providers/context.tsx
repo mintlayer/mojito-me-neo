@@ -38,3 +38,37 @@ export function useData<T>(load: (data: WalletData) => Promise<T>): T | null {
   }, [data]);
   return value;
 }
+
+/**
+ * useData with an error surface and a refresh key: the screens that show
+ * offline, stale and retry states (Home, Receive) read the error instead of
+ * waiting forever on a skeleton, and bumping refreshKey re-runs the load
+ * (polling and pull-to-refresh both drive it).
+ */
+export function useDataState<T>(
+  load: (data: WalletData) => Promise<T>,
+  refreshKey: unknown,
+): { data: T | null; error: Error | null; loadedAt: number } {
+  const { data } = useProviders();
+  const [state, setState] = useState<{ data: T | null; error: Error | null; loadedAt: number }>({
+    data: null,
+    error: null,
+    loadedAt: 0,
+  });
+  useEffect(() => {
+    let live = true;
+    load(data).then(
+      (resolved) => {
+        if (live) setState({ data: resolved, error: null, loadedAt: Date.now() });
+      },
+      (e: unknown) => {
+        if (live) setState({ data: null, error: e instanceof Error ? e : new Error(String(e)), loadedAt: Date.now() });
+      },
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is an inline arrow recreated every render
+  }, [data, refreshKey]);
+  return state;
+}

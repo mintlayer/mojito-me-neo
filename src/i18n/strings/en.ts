@@ -26,6 +26,9 @@ export const en = {
   'common.devClientRequired': 'Expo Go cannot run this build. Install the Mojito development build to launch the app.',
   'common.error.generic': 'Something went wrong. Try again.',
   'common.retry': 'Try again',
+  'common.offline': 'You are offline. Balances will not update until the connection returns.',
+  'common.syncing': 'Syncing chain data…',
+  'common.stale': 'Last update {minutes} min ago. Pull to refresh.',
 
   // activity rows (assembled by src/data/activity/ActivityService.ts)
   'activity.row.send': 'Sent',
@@ -69,6 +72,10 @@ export const en = {
   'home.tabs.nfts': 'NFTs',
   'home.tabs.defi': 'DeFi',
   'home.activity.title': 'Recent activity',
+  'home.activity.refresh': 'Refresh balances and activity',
+  'home.balance.error': 'Could not load the balance. Check the connection and try again.',
+  'home.activity.empty': 'No activity yet. Sends and receives will appear here.',
+  'home.nfts.empty': 'No NFTs on this account yet. Collectibles you own will appear here.',
   'home.ranges.1H': '1H',
   'home.ranges.4H': '4H',
   'home.ranges.1D': '1D',
@@ -106,6 +113,9 @@ export const en = {
 
   // receive
   'receive.title': 'Receive',
+  'receive.chain.ml': 'Mintlayer',
+  'receive.chain.btc': 'Bitcoin',
+  'receive.address.none': 'No address yet. Unlock the wallet and try again.',
   'receive.address.label': '{chain} address',
   'receive.request': 'Request specific amount',
   'receive.requestSub': 'Encode the amount in your QR code',
@@ -235,6 +245,16 @@ export const en = {
   'settings.signout.wipeErrorTitle': 'Sign out failed',
   'settings.signout.wipeErrorBody': "The keys could not be erased. Nothing was signed out - try again, and check the device's secure storage if it keeps failing.",
   'settings.version': 'mojito · v{version} · build {build}',
+
+  // nft rows
+  'tokens.nft.owner': 'Owner {owner}',
+  'tokens.nft.collection': 'Collection {collection}',
+  'tokens.nft.metadataMissing': 'Metadata unavailable for this collectible.',
+
+  // data errors
+  'errors.indexer.http': 'The Mintlayer index answered with an error ({status}). Try again later.',
+  'errors.indexer.network': 'Could not reach the Mintlayer index. Check your connection.',
+  'errors.price.unavailable': 'Price data is unavailable right now.',
 
   // onboarding
   'onboarding.welcome.tagline': 'One recovery phrase, every account.\nBitcoin and Mintlayer, self-custody.',

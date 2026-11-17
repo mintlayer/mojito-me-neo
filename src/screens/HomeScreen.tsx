@@ -1,17 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { useData, useProviders } from '../data/providers/context';
-import type { AssetRow, PriceRange } from '../data/providers';
+import { useData, useDataState, useProviders } from '../data/providers/context';
+import { dataErrorCopy } from '../data/errors';
+import { usePoll } from '../data/polling';
+import type { AssetRow, NftRow, PriceRange } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
-import { AreaChart, Avatar, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
+import { AreaChart, Avatar, Btn, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
-export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
-  const { mode, price } = useProviders();
-  const balance = useData((d) => d.getPortfolio());
-  const assets = useData((d) => d.getAssets());
-  const activity = useData((d) => d.getActivity(20));
+// Polling cadence per the M2 spec: balances and activity refresh every 60 s
+// while the wallet screen is foregrounded; focus and pull-to-refresh refresh
+// immediately; the cycle pauses in background and resumes with one refresh.
+const BALANCE_POLL_MS = 60_000;
+/** A successful sync older than this shows the stale banner. */
+const STALE_AFTER_MS = 180_000;
+
+export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock, active }: Nav) {
+  const { mode, price, pricesAreMock } = useProviders();
+  const [tick, setTick] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(async (): Promise<void> => {
+    setTick((n) => n + 1);
+  }, []);
+  usePoll(refresh, { intervalMs: BALANCE_POLL_MS, active: active !== false });
+
+  const balance = useDataState((d) => d.getPortfolio(), tick);
+  const assets = useDataState((d) => d.getAssets(), tick);
+  const activity = useDataState((d) => d.getActivity(20), tick);
+  const nfts = useDataState((d) => d.getNfts(), tick);
   const networks = useData((d) => d.getNetworks());
   const ranges = useData((d) => d.getRanges());
   const profile = useData((d) => d.getProfile());
@@ -19,6 +36,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const [range, setRange] = useState<PriceRange>('1D');
   const [series, setSeries] = useState<number[] | null>(null);
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
+
+  // The pull-to-refresh spinner stops when the refreshed data lands.
+  useEffect(() => {
+    setRefreshing(false);
+  }, [balance.loadedAt, assets.loadedAt, activity.loadedAt, nfts.loadedAt]);
 
   useEffect(() => {
     let live = true;
@@ -43,10 +65,24 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
     { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
   ];
 
-  if (!balance || !assets || !activity || !networks || !ranges || !profile) return <Screen />;
+  if (!networks || !ranges || !profile) return <Screen />;
+
+  // One sync banner at a time, most severe first: offline, syncing, stale.
+  const offline = [balance, assets, activity].some((state) => state.error !== null);
+  const syncing = !offline && balance.data === null && balance.error === null;
+  const lastSync = Math.max(balance.loadedAt, assets.loadedAt, activity.loadedAt, nfts.loadedAt);
+  const stale = !offline && !syncing && lastSync > 0 && Date.now() - lastSync > STALE_AFTER_MS;
+  const staleMinutes = lastSync > 0 ? Math.max(1, Math.round((Date.now() - lastSync) / 60_000)) : 0;
+  const showDemoChip = mode === 'mock' || pricesAreMock;
 
   return (
-    <Screen>
+    <Screen
+      refreshing={refreshing}
+      refreshTitle={t('home.activity.refresh')}
+      onRefresh={() => {
+        setRefreshing(true);
+        refresh();
+      }}>
       <View className="px-5 flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
           <Avatar letter={profile.initial} size={32} />
@@ -55,7 +91,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <Txt className="text-[13px] font-semibold">{profile.name} ▾</Txt>
           </View>
         </View>
-        {mode === 'mock' && (
+        {showDemoChip && (
           <View className="flex-1 items-start pl-2">
             <Chip dot={false}>{t('home.demoData')}</Chip>
           </View>
@@ -66,6 +102,28 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           <IconBtn name="bell" label={t('settings.notifications')} badge={C.amber} />
         </View>
       </View>
+
+      {offline && (
+        <View className="px-5 pt-3">
+          <Callout tone={C.red} icon="flash">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.offline')}</Txt>
+          </Callout>
+        </View>
+      )}
+      {!offline && syncing && (
+        <View className="px-5 pt-3">
+          <Callout tone={C.text2} glyph="ⓘ">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.syncing')}</Txt>
+          </Callout>
+        </View>
+      )}
+      {!offline && !syncing && stale && (
+        <View className="px-5 pt-3">
+          <Callout tone={C.amber} glyph="ⓘ">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.stale', { minutes: staleMinutes })}</Txt>
+          </Callout>
+        </View>
+      )}
 
       {deferred && (
         <View className="px-5 pt-3">
@@ -95,51 +153,71 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <View className="w-[180px] h-[180px] rounded-full" style={{ backgroundColor: alpha(C.amber, 0.18) }} />
           </Float>
 
-          <View className="flex-row items-center gap-2">
-            <Label>{t('home.balance.total')}</Label>
-            <Pressable
-              onPress={() => setHidden((h) => !h)}
-              accessibilityRole="button"
-              accessibilityLabel={t(hidden ? 'home.balance.show' : 'home.balance.hide')}
-              accessibilityState={{ selected: hidden }}>
-              <Icon name={hidden ? 'eye_off' : 'eye'} size={14} color={C.text2} />
-            </Pressable>
-          </View>
+          {balance.error !== null ? (
+            <View>
+              <Label>{t('home.balance.total')}</Label>
+              <Callout tone={C.red} glyph="!" className="mt-3">
+                <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('home.balance.error')}</Txt>
+                <Txt className="text-[11px] text-text2 leading-[16px] mt-1">{dataErrorCopy(balance.error)}</Txt>
+              </Callout>
+              <View className="mt-3">
+                <Btn onPress={refresh}>{t('common.retry')}</Btn>
+              </View>
+            </View>
+          ) : balance.data === null ? (
+            <View>
+              <Label>{t('home.balance.total')}</Label>
+              <Txt className="text-[38px] font-bold tracking-tightest text-text3 mt-1.5">······</Txt>
+            </View>
+          ) : (
+            <View>
+              <View className="flex-row items-center gap-2">
+                <Label>{t('home.balance.total')}</Label>
+                <Pressable
+                  onPress={() => setHidden((h) => !h)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(hidden ? 'home.balance.show' : 'home.balance.hide')}
+                  accessibilityState={{ selected: hidden }}>
+                  <Icon name={hidden ? 'eye_off' : 'eye'} size={14} color={C.text2} />
+                </Pressable>
+              </View>
 
-          <View className="flex-row items-baseline gap-2 mt-1.5">
-            {hidden ? (
-              // Balance mask is decoration, kept in code rather than en.ts.
-              <Txt className="text-[38px] font-bold tracking-tightest">••••••</Txt>
-            ) : (
-              <Txt className="text-[38px] font-bold tracking-tightest">
-                <Txt className="text-[38px] font-medium text-text2">$</Txt>
-                {balance.total}
-              </Txt>
-            )}
-          </View>
+              <View className="flex-row items-baseline gap-2 mt-1.5">
+                {hidden ? (
+                  // Balance mask is decoration, kept in code rather than en.ts.
+                  <Txt className="text-[38px] font-bold tracking-tightest">••••••</Txt>
+                ) : (
+                  <Txt className="text-[38px] font-bold tracking-tightest">
+                    <Txt className="text-[38px] font-medium text-text2">$</Txt>
+                    {balance.data.total}
+                  </Txt>
+                )}
+              </View>
 
-          <View className="flex-row items-center gap-2 mt-2">
-            <LivePill value={balance.change} />
-            <Txt mono className="text-[12px] text-text2">
-              {balance.delta}
-            </Txt>
-          </View>
-
-          <View className="mt-3.5">
-            {/* Provider history for the picked range; the fixture spark is
-                only the fallback while it resolves. */}
-            <AreaChart data={series ?? balance.spark} />
-          </View>
-
-          <View className="flex-row justify-between mt-1">
-            {ranges.map((r) => (
-              <Pressable key={r} onPress={() => setRange(r)}>
-                <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
-                  {t(`home.ranges.${r}` as I18nKey)}
+              <View className="flex-row items-center gap-2 mt-2">
+                <LivePill value={balance.data.change} />
+                <Txt mono className="text-[12px] text-text2">
+                  {balance.data.delta}
                 </Txt>
-              </Pressable>
-            ))}
-          </View>
+              </View>
+
+              <View className="mt-3.5">
+                {/* Provider history for the picked range; the fixture spark is
+                    only the fallback while it resolves. */}
+                <AreaChart data={series ?? balance.data.spark} />
+              </View>
+
+              <View className="flex-row justify-between mt-1">
+                {ranges.map((r) => (
+                  <Pressable key={r} onPress={() => setRange(r)}>
+                    <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
+                      {t(`home.ranges.${r}` as I18nKey)}
+                    </Txt>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          )}
         </Card>
       </View>
 
@@ -196,11 +274,15 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           />
         </View>
 
-        {assets.map((a, i) => (
-          <Enter key={a.sym} delay={400 + i * 70}>
-            <TokenRow asset={a} />
-          </Enter>
-        ))}
+        {tab === 'NFTs' ? (
+          <NftList nfts={nfts.data} />
+        ) : (
+          (assets.data ?? []).map((a, i) => (
+            <Enter key={a.sym} delay={400 + i * 70}>
+              <TokenRow asset={a} />
+            </Enter>
+          ))
+        )}
       </View>
 
       {/* Activity */}
@@ -209,31 +291,79 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           <Txt className="text-[14px] font-semibold">{t('home.activity.title')}</Txt>
           <Txt className="text-[11px] text-text2">{t('common.seeAll')}</Txt>
         </View>
-        <Card variant="glass" className="p-1">
-          {activity.map((r, i) => (
-            <ListRow
-              key={r.title}
-              icon={r.icon}
-              iconColor={toneColor(r.tone)}
-              label={r.title}
-              sub={<Txt mono className="text-[11px] text-text2 mt-0.5">{r.sub}</Txt>}
-              divider={i > 0}
-              trailing={
-                <View className="items-end">
-                  <Txt mono className="text-[11px] text-text2">
-                    {r.time}
-                  </Txt>
-                  <Txt className="text-[10px] mt-0.5" style={{ color: r.live ? C.amber : C.text2 }}>
-                    {r.state}
-                  </Txt>
-                </View>
-              }
-            />
-          ))}
-        </Card>
+        {activity.data !== null && activity.data.length === 0 ? (
+          <Card variant="glass" className="p-4">
+            <Txt className="text-[12px] text-text2 text-center leading-[17px]">{t('home.activity.empty')}</Txt>
+          </Card>
+        ) : (
+          <Card variant="glass" className="p-1">
+            {(activity.data ?? []).map((r, i) => (
+              <ListRow
+                key={`${r.title}-${r.time}-${i}`}
+                icon={r.icon}
+                iconColor={toneColor(r.tone)}
+                label={r.title}
+                sub={<Txt mono className="text-[11px] text-text2 mt-0.5">{r.sub}</Txt>}
+                divider={i > 0}
+                trailing={
+                  <View className="items-end">
+                    <Txt mono className="text-[11px] text-text2">
+                      {r.time}
+                    </Txt>
+                    <Txt className="text-[10px] mt-0.5" style={{ color: r.live ? C.amber : C.text2 }}>
+                      {r.state}
+                    </Txt>
+                  </View>
+                }
+              />
+            ))}
+          </Card>
+        )}
       </View>
     </Screen>
   );
+}
+
+/** NFTs tab: holdings from NftService (real) or the empty gallery. */
+function NftList({ nfts }: { nfts: NftRow[] | null }) {
+  if (nfts === null) return null;
+  if (nfts.length === 0) {
+    return (
+      <Card variant="glass" className="p-4">
+        <Txt className="text-[12px] text-text2 text-center leading-[17px]">{t('home.nfts.empty')}</Txt>
+      </Card>
+    );
+  }
+  return (
+    <Card variant="glass" className="p-1">
+      {nfts.map((nft, i) => (
+        <ListRow
+          key={nft.id}
+          icon="card"
+          iconColor={C.violet}
+          label={nft.name ?? t('home.tokens.unknown')}
+          sub={
+            <Txt className="text-[11px] text-text2 mt-0.5">
+              {nft.ticker !== null ? t('tokens.nft.collection', { collection: nft.ticker }) : t('tokens.nft.metadataMissing')}
+            </Txt>
+          }
+          divider={i > 0}
+          trailing={
+            nft.owner !== null ? (
+              <Txt mono className="text-[10px] text-text2">
+                {t('tokens.nft.owner', { owner: shortId(nft.owner) })}
+              </Txt>
+            ) : undefined
+          }
+        />
+      ))}
+    </Card>
+  );
+}
+
+/** First 10 and last 6 chars with an ellipsis for owner rows. */
+function shortId(id: string): string {
+  return id.length <= 18 ? id : `${id.slice(0, 10)}…${id.slice(-6)}`;
 }
 
 /* ══ Home ═══════════════════════════════════════════════════ */
