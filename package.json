@@ -9,7 +9,7 @@
     "ios:dev": "expo run:ios",
     "android:dev": "expo run:android",
     "prebuild": "expo prebuild",
-    "check": "tsx src/theme.test.ts && tsc --noEmit && eslint .",
+    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/storage/secureStore.test.ts && tsx src/data/providers/providers.test.ts && tsc --noEmit && eslint . && tsx scripts/no-em-dash.ts",
     "lint": "eslint ."
   },
   "dependencies": {
