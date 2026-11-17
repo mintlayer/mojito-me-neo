@@ -202,15 +202,16 @@ function Shell() {
    *  is re-sealed under a fresh gated key. The wipe-save window is
    *  unavoidable with a single key slot; if the re-seal fails (a declined
    *  prompt among others) the wallet is gone and the phrase is the only way
-   *  back, which the failure alert states outright. */
+   *  back, which the unlock error alert states outright. */
   const upgradeUngatedKey = async (meta: VaultMeta): Promise<void> => {
     if (!session?.bioChoice || (await walletVault.keyGated())) return;
     const words = await walletVault.openWords();
     await walletVault.wipe();
+    // The unlock catch surfaces the terminal guidance (with the erase
+    // option); this layer only escalates.
     try {
       await walletVault.save(words, meta, true);
     } catch {
-      Alert.alert(t('onboarding.unlock.invalidatedTitle'), t('onboarding.unlock.invalidatedBody'));
       throw new VaultKeyInvalidatedError('vault key upgrade failed; restore from the recovery phrase');
     }
   };
