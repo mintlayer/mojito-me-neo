@@ -4,12 +4,19 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 import { createProviders, readDataMode } from './index';
+import { setNetwork, type NetworkFlag } from '../../config/endpoints';
 import type { Providers, WalletData } from './types';
 
 const ProvidersContext = createContext<Providers | null>(null);
 
-export function ProvidersProvider({ children }: { children: React.ReactNode }) {
-  const value = useMemo(() => createProviders(readDataMode()), []);
+export function ProvidersProvider({ children, network = 'mainnet' }: { children: React.ReactNode; network?: NetworkFlag }) {
+  // One provider set per active network: switching tears down the previous
+  // instances, so every session cache (home bundle, token metadata, xpubs)
+  // is cleared with the network instead of leaking across chains.
+  const value = useMemo(() => {
+    setNetwork(network);
+    return createProviders(readDataMode());
+  }, [network]);
   return <ProvidersContext.Provider value={value}>{children}</ProvidersContext.Provider>;
 }
 

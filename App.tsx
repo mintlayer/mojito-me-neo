@@ -9,10 +9,11 @@ import './global.css';
 
 import { t } from './src/i18n';
 import { ProvidersProvider } from './src/data/providers/context';
+import { type NetworkFlag } from './src/config/endpoints';
+import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { VaultKeyInvalidatedError } from './modules/mojito-core';
 import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
-import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
@@ -57,6 +58,18 @@ const OVERLAYS: Record<Exclude<Overlay, null>, React.ComponentType<Sheet>> = {
 };
 
 export default function App() {
+  // Active network (M2): persisted app setting, applied by ProvidersProvider.
+  // Loaded async after mount; the splash covers the one-shot rebuild.
+  const [testnet, setTestnet] = useState(false);
+  useEffect(() => {
+    void loadAppSettings()
+      .then((s) => setTestnet(s.testnet))
+      .catch(() => undefined);
+  }, []);
+  const switchNetwork = (next: boolean) => {
+    setTestnet(next);
+    void saveAppSettings({ testnet: next }).catch(() => undefined);
+  };
   // Expo Go lacks the local native module; only dev builds launch the app.
   if (Constants.appOwnership === 'expo') {
     return (
@@ -67,9 +80,9 @@ export default function App() {
   }
   return (
     <SafeAreaProvider>
-      <ProvidersProvider>
+      <ProvidersProvider network={testnet ? 'testnet' : 'mainnet'}>
         <StatusBar style="light" />
-        <Shell />
+        <Shell network={testnet ? 'testnet' : 'mainnet'} onNetworkChange={switchNetwork} />
       </ProvidersProvider>
     </SafeAreaProvider>
   );
@@ -103,7 +116,7 @@ type AppSession = {
   settings: { biometrics: boolean; autoLock: boolean; testnet: boolean };
 };
 
-function Shell() {
+function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkChange: (testnet: boolean) => void }) {
   const [splashDone, setSplashDone] = useState(false);
   /** Whether the vault-existence check finished; drives onboarding vs lock. */
   const [ready, setReady] = useState(false);
@@ -353,6 +366,8 @@ function Shell() {
                 onClose={() => setOverlay(null)}
                 bio={session.bio}
                 wordCount={session.vault?.meta.wordCount}
+                network={network}
+                onNetworkChange={onNetworkChange}
                 onBackup={() => {
                   setOverlay(null);
                   revealBackup();

@@ -13,6 +13,10 @@ export type AppSettings = {
   biometrics: boolean | null;
   /** Lock the app when it leaves the foreground. */
   autoLock: boolean;
+  /** Active-network switch (M2): selects the endpoint set and rebuilds the
+   *  data providers. Mainnet is the default; the testnet base itself stays
+   *  pending action item A2 (decisions.md R6). */
+  testnet: boolean;
 };
 
 const SETTINGS_KEY = STORAGE_KEYS.settings;
@@ -52,6 +56,7 @@ function coerce(raw: Partial<AppSettings> | null): AppSettings {
   return {
     biometrics: typeof raw?.biometrics === 'boolean' ? raw.biometrics : null,
     autoLock: raw?.autoLock !== false,
+    testnet: raw?.testnet === true,
   };
 }
 

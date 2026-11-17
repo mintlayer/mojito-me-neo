@@ -10,14 +10,15 @@ import { detectBio } from '../onboarding/ui/useBioScan';
 import { C, G } from '../theme';
 import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
-export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount }: Sheet) {
+export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount, network, onNetworkChange }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
   const dapps = useData((d) => d.getDapps());
   // Security toggles are persisted (storage/appSettings); the other flags
-  // stay local until their features ship.
+  // stay local until their features ship. The network switch is app-level
+  // (ProvidersProvider rebuilds on change), not a local flag.
   const [security, setSecurity] = useState({ biometric: true, autoLock: true });
-  const [flags, setFlags] = useState({ testnet: false, notifs: true, hideBal: false });
+  const [flags, setFlags] = useState({ notifs: true, hideBal: false });
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
   const [appearance, setAppearance] = useState<AppearanceId>('dark');
   const [dex, setDex] = useState<DexId>('mintlayer');
@@ -184,8 +185,28 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
 
       <Section title={t('settings.section.networks')}>
         <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} trailing="→" />
-        <ListRow icon="flash" iconColor={C.amber} label={t('settings.network.testnet')} sub={t('settings.network.testnetSub')} divider>
-          <Toggle on={flags.testnet} onChange={set('testnet')} />
+        <ListRow
+          icon="flash"
+          iconColor={C.amber}
+          label={t('settings.network.mode')}
+          sub={t(network === 'testnet' ? 'settings.network.testnet' : 'settings.network.mainnet')}
+          divider
+        >
+          <Toggle
+            on={network === 'testnet'}
+            onChange={(v) => {
+              // The switch rebuilds the providers (cache wipe) after an
+              // explicit confirm; the copy names the pending testnet base.
+              Alert.alert(
+                t(v ? 'settings.network.testnet' : 'settings.network.mainnet'),
+                t('settings.network.switchWarn'),
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('common.continue'), onPress: () => onNetworkChange?.(v) },
+                ],
+              );
+            }}
+          />
         </ListRow>
         <ListRow icon="chart" iconColor={C.teal} label={t('settings.dex')} sub={t(dex === 'mintlayer' ? 'settings.dexes.mintlayer' : 'settings.dexes.auto')} trailing="→" divider onPress={() => setSheet('dex')} />
       </Section>
