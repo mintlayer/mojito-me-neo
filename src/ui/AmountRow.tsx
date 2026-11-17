@@ -1,5 +1,6 @@
 import React from 'react';
 import { TextInput, View } from 'react-native';
+import { t } from '../i18n';
 import { TokenPill } from './TokenPill';
 
 export function AmountRow({
@@ -8,6 +9,7 @@ export function AmountRow({
   value,
   onChangeText,
   onPickToken,
+  accessibilityLabel,
 }: {
   symbol: string;
   chain?: string;
@@ -15,6 +17,8 @@ export function AmountRow({
   onChangeText?: (v: string) => void;
   /** Opens the asset picker. Without it the pill's chevron is decorative. */
   onPickToken?: () => void;
+  /** Screen-readable name for the amount input; callers pass the panel label. */
+  accessibilityLabel?: string;
 }) {
   return (
     <View className="flex-row items-center gap-3">
@@ -24,6 +28,7 @@ export function AmountRow({
         onChangeText={onChangeText}
         editable={!!onChangeText}
         keyboardType="decimal-pad"
+        accessibilityLabel={accessibilityLabel ?? t('common.amount')}
         className="flex-1 font-mono text-[26px] font-semibold text-right text-text0 p-0"
       />
     </View>

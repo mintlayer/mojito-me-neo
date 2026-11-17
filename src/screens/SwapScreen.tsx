@@ -61,9 +61,9 @@ export function SwapScreen() {
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label={t('common.youSend')} data={from} price={priceMap[from.sym]} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
+        <SwapPanel label={t('common.youSend')} data={from} price={priceMap[from.sym]} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} amountLabel={t('common.youSend')} />
         <View className="h-2" />
-        <SwapPanel label={t('common.youReceive')} data={to} price={priceMap[to.sym]} onPickToken={() => setPicking('to')} />
+        <SwapPanel label={t('common.youReceive')} data={to} price={priceMap[to.sym]} onPickToken={() => setPicking('to')} amountLabel={t('common.youReceive')} />
 
         <Pressable
           onPress={flip}
@@ -108,12 +108,15 @@ function SwapPanel({
   price = 0,
   onChange,
   onPickToken,
+  amountLabel,
 }: {
   label: string;
   data: { sym: string; chain: string; amt: string; bal: string };
   price?: number;
   onChange?: (v: string) => void;
   onPickToken?: () => void;
+  /** Readable name for the panel's amount input. */
+  amountLabel?: string;
 }) {
   const usd = (parseFloat(data.amt || '0') * price).toFixed(2);
   return (
@@ -125,7 +128,7 @@ function SwapPanel({
         </Txt>
       </View>
       <View className="mt-3">
-        <AmountRow symbol={data.sym} chain={data.chain} value={data.amt} onChangeText={onChange} onPickToken={onPickToken} />
+        <AmountRow symbol={data.sym} chain={data.chain} value={data.amt} onChangeText={onChange} onPickToken={onPickToken} accessibilityLabel={amountLabel} />
       </View>
       <View className="flex-row justify-between items-center mt-2">
         <Txt mono className="text-[11px] text-text2">
