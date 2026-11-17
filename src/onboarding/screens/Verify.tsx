@@ -9,8 +9,9 @@ import type { Ctx } from '../context';
 
 /**
  * Backup quiz over the real generated or imported phrase, with distractors
- * drawn from the full 2048-word list. A wrong pick re-shuffles on the next
- * render via the wrong-chip flash; the answer key stays in one lazy state.
+ * drawn from the full 2048-word list. The answer key and chips are mount-
+ * stable by design (lazy useState): a wrong pick only flashes the wrong
+ * chip, nothing reshuffles mid-quiz.
  */
 export function Verify({ ctx }: { ctx: Ctx }) {
   // The chips and filled slots expose 3 of the words, so protect it too.

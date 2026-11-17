@@ -4,6 +4,8 @@
 //   tsx src/keys/mlAccounts.test.ts
 import { strict as assert } from 'node:assert/strict';
 
+import { bytesToHex } from '@noble/hashes/utils.js';
+
 import { deriveMlAccount, mlAddressAt, mlAddressPublicKey } from './mlAccounts';
 import { deriveCustomScan } from './customPath';
 
@@ -34,12 +36,6 @@ const PARITY = {
     mainnet: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
   },
 } as const;
-
-function bytesToHex(bytes: Uint8Array): string {
-  let hex = '';
-  for (const byte of bytes) hex += byte.toString(16).padStart(2, '0');
-  return hex;
-}
 
 async function main() {
   const words = MNEMONIC.split(' ');

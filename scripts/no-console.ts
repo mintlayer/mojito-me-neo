@@ -1,13 +1,14 @@
 // Secret-logging guard: no console.* anywhere in the native module facade
-// or the key modules. Binding calls carry key blobs, and the security note
-// is "never log": the check fails the build instead of trusting review to
-// catch a stray debug line. Test sources are exempt: they run in the Node
+// or the secret-handling modules (keys, storage, onboarding: the phrase and
+// the PIN cross all three). Binding calls carry key blobs, and the security
+// note is "never log": the check fails the build instead of trusting review
+// to catch a stray debug line. Test sources are exempt: they run in the Node
 // gate and their stdout is the harness output.
 //   tsx scripts/no-console.ts
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SCAN_ROOTS = ['modules/mojito-core', 'src/keys'];
+const SCAN_ROOTS = ['modules/mojito-core', 'src/keys', 'src/storage', 'src/onboarding'];
 
 const failures: string[] = [];
 

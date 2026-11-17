@@ -17,6 +17,7 @@
 // - pubkeyhash addresses: bech32m over variant byte 0x01 plus the first 20
 //   bytes of the 64-byte BLAKE2b digest of the holder blob (0x00 || point)
 import { HDKey } from '@scure/bip32';
+import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha512 } from '@noble/hashes/sha2.js';
@@ -50,8 +51,12 @@ const HRP: Record<MlDerivationNetwork, string> = { mainnet: 'mtc', testnet: 'tmt
 // Destination variant byte for SCALE-encoded Destination::PublicKeyHash.
 const DESTINATION_PUBLIC_KEY_HASH = 0x01;
 
-// Key blob kind bytes (mintlayer runtime format).
-const BLOB_KIND_EXTENDED = 0x00;
+// Runtime blob holder byte: 0x00 prefixes both blob shapes (mintlayer
+// runtime format, pinned by the parity vectors): the extended-key blob reads
+// kind, level count, path levels, chain code, key material - and the plain
+// public-key blob is just the holder byte plus the compressed point. One
+// byte, two shapes, hence the neutral name.
+const BLOB_HOLDER_BYTE = 0x00;
 
 /** Account index is fixed at 0 for v1 (single-account wallet). */
 const ACCOUNT_INDEX = 0;
@@ -77,7 +82,7 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
  *  key material (32-byte private or 33-byte compressed public). */
 function extendedBlob(levels: Uint8Array[], chainCode: Uint8Array, key: Uint8Array): Uint8Array {
   return concatBytes(
-    new Uint8Array([BLOB_KIND_EXTENDED, levels.length]),
+    new Uint8Array([BLOB_HOLDER_BYTE, levels.length]),
     ...levels,
     chainCode,
     key,
@@ -86,7 +91,7 @@ function extendedBlob(levels: Uint8Array[], chainCode: Uint8Array, key: Uint8Arr
 
 /** Plain public-key runtime blob: holder byte plus the compressed point. */
 function publicKeyBlob(point: Uint8Array): Uint8Array {
-  return concatBytes(new Uint8Array([BLOB_KIND_EXTENDED]), point);
+  return concatBytes(new Uint8Array([BLOB_HOLDER_BYTE]), point);
 }
 
 function parseXpubBlob(xpub: Uint8Array): {
@@ -122,7 +127,10 @@ async function deriveChildPoint(xpub: Uint8Array, children: number[]): Promise<U
     const digest = hmac(sha512, chainCode, concatBytes(point, u32be(child)));
     const tweak = digest.slice(0, 32);
     chainCode = digest.slice(32);
-    const { secp256k1 } = await import('@noble/curves/secp256k1.js');
+    // BIP32 pathological cases (IL >= n or the child point at infinity,
+    // ~2^-128 per draw) are not rejected: noble reduces IL mod n, so the
+    // tweak stays in range, and the next index is simply tried. Documented
+    // ceiling, not an oversight.
     const childPoint = secp256k1.Point.fromHex(bytesToHex(point))
       .add(secp256k1.Point.BASE.multiply(BigInt('0x' + bytesToHex(tweak))))
       .toBytes(true);

@@ -11,24 +11,23 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · pre-production (M0)
+## ⚠️ Project status · M1 (keys)
 
-**This repository is the foundations milestone: UI plus the first real native layer. It is not a working wallet.**
+**This repository is the keys milestone: real key management under the M0 UI. It is not yet a working wallet.**
 
-There is no backend and no chain connectivity. Wallet balances, addresses, transactions and
-accounts are fixtures from `src/data.ts` or `src/onboarding/data.ts`. Specifically, and deliberately:
+Real since M1, with vector-backed tests:
 
-- The recovery phrase is a **fixed demo constant**, not generated entropy.
-- Checksum validation on import is a **stand-in**, not BIP39 (see `checksumOK()`).
-- The BIP39 word list is **truncated** (a-cy) for the autocomplete demo.
-- The "draw your own entropy" screen collects and meters real input but **does not derive a key**.
-- Biometric prompts are **simulated**; no `LocalAuthentication` call is made.
-- The native crypto module (`modules/mojito-core`) ships **real AES-256-GCM** over Keychain or
-  Keystore, but nothing stores wallet secrets with it yet; the bindings call-throughs **reject**
-  until M1. See the Storage section below.
+- **Recovery phrase**: full BIP39 over the complete 2048-word English list. Generation from device secure random (optionally mixed with the drawn-entropy screen, which genuinely feeds the phrase), import validation with checksum, PBKDF2-HMAC-SHA512 seeding.
+- **Vault**: the phrase is sealed with AES-256-GCM under a Keychain (iOS) or Keystore (Android) resident key before onboarding completes; the wallet survives kill and relaunch. The key is **user-authentication gated**: with biometrics enrolled, every seal/open runs the biometric prompt and enrolling a new biometric invalidates the key.
+- **PIN and lock**: persisted PBKDF2 verifier with an escalating lockout that survives restart; real `LocalAuthentication` biometric prompts (biometry-only for the wallet lock, in-app PIN always works); auto-lock on background; the recovery-phrase reveal sits behind a re-auth step-up.
+- **Derivation**: Mintlayer account 0 (`m/44'/<coin type>'/0'`) and BTC BIP84 account (`m/84'/<coin>'/0'`) in pure TypeScript, byte-pinned to the bindings' published parity vectors and the BIP84 test vectors. Discovery derives real addresses (balance probing is still a fixture seam).
 
-Do not point this at real funds. Do not treat any screen here as a security control until the
-corresponding logic is implemented and audited.
+Still deferred, deliberately:
+
+- The **vendored bindings call-through** (transaction assembly, signing, native encoders) still rejects; the artifacts are vendored and linked, the facades are real code that compiles on EAS, and the TS key paths above do not depend on the call-through. See the Storage section and `vendor/mintlayer/`.
+- Chain connectivity, balances, history, prices: fixtures from `src/data.ts` behind the provider layer. Sending lands in M3.
+
+Do not point this at real funds. Do not treat any screen here as a security control until the corresponding logic is implemented and audited.
 
 ---
 
@@ -49,6 +48,7 @@ corresponding logic is implemented and audited.
 - **Expo SDK 57** / React Native 0.86 / React 19 (development builds; Expo Go is blocked)
 - **NativeWind v4** (Tailwind for React Native)
 - **Expo modules**: a local native module (`modules/mojito-core`) for the crypto facade
+- **Key crypto**: `@noble/hashes`, `@noble/curves`, `@scure/bip32`, `@scure/btc-signer` (pure JS, Hermes-safe, Uint8Array only)
 - **react-native-svg** for icons, charts and the entropy canvas
 - **TypeScript**, strict mode
 - No navigation library: screen switching is plain state in `App.tsx`
@@ -59,7 +59,7 @@ corresponding logic is implemented and audited.
 ```
 App.tsx                     root shell: tabs, overlays, onboarding/lock layering
 src/theme.ts                design tokens; oklch→sRGB (feeds tailwind.config.ts too)
-src/data.ts                 wallet fixtures
+src/data.ts                 wallet fixtures (providers mock from here; M1 slimmed it)
 src/config/endpoints.ts     per-network endpoint sets and feature flags
 
 src/ui/                     shared component library · one file per component
@@ -70,6 +70,14 @@ src/ui/                     shared component library · one file per component
   style.ts                  gradColors · toneColor · hairlineTop · tile · tint
   chart.ts                  polyline maths shared by Sparkline and AreaChart
 
+src/keys/                   the M1 key stack, pure TypeScript and vector-tested
+  bip39.ts                  full BIP39: entropy, mnemonic, validation, seeding
+  bip39Words.ts             the 2048-word list, SHA-256 pinned and asserted
+  mlAccounts.ts             Mintlayer account derivation and bech32m addresses
+  BtcKeyring.ts             BIP84 P2WPKH accounts on scure
+  customPath.ts             generic m/… account-path parse for the discovery scan
+  session.ts                KeySession: short-lived vault handle with release()
+
 src/screens/                one screen per file
   HomeScreen.tsx  DexScreen.tsx  SwapScreen.tsx  BridgeScreen.tsx
   CardScreen.tsx  SendScreen.tsx  ReceiveScreen.tsx  SettingsScreen.tsx
@@ -78,23 +86,32 @@ src/screens/                one screen per file
 
 src/onboarding/
   index.tsx                 <Onboarding> + the screen map
-  context.ts                Ctx, ScreenId, lockout constants
+  context.ts                Ctx, ScreenId
   UnlockScreen.tsx
   screens/                  one screen per file (Welcome, Secure, PinSet, …)
   ui/                       onboarding-only components, one file each
-  data.ts                   BIP39 list, demo phrase, discovery fixtures
+  data.ts                   one constant: the accepted phrase lengths
 
 src/i18n/                   t() plus the en dictionary; a completeness test gates
   strings/en.ts             every user-visible string (no literals in screens)
 
 src/data/providers/         provider interfaces, mock implementations, mode switch
-src/storage/                SecureStore facade over the native crypto (seal/open/wipe)
+src/storage/                the persistence seam
+  secureStore.ts            seal/open/wipe over the native crypto (test double in dev/node)
+  blobStore.ts              persists sealed blobs across restarts (AsyncStorage)
+  walletVault.ts            the sealed recovery phrase under seed.v1
+  pinStore.ts               PBKDF2 PIN verifier with persisted lockout (pin.meta.v1)
+  appSettings.ts            plain security toggles (biometrics, auto-lock)
 
 modules/mojito-core/        Expo native module: AES-256-GCM seal/open, secure
-  index.ts                  random, key wipe; Mintlayer bindings arrive in M1
+  index.ts                  random, auth-gated keys; bindings call-throughs pending
   android/  ios/            Kotlin (Keystore) and Swift (Keychain) sources
 
+vendor/mintlayer/           vendored wallet-bindings v0.1.0 artifacts
+  CHECKSUMS.txt             upstream SHA256SUMS provenance, verified in CI
+
 scripts/no-em-dash.ts       dash gate (no em or en dashes in code or specs)
+scripts/no-console.ts       secret-logging gate (keys, storage, onboarding, module)
 ```
 
 ---
@@ -147,14 +164,25 @@ phrase is on screen, and released on unmount.
 
 ---
 
-## Storage and crypto (M0 state)
+## Storage and crypto (M1 state)
 
-`src/storage/secureStore.ts` exposes a `seal`/`open`/`wipe`/`keyExists` facade over the native
-MojitoCore module (AES-256-GCM, key resident in Keychain or Keystore, never returned to JS).
-`getSecureStore()` reports which implementation it handed out (`kind: 'native' | 'memory'`).
-A small in-memory store exists **only** for dev builds, Expo Go and Node tooling; it is a
-non-cryptographic test double, and a release build without the native core **throws** instead of
-falling back. Nothing persists to disk yet; persistence lands in M1.
+- `src/storage/secureStore.ts` exposes a `seal`/`open`/`wipe`/`keyExists` facade over the native
+  MojitoCore module (AES-256-GCM, key resident in Keychain or Keystore, never returned to JS).
+  With biometrics enrolled the key carries user-authentication gating (Keystore
+  `setUserAuthenticationRequired` plus biometric-enrolment invalidation on Android,
+  `kSecAccessControlBiometryCurrentSet` on iOS); the TS facade maps the native refusal to a typed
+  `VaultAuthRequiredError` and the app re-prompts once.
+- `src/storage/blobStore.ts` persists the sealed ciphertext (AsyncStorage); `walletVault.ts` keeps
+  the phrase under `seed.v1`, `pinStore.ts` keeps the PIN verifier and lockout under `pin.meta.v1`,
+  `appSettings.ts` keeps the plain security toggles.
+- The memory store in `secureStore`/`blobStore` exists **only** for dev builds, Expo Go and Node
+  tooling; it is a non-cryptographic test double, and a release build without the native core
+  **throws** instead of falling back. Dev-only quirk: a wallet sealed under the memory double is
+  undecryptable after a relaunch (the in-memory key is never persisted), so sign out and re-run
+  onboarding instead of relying on dev persistence.
+- The vendored bindings (`vendor/mintlayer`) are linked from both platform builds; their facade
+  call-throughs reject until the first dev-build run on a build machine. CI re-hashes every
+  vendored artifact against `CHECKSUMS.txt`.
 
 ---
 
@@ -166,7 +194,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs seven things:
+`npm run check` runs fourteen things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -175,10 +203,23 @@ npx tsx src/theme.test.ts
    exist in `en.ts`, no orphaned keys, and `{var}` interpolation must work.
 3. **`src/storage/secureStore.test.ts`**: memory SecureStore self-check (roundtrip, wrong key and
    tamper rejection, wipe). The native path is exercised on dev builds.
-4. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour.
-5. **`tsc --noEmit`**: strict TypeScript.
-6. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
-7. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+4. **`src/storage/walletVault.test.ts`**: seal, meta-only read, open and wipe of the phrase vault.
+5. **`src/storage/pinStore.test.ts`**: PIN set/verify, attempt bookkeeping, escalating lockout
+   with persistence, unset-vs-wrong, wipe.
+6. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour.
+7. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+   NFKD normalization, wordlist integrity, supplied-entropy generation.
+8. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+   blobs, receiving blobs and addresses, plus the custom-path scan.
+9. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+   account paths.
+10. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+    release semantics, xpub parity.
+11. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+    modules (keys, storage, onboarding).
+12. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+13. **`tsc --noEmit`**: strict TypeScript.
+14. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
@@ -247,10 +288,10 @@ import and verification steps.
 
 **The Mintlayer bug bounty does not apply to this repository yet.**
 
-Mojito ME is pre-production. The native crypto module is real AES-256-GCM, but the wallet does not
-use it for secret material yet, there is no chain connectivity, and the data layer is deliberately
-mocked (see [Project status](#️-project-status--pre-production-m0)). Findings against mock data,
-placeholder checksums or simulated biometrics are out of scope and not eligible for a reward.
+Mojito ME is pre-production: the key stack is real and vector-tested, but the bindings
+call-through, chain connectivity and transaction sending are still pending (see
+[Project status](#️-project-status--m1-keys)). Findings against mock chain data or the not-yet-
+wired bindings facades are out of scope and not eligible for a reward.
 
 The bounty becomes valid for this repository when it ships to production, at which point this
 section will be updated with the scope and terms. Reports are still welcome in the meantime:

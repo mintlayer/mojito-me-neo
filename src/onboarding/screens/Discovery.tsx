@@ -108,6 +108,8 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
             {t('onboarding.discovery.scanningSub')}
           </Txt>
           <Ticker>
+            {/* Locale-neutral technical literal (deliberate): derivation
+                paths are identical in every locale, so it stays outside t(). */}
             <Txt mono className="text-[11px] text-text3 mt-[18px]">
               m/44'/1'/0'/0/…
             </Txt>
@@ -154,6 +156,8 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
                   borderColor: derived!.funded.has(address) ? alpha(C.amber, 0.4) : C.lineSoft,
                 }}>
                 <View className="flex-1">
+                  {/* Locale-neutral chain prefix (deliberate): BTC is the same
+                      ticker in every locale, so it stays outside t(). */}
                   <Txt mono className="text-[10px] text-text3">
                     BTC · {t('onboarding.discovery.addressN', { n: i + 1 })}
                   </Txt>
