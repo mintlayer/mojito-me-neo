@@ -4,7 +4,7 @@ import { t } from '../i18n';
 import { pinStore, LOCK_ATTEMPTS } from '../storage/pinStore';
 import { C } from '../theme';
 import { Btn, MojitoLogo, Txt } from '../ui';
-import { Bio, BioCircle, BioGlyph, Column, Keypad, LinkBtn, PinDots, useBioScan, usePinEntry } from './ui';
+import { Bio, BioCircle, BioGlyph, Column, Keypad, PinDots, useBioScan, usePinEntry } from './ui';
 import { bioName } from './context';
 
 /**
@@ -47,6 +47,9 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
           lockSeconds: seconds,
         };
       }
+      // 'unset' (no PIN row) fails closed without feeding the lockout: there
+      // is no verifier the lockout could ever be cleared against.
+      if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
       await pinStore.registerFailure();
       const seconds = await pinStore.lockSecondsLeft();
       if (seconds > 0) {
@@ -101,13 +104,9 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
           <Txt className="text-[12px] text-center mt-4 h-4" style={{ color: err || locked ? C.red : C.text3 }}>
             {locked ? t('onboarding.pin.locked', { seconds: lockLeft }) : msg}
           </Txt>
-          {/* Rendered outside <Keypad> so the PIN lockout can't disable the
-              only way back in. */}
-          {locked && (
-            <LinkBtn className="mt-3" onPress={() => setMode('bio')}>
-              {t('onboarding.unlock.bioInstead', { bio: bioName(bio) })}
-            </LinkBtn>
-          )}
+          {/* No bio switch while a lockout is active: bio attempts during the
+              countdown would bypass the app's escalating counter (decisions.md
+              records the biometry-only product decision). */}
           <View className="flex-1" />
           <Keypad
             disabled={locked}
@@ -116,13 +115,15 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
             }}
             onDelete={() => setValue(val.slice(0, -1))}
             corner={
-              <Pressable
-                onPress={() => setMode('bio')}
-                accessibilityRole="button"
-                accessibilityLabel={t('onboarding.unlock.bioSwitch', { bio: bioName(bio) })}
-                className="p-2">
-                <BioGlyph bio={bio} size={26} color={C.text2} />
-              </Pressable>
+              !locked ? (
+                <Pressable
+                  onPress={() => setMode('bio')}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('onboarding.unlock.bioSwitch', { bio: bioName(bio) })}
+                  className="p-2">
+                  <BioGlyph bio={bio} size={26} color={C.text2} />
+                </Pressable>
+              ) : null
             }
           />
         </>

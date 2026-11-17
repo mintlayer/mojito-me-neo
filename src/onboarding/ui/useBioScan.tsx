@@ -58,8 +58,9 @@ export async function stepUpDeviceAuth(): Promise<boolean> {
  * Real biometric prompt over expo-local-authentication (M0 shipped this as a
  * simulated scan). Resolves to the ok phase only when the OS-level check
  * succeeds; failures drop back to idle with the failure count for the PIN
- * fallback copy. Device credential (PIN/pattern) stays enabled as the OS
- * fallback; the in-app PIN fallback lives in usePinEntry.
+ * fallback copy. Biometry-only by product decision: the OS device credential
+ * is not offered on the wallet's prompt (the in-app PIN fallback in
+ * usePinEntry is the always-working path; see decisions.md).
  */
 export function useBioScan(onDone: () => void, onFail?: () => void): BioScan {
   const [phase, setPhase] = useState<ScanPhase>('idle');
@@ -86,9 +87,9 @@ export function useBioScan(onDone: () => void, onFail?: () => void): BioScan {
     LocalAuthentication.authenticateAsync({
       promptMessage: t('onboarding.unlock.bioReason'),
       cancelLabel: t('common.cancel'),
-      // The OS-level device credential stays available; the in-app PIN
-      // fallback after two failures is a separate, always-working path.
-      disableDeviceFallback: false,
+      // Biometry-only: a shared or weaker OS screen PIN must not open the
+      // wallet, and bio attempts bypass the app's escalating PIN lockout.
+      disableDeviceFallback: true,
     })
       .then((result) => {
         if (result.success) {

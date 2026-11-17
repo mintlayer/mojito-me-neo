@@ -33,7 +33,7 @@ export type PinState = {
   lockedUntil: number | null;
 };
 
-export type PinVerdict = 'ok' | 'wrong' | 'locked';
+export type PinVerdict = 'ok' | 'wrong' | 'locked' | 'unset';
 
 function encodeState(state: PinState): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(state));
@@ -110,7 +110,11 @@ class PinStore {
 
   async verify(pin: string): Promise<PinVerdict> {
     const state = await this.open();
-    if (!state) return 'wrong';
+    // Unset is not wrong: a wallet whose PIN row is missing or half-written
+    // (partial wipe, storage desync) must not fabricate failures. Wrong
+    // verdicts feed the lockout; unset must not, or a fresh install of the
+    // lock state could lock the wallet with no correct PIN existing.
+    if (!state || !state.verifierHash) return 'unset';
     const now = Date.now();
     if (lockSecondsLeft(state, now) > 0) return 'locked';
     const given = deriveVerifier(pin, hexToBytes(state.salt));
@@ -119,12 +123,14 @@ class PinStore {
   }
 
   /** Count a failed attempt; every LOCK_ATTEMPTS failures arm a lockout with
-   *  double the previous burst duration. */
+   *  double the previous burst duration. Refuses to write lockout state when
+   *  no verifier exists: registerFailure is only meaningful after a verify()
+   *  saw a real PIN state, and a {verifierHash:'', salt:''} row would be a
+   *  permanent lockout no correct PIN could ever clear. */
   async registerFailure(): Promise<void> {
     const state = await this.open();
-    const next: PinState = state
-      ? { ...state, failedAttempts: state.failedAttempts + 1 }
-      : { v: 1, verifierHash: '', salt: '', failedAttempts: 1, lockedUntil: null };
+    if (!state || !state.verifierHash) return;
+    const next: PinState = { ...state, failedAttempts: state.failedAttempts + 1 };
     const burst = Math.floor(next.failedAttempts / LOCK_ATTEMPTS);
     if (burst > 0 && next.failedAttempts % LOCK_ATTEMPTS === 0) {
       next.lockedUntil = Date.now() + LOCK_SECONDS * 1000 * 2 ** (burst - 1);
@@ -150,9 +156,11 @@ class PinStore {
     return state?.failedAttempts ?? 0;
   }
 
-  /** Whether a PIN is configured (without touching the verifier). */
+  /** Whether a usable PIN is configured (a stored row without a verifier is
+   *  the unset state, not a configured PIN). */
   async exists(): Promise<boolean> {
-    return (await this.open()) !== null;
+    const state = await this.open();
+    return state !== null && state.verifierHash !== '';
   }
 
   /** Settings sign-out: forget the verifier and its keystore key. */

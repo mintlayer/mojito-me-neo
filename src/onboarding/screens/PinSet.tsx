@@ -32,6 +32,9 @@ export function PinSet({ ctx }: { ctx: Ctx }) {
                 lockSeconds: seconds,
               };
             }
+            // 'unset' (no PIN row) fails closed without feeding the lockout:
+            // there is no verifier the lockout could ever be cleared against.
+            if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
             await pinStore.registerFailure();
             const seconds = await pinStore.lockSecondsLeft();
             if (seconds > 0) {

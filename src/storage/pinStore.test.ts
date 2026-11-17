@@ -7,7 +7,13 @@ import { LOCK_ATTEMPTS, LOCK_SECONDS, pinStore } from './pinStore';
 
 async function main() {
   assert.equal(await pinStore.exists(), false);
-  assert.equal(await pinStore.verify('123456'), 'wrong', 'no PIN configured yet');
+  assert.equal(await pinStore.verify('123456'), 'unset', 'no PIN configured yet');
+
+  // registerFailure without a verifier must not fabricate lock state: the
+  // unset wallet stays unset instead of arming an uncleareable lockout.
+  await pinStore.registerFailure();
+  assert.equal(await pinStore.exists(), false);
+  assert.equal(await pinStore.verify('123456'), 'unset');
 
   await pinStore.setPin('123456');
   assert.equal(await pinStore.exists(), true);
@@ -41,12 +47,13 @@ async function main() {
   assert.equal(await pinStore.verify('123456'), 'wrong');
   assert.equal(await pinStore.verify('987654'), 'ok');
 
-  // Wipe (settings sign-out): verifier and key are gone.
+  // Wipe (settings sign-out): verifier and key are gone, and the verdict
+  // drops back to unset, not wrong.
   await pinStore.wipe();
   assert.equal(await pinStore.exists(), false);
-  assert.equal(await pinStore.verify('987654'), 'wrong');
+  assert.equal(await pinStore.verify('987654'), 'unset');
 
-  console.log('pinStore.test.ts: set, verify, lockout escalation, wipe all pass');
+  console.log('pinStore.test.ts: set, verify, lockout escalation, unset vs wrong, wipe all pass');
 }
 
 main().catch((e) => {

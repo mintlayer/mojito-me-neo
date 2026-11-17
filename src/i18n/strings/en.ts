@@ -257,7 +257,6 @@ export const en = {
   'onboarding.unlock.usePin': 'Use PIN',
   'onboarding.unlock.pinPrompt': 'Enter your 6-digit PIN',
   'onboarding.unlock.wrongPin': 'Wrong PIN · {attempts} attempt{plural} left',
-  'onboarding.unlock.bioInstead': 'Unlock with {bio} instead',
   'onboarding.unlock.bioSwitch': 'Unlock with {bio}',
   'onboarding.seed.title': 'Your recovery phrase',
   'onboarding.seed.count24': '24 words',
