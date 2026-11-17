@@ -5,7 +5,7 @@ import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as
 import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
-import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
+import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
 
 export function SwapScreen() {
   const assets = useData((d) => d.getAssets());
@@ -118,7 +118,7 @@ function SwapPanel({
   /** Readable name for the panel's amount input. */
   amountLabel?: string;
 }) {
-  const usd = (parseFloat(data.amt || '0') * price).toFixed(2);
+  const usdValue = usd(data.amt, price);
   return (
     <Card className="p-[18px]">
       <View className="flex-row justify-between items-center">
@@ -132,7 +132,7 @@ function SwapPanel({
       </View>
       <View className="flex-row justify-between items-center mt-2">
         <Txt mono className="text-[11px] text-text2">
-          {t('common.approxUsd', { usd: `$${usd}` })}
+          {t('common.approxUsd', { usd: `$${usdValue}` })}
         </Txt>
         {onChange && <PctButtons compact onPick={(f) => onChange(String(parseFloat(data.amt || '0') * (f === 1 ? 2 : f)))} />}
       </View>

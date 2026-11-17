@@ -16,6 +16,7 @@ export { ChainBadge } from './ChainBadge';
 export { ChainGlyph } from './ChainGlyph';
 export { Chip } from './Chip';
 export { Divider } from './Divider';
+export { usd } from './format';
 export { FakeQR } from './FakeQR';
 export { Field } from './Field';
 export { IconBtn } from './IconBtn';

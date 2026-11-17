@@ -4,12 +4,13 @@ import { t } from '../i18n';
 import { useData, useProviders } from '../data/providers/context';
 import type { Candle, CandleInterval } from '../data/providers';
 import { C, G, alpha, black } from '../theme';
-import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile } from '../ui';
+import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile, usd } from '../ui';
 
 export function DexScreen() {
   const market = useData((d) => d.getMarket('ML/USDT'));
   const orderBook = useData((d) => d.getOrderBook('ML/USDT'));
   const timeframes = useData((d) => d.getTimeframes());
+  const fees = useData((d) => d.getFees());
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [book, setBook] = useState<'book' | 'trades' | 'depth'>('book');
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
@@ -28,10 +29,10 @@ export function DexScreen() {
     };
   }, [price, tf]);
 
-  if (!market || !orderBook || !timeframes || !candles) return <Screen />;
+  if (!market || !orderBook || !timeframes || !fees || !candles) return <Screen />;
   const maxAsk = Math.max(...orderBook.asks.map((r) => r.t));
   const maxBid = Math.max(...orderBook.bids.map((r) => r.t));
-  const total = (parseFloat(amount || '0') * market.price).toFixed(4);
+  const total = usd(amount, market.price);
 
   return (
     <Screen>
@@ -172,7 +173,7 @@ export function DexScreen() {
           </Btn>
 
           <View className="mt-3 gap-1">
-            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue')} />
+            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue', { fee: String(fees.standard.cost), usd: `$${usd(fees.standard.cost, market.price)}` })} />
             <KVRow k={t('dex.onchainSettlement')} v={t('dex.settlementEta')} tone={C.teal} />
           </View>
         </Card>

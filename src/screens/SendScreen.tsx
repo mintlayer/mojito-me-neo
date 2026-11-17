@@ -5,7 +5,7 @@ import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
 import type { FeeTierId } from '../data/providers';
 import { C, G } from '../theme';
-import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop } from '../ui';
+import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop, usd } from '../ui';
 
 export function SendScreen({ onClose }: Sheet) {
   const assets = useData((d) => d.getAssets());
@@ -48,7 +48,6 @@ export function SendScreen({ onClose }: Sheet) {
   }
 
   if (step === 1) {
-    const usd = (parseFloat(amount || '0') * token.price).toFixed(2);
     const rows: [string, React.ReactNode][] = [
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{address}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
@@ -69,7 +68,7 @@ export function SendScreen({ onClose }: Sheet) {
               <Txt className="text-[18px] text-text2">{token.sym}</Txt>
             </View>
             <Txt mono className="text-[13px] text-text2 mt-1">
-              {t('common.approxUsd', { usd: `$${usd}` })}
+              {t('common.approxUsd', { usd: `$${usd(amount, token.price)}` })}
             </Txt>
           </View>
 
@@ -146,7 +145,7 @@ export function SendScreen({ onClose }: Sheet) {
           <Txt className="text-[20px] text-text2 font-medium">{token.sym}</Txt>
         </View>
         <Txt mono className="text-[13px] text-text2 mt-1">
-          {t('send.usd', { usd: (parseFloat(amount || '0') * token.price).toFixed(2) })}
+          {t('common.approxUsd', { usd: `$${usd(amount, token.price)}` })}
         </Txt>
         <View className="w-full mt-3.5">
           <PctButtons onPick={(f) => setAmount(String(token.amt * f))} />

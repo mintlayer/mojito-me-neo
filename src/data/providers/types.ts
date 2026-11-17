@@ -35,6 +35,7 @@ export type BridgeQuoteLine = [string, string];
 
 // Card
 export type WaitlistStatus = { taken: number; total: number };
+export type DappsSummary = { active: number };
 export type CardFeature = { icon: IconName; title: string; detail: string; tone: Tone };
 export type CardTier = { name: string; stake: string; cashback: string; active?: boolean };
 
@@ -121,6 +122,7 @@ export interface WalletData {
   getBridgeQuote(): Promise<BridgeQuoteLine[]>;
   // card
   getWaitlist(): Promise<WaitlistStatus>;
+  getDapps(): Promise<DappsSummary>;
   getCardFeatures(): Promise<CardFeature[]>;
   getCardTiers(): Promise<CardTier[]>;
   // send and receive

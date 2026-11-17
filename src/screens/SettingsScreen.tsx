@@ -16,6 +16,8 @@ type SettingsNav = Sheet & {
 
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: SettingsNav) {
   const profile = useData((d) => d.getProfile());
+  const networks = useData((d) => d.getNetworks());
+  const dapps = useData((d) => d.getDapps());
   const [flags, setFlags] = useState({ biometric: true, autoLock: true, testnet: false, notifs: true, hideBal: false });
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
   const [appearance, setAppearance] = useState<AppearanceId>('dark');
@@ -35,7 +37,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
       ],
     );
 
-  if (!profile) return <Screen />;
+  if (!profile || !networks || !dapps) return <Screen />;
 
   return (
     <Screen>
@@ -66,11 +68,11 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
         </ListRow>
         <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub')} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
-        <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub')} trailing="→" divider />
+        <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub', { count: dapps.active })} trailing="→" divider />
       </Section>
 
       <Section title={t('settings.section.networks')}>
-        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub')} trailing="→" />
+        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} trailing="→" />
         <ListRow icon="flash" iconColor={C.amber} label={t('settings.network.testnet')} sub={t('settings.network.testnetSub')} divider>
           <Toggle on={flags.testnet} onChange={set('testnet')} />
         </ListRow>

@@ -130,6 +130,9 @@ export const BRIDGE_QUOTE = [
 
 export const WAITLIST = { taken: 12847, total: 25000 };
 
+/** Connected-dApp demo state for Settings. */
+export const DAPPS = { active: 3 };
+
 export const CARD_FEATURES = [
   { icon: 'flash', title: 'Spend onchain', detail: 'Instant ML + BTC settlement', tone: 'amber' },
   { icon: 'bridge', title: 'Auto-route', detail: 'Best fee across chains', tone: 'violet' },
