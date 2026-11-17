@@ -7,29 +7,41 @@ import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
 import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
 
+/** One side of a swap: token, chain, typed amount and provider balance. */
+type SwapPanelData = { sym: string; chain: string; amt: string; bal: string };
+
 export function SwapScreen() {
   const assets = useData((d) => d.getAssets());
   const assetBalances = useData((d) => d.getAssetBalances());
   const assetSymbols = useData((d) => d.getAssetSymbols());
   const htlcSteps = useData((d) => d.getHtlcSteps());
   const swapStats = useData((d) => d.getSwapStats());
-  const [from, setFrom] = useState({ sym: 'BTC', chain: 'Bitcoin', amt: '0.025', bal: '0.4821' });
-  const [to, setTo] = useState({ sym: 'ML', chain: 'Mintlayer', amt: '7012.45', bal: '12,480.50' });
+  /** Panels start null and resolve from provider assets, the same source the picker uses. */
+  const [from, setFrom] = useState<SwapPanelData | null>(null);
+  const [to, setTo] = useState<SwapPanelData | null>(null);
   /** Which panel the picker is editing, or null when closed. */
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
   const [submitted, setSubmitted] = useState(false);
   /** Approx-USD conversion reads provider fixture prices, not screen constants. */
   const priceMap = Object.fromEntries((assets ?? []).map((a) => [a.sym, a.price] as const));
 
+  /** Build a panel from the provider asset row; a fresh pick starts at amount zero. */
+  const sideDefaults = (sym: string): SwapPanelData => {
+    const asset = assets?.find((a) => a.sym === sym);
+    return { sym, chain: asset?.chain ?? '', amt: '0', bal: asset ? asset.amt.toLocaleString() : '' };
+  };
+  const fromPanel = from ?? sideDefaults('BTC');
+  const toPanel = to ?? sideDefaults('ML');
+
   const flip = () => {
-    setFrom(to);
-    setTo(from);
+    setFrom(toPanel);
+    setTo(fromPanel);
   };
 
   const pick = (sym: string) => {
     const asset = assets?.find((a) => a.sym === sym);
     if (!asset) return;
-    const next = { sym: asset.sym, chain: asset.chain, amt: '0', bal: asset.amt.toLocaleString() };
+    const next = sideDefaults(asset.sym);
     if (picking === 'from') setFrom(next);
     else setTo(next);
   };
@@ -40,8 +52,8 @@ export function SwapScreen() {
     return (
       <SuccessScreen
         title={t('swap.success.title')}
-        summary={`${from.amt} ${from.sym} → ${to.amt} ${to.sym}`}
-        description={t('swap.success.desc', { chain: from.chain })}
+        summary={`${fromPanel.amt} ${fromPanel.sym} → ${toPanel.amt} ${toPanel.sym}`}
+        description={t('swap.success.desc', { chain: fromPanel.chain })}
         onDone={() => setSubmitted(false)}
       />
     );
@@ -55,15 +67,15 @@ export function SwapScreen() {
         open={picking !== null}
         onClose={() => setPicking(null)}
         symbols={assetSymbols}
-        value={picking === 'from' ? from.sym : to.sym}
+        value={picking === 'from' ? fromPanel.sym : toPanel.sym}
         balances={assetBalances}
         onSelect={pick}
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label={t('common.youSend')} data={from} price={priceMap[from.sym]} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} amountLabel={t('common.youSend')} />
+        <SwapPanel label={t('common.youSend')} data={fromPanel} price={priceMap[fromPanel.sym]} onChange={(amt) => setFrom({ ...fromPanel, amt })} onPickToken={() => setPicking('from')} amountLabel={t('common.youSend')} />
         <View className="h-2" />
-        <SwapPanel label={t('common.youReceive')} data={to} price={priceMap[to.sym]} onPickToken={() => setPicking('to')} amountLabel={t('common.youReceive')} />
+        <SwapPanel label={t('common.youReceive')} data={toPanel} price={priceMap[toPanel.sym]} onPickToken={() => setPicking('to')} amountLabel={t('common.youReceive')} />
 
         <Pressable
           onPress={flip}
@@ -107,7 +119,7 @@ function SwapPanel({
   amountLabel,
 }: {
   label: string;
-  data: { sym: string; chain: string; amt: string; bal: string };
+  data: SwapPanelData;
   price?: number;
   onChange?: (v: string) => void;
   onPickToken?: () => void;

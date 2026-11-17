@@ -11,6 +11,7 @@ export function DexScreen() {
   const orderBook = useData((d) => d.getOrderBook('ML/USDT'));
   const timeframes = useData((d) => d.getTimeframes());
   const fees = useData((d) => d.getFees());
+  const assets = useData((d) => d.getAssets());
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [book, setBook] = useState<'book' | 'trades' | 'depth'>('book');
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
@@ -29,10 +30,16 @@ export function DexScreen() {
     };
   }, [price, tf]);
 
-  if (!market || !orderBook || !timeframes || !fees || !candles) return <Screen />;
+  if (!market || !orderBook || !timeframes || !fees || !candles || !assets) return <Screen />;
   const maxAsk = Math.max(...orderBook.asks.map((r) => r.t));
   const maxBid = Math.max(...orderBook.bids.map((r) => r.t));
   const total = usd(amount, market.price);
+  /** Spread between the best ask and best bid, percent relative to the ask. */
+  const bestAsk = orderBook.asks[0]?.p ?? market.price;
+  const bestBid = orderBook.bids[0]?.p ?? market.price;
+  const spread = Math.abs(bestAsk - bestBid);
+  const spreadPct = (spread / bestAsk) * 100;
+  const mlBalance = assets.find((a) => a.sym === 'ML')?.amt ?? 0;
 
   return (
     <Screen>
@@ -115,7 +122,7 @@ export function DexScreen() {
             {t('dex.spread')}
           </Txt>
           <Txt mono className="text-[12px] font-semibold">
-            0.0006 · 0.17%
+            {`${spread.toFixed(4)} · ${spreadPct.toFixed(2)}%`}
           </Txt>
           <Txt mono className="text-[12px]" style={{ color: C.teal }}>
             ↕
@@ -164,7 +171,7 @@ export function DexScreen() {
           <View className="gap-2">
             <Field label={t('dex.price')} value={market.price.toFixed(4)} unit="USDT" />
             <Field label={t('common.amount')} value={amount} unit="ML" onChangeText={setAmount} />
-            <PctButtons onPick={(f) => setAmount(String(Math.round(12480.5 * f)))} />
+            <PctButtons onPick={(f) => setAmount(String(Math.round(mlBalance * f)))} />
             <Field label={t('common.total')} value={total} unit="USDT" tone={C.text1} />
           </View>
 
