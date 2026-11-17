@@ -1,0 +1,9 @@
+{
+  "platforms": ["ios", "android"],
+  "ios": {
+    "modules": ["MojitoCoreModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.mojitocore.MojitoCoreModule"]
+  }
+}

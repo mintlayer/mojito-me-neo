@@ -20,7 +20,8 @@
       "android"
     ],
     "plugins": [
-      "expo-build-properties"
+      "expo-build-properties",
+      "./modules/mojito-core/app.plugin.js"
     ]
   }
 }
