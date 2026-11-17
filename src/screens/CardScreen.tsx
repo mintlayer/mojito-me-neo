@@ -15,7 +15,7 @@ export function CardScreen() {
   const cardTiers = useData((d) => d.getCardTiers());
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<WaitlistResult | null>(null);
-  const [joinError, setJoinError] = useState<'invalid' | 'duplicate' | null>(null);
+  const [joinError, setJoinError] = useState<'invalid' | 'duplicate' | 'error' | null>(null);
 
   if (!waitlist || !cardFeatures || !cardTiers) return <Screen />;
   const pct = (waitlist.taken / waitlist.total) * 100;
@@ -30,7 +30,7 @@ export function CardScreen() {
       } else if (r.reason === 'invalid' || r.reason === 'duplicate') {
         setJoinError(r.reason);
       }
-    });
+    }).catch(() => setJoinError('error'));
   };
 
   return (
@@ -104,7 +104,11 @@ export function CardScreen() {
             </Btn>
             {joinError && (
               <Callout tone={C.red} icon="close" className="mt-3">
-                {joinError === 'invalid' ? t('card.waitlist.invalid') : t('card.waitlist.duplicate')}
+                {joinError === 'invalid'
+                  ? t('card.waitlist.invalid')
+                  : joinError === 'duplicate'
+                    ? t('card.waitlist.duplicate')
+                    : t('card.waitlist.error')}
               </Callout>
             )}
             <View className="flex-row justify-between mt-2.5">

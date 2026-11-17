@@ -80,6 +80,8 @@ export function SwapScreen() {
 
         <Pressable
           onPress={flip}
+          accessibilityRole="button"
+          accessibilityLabel={t('swap.flip')}
           className="absolute w-11 h-11 rounded-[14px] items-center justify-center z-10 overflow-hidden"
           style={{ top: '44%', left: '50%', marginLeft: -22, borderWidth: 1, borderColor: C.line }}>
           <LinearGradient colors={gradColors(G.flip)} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />

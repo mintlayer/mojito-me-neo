@@ -17,7 +17,12 @@ export function Checkbox({
   size?: number;
 }) {
   return (
-    <Pressable onPress={onToggle} className="flex-row items-center gap-3">
+    <Pressable
+      onPress={onToggle}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      accessibilityLabel={label}
+      className="flex-row items-center gap-3">
       <View
         className="items-center justify-center"
         style={{

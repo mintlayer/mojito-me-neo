@@ -76,7 +76,9 @@ export function Verify({ ctx }: { ctx: Ctx }) {
                         delete n[i];
                         return n;
                       })
-                    }>
+                    }
+                    accessibilityRole="button"
+                    accessibilityLabel={t('onboarding.verify.clearWord', { position: i + 1 })}>
                     <Icon name="close" size={12} color={C.text3} />
                   </Pressable>
                 )}

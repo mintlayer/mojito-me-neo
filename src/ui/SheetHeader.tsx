@@ -12,7 +12,7 @@ export function SheetHeader({ title, onClose, onBack }: { title?: string; onClos
         name={onBack ? 'arrow_l' : 'close'}
         iconSize={16}
         radius={12}
-        label={onBack ? t('common.goBack') : t('common.close')}
+        label={onBack ? t('common.back') : t('common.close')}
         onPress={onBack ?? onClose}
       />
       <Txt className="text-[16px] font-semibold">{title}</Txt>

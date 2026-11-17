@@ -64,7 +64,11 @@ export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; on
             }}
             onDelete={() => setValue(val.slice(0, -1))}
             corner={
-              <Pressable onPress={() => setMode('bio')} className="p-2">
+              <Pressable
+                onPress={() => setMode('bio')}
+                accessibilityRole="button"
+                accessibilityLabel={t('onboarding.unlock.bioSwitch', { bio: bioName(bio) })}
+                className="p-2">
                 <BioGlyph bio={bio} size={26} color={C.text2} />
               </Pressable>
             }

@@ -77,6 +77,8 @@ export function BridgeScreen() {
                 setSrc(dst);
                 setDst(src);
               }}
+              accessibilityRole="button"
+              accessibilityLabel={t('bridge.swapSides')}
               className="w-9 h-9 rounded-xl items-center justify-center"
               style={{ backgroundColor: C.bg1, borderWidth: 1, borderColor: C.line }}>
               <Icon name="swap" size={14} color={C.violet} />

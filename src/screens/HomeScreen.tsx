@@ -97,7 +97,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
           <View className="flex-row items-center gap-2">
             <Label>{t('home.balance.total')}</Label>
-            <Pressable onPress={() => setHidden((h) => !h)}>
+            <Pressable
+              onPress={() => setHidden((h) => !h)}
+              accessibilityRole="button"
+              accessibilityLabel={t(hidden ? 'home.balance.show' : 'home.balance.hide')}
+              accessibilityState={{ selected: hidden }}>
               <Icon name={hidden ? 'eye_off' : 'eye'} size={14} color={C.text2} />
             </Pressable>
           </View>
@@ -122,7 +126,8 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           </View>
 
           <View className="mt-3.5">
-            {/* Provider history for the picked range; static spark until it lands. */}
+            {/* Provider history for the picked range; the fixture spark is
+                only the fallback while it resolves. */}
             <AreaChart data={series ?? balance.spark} />
           </View>
 

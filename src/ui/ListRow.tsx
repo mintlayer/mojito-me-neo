@@ -30,7 +30,10 @@ export function ListRow({
   compact?: boolean;
 }) {
   return (
-    <Pressable onPress={onPress} className={`flex-row items-center gap-3 px-3.5 ${compact ? 'py-2' : 'py-3'}`}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole={onPress ? 'button' : undefined}
+      className={`flex-row items-center gap-3 px-3.5 ${compact ? 'py-2' : 'py-3'}`}>
       {divider && <View className="absolute left-0 right-0 top-0" style={{ height: 1, backgroundColor: C.lineSoft }} />}
       {icon && (
         <View>

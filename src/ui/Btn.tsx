@@ -48,6 +48,8 @@ export function Btn({
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       className={`rounded-2xl overflow-hidden ${className}`}
       style={{ opacity: disabled ? 0.4 : 1 }}>
       {t.grad ? (
