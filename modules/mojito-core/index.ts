@@ -48,13 +48,6 @@ export function bytesToHex(bytes: Uint8Array): string {
   return hex;
 }
 
-export function hexToBytes(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) throw bindingsError('odd-length hex string', 'decoding');
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  return out;
-}
-
 function toBytes(value: unknown): Uint8Array {
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);

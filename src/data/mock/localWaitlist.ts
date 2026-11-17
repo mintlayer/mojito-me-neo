@@ -2,13 +2,17 @@
 // state, idempotent per email. The real backend MUST replace this before any
 // production ship; the ship-blocking TODO lives in missing-architecture gap 4.
 import { WAITLIST } from '../../data';
+import { STORAGE_KEYS, type StorageKeyId } from '../../storage/keys';
 import type { WaitlistProvider, WaitlistResult } from '../providers/types';
+
+/** M5 persistence target for the confirmed email; keeps the keys.ts seam live. */
+export const WAITLIST_EMAIL_KEY: StorageKeyId = STORAGE_KEYS.waitlistEmail;
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
 export function createLocalWaitlistProvider(): WaitlistProvider {
-  // Session-scoped membership set. M5 swaps in secure persistence via the
-  // waitlist.email.v1 storage key; the call sites do not change.
+  // Session-scoped membership set. M5 swaps in secure persistence under
+  // WAITLIST_EMAIL_KEY; the call sites do not change.
   const members = new Set<string>();
   let nextPosition = WAITLIST.taken + 1;
 

@@ -6,6 +6,8 @@
 // is gated to dev/test runtimes: a release build without the native core
 // fails loudly instead of sealing secrets with a fake cipher.
 import type { SealedBlob } from '../../modules/mojito-core';
+import { bytesToHex, hexToBytes } from './hex';
+import { type StorageKeyId } from './keys';
 
 /** Which implementation getSecureStore() handed out. */
 export type SecureStoreKind = 'native' | 'memory';
@@ -20,10 +22,10 @@ function memoryFallbackAllowed(): boolean {
 }
 
 export interface SecureStore {
-  seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob>;
-  open(keyId: string, blob: SealedBlob): Promise<Uint8Array>;
-  wipe(keyId: string): Promise<void>;
-  keyExists(keyId: string): Promise<boolean>;
+  seal(keyId: StorageKeyId, plaintext: Uint8Array): Promise<SealedBlob>;
+  open(keyId: StorageKeyId, blob: SealedBlob): Promise<Uint8Array>;
+  wipe(keyId: StorageKeyId): Promise<void>;
+  keyExists(keyId: StorageKeyId): Promise<boolean>;
 }
 
 const IV_BYTES = 12;
@@ -104,6 +106,8 @@ function randomBytes(length: number): Uint8Array {
   return out;
 }
 
+// FNV-1a again on purpose: the storage test double stays dependency-free and
+// does not import from the mock data layer.
 function fnv1a(data: number[], seed: number): number {
   let h = seed >>> 0;
   for (const byte of data) {
@@ -141,9 +145,9 @@ function mockTag(key: Uint8Array, iv: Uint8Array, ct: Uint8Array): Uint8Array {
 
 /** In-memory SecureStore with the same contract as the native path. */
 export function createMemorySecureStore(): SecureStore {
-  const keys = new Map<string, Uint8Array>();
+  const keys = new Map<StorageKeyId, Uint8Array>();
 
-  const loadOrCreateKey = (keyId: string): Uint8Array => {
+  const loadOrCreateKey = (keyId: StorageKeyId): Uint8Array => {
     let key = keys.get(keyId);
     if (!key) {
       key = randomBytes(32);
@@ -163,14 +167,14 @@ export function createMemorySecureStore(): SecureStore {
       const key = loadOrCreateKey(keyId);
       const iv = randomBytes(IV_BYTES);
       const ct = xor(plaintext, keystream(key, iv, plaintext.length));
-      return { v: 1, iv: hex(iv), ct: hex(ct), tag: hex(mockTag(key, iv, ct)) };
+      return { v: 1, iv: bytesToHex(iv), ct: bytesToHex(ct), tag: bytesToHex(mockTag(key, iv, ct)) };
     },
 
     async open(keyId, blob) {
       const key = keys.get(keyId);
-      const iv = unhex(blob.iv);
-      const ct = unhex(blob.ct);
-      const tag = unhex(blob.tag);
+      const iv = hexToBytes(blob.iv);
+      const ct = hexToBytes(blob.ct);
+      const tag = hexToBytes(blob.tag);
       if (!key || tag.length !== TAG_BYTES || !timingSafeEqual(mockTag(key, iv, ct), tag)) {
         throw new Error(`open failed for ${keyId}`);
       }
@@ -191,17 +195,4 @@ function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
-}
-
-function hex(bytes: Uint8Array): string {
-  let out = '';
-  for (const byte of bytes) out += byte.toString(16).padStart(2, '0');
-  return out;
-}
-
-function unhex(value: string): Uint8Array {
-  if (value.length % 2 !== 0) throw new Error('odd-length hex string');
-  const out = new Uint8Array(value.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(value.slice(i * 2, i * 2 + 2), 16);
-  return out;
 }
