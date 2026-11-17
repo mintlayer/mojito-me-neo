@@ -35,10 +35,13 @@ class MojitoCoreModule : Module() {
     AsyncFunction("seal") { keyId: String, plaintext: ByteArray, promise: Promise ->
       try {
         val key = loadOrCreateKey(keyId)
-        val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(TRANSFORM)
-        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(TAG_BITS, iv))
+        // The Keystore cipher generates its own IV: caller-provided encryption
+        // IVs are rejected outright on API 28+ (randomized encryption is
+        // required) and would otherwise open the door to IV-reuse misuse.
+        cipher.init(Cipher.ENCRYPT_MODE, key)
         val output = cipher.doFinal(plaintext)
+        val iv = cipher.iv
         // GCM output is ciphertext with the tag appended; split them apart.
         val tagLen = TAG_BITS / 8
         val ct = output.copyOfRange(0, output.size - tagLen)
@@ -58,6 +61,7 @@ class MojitoCoreModule : Module() {
     AsyncFunction("open") { keyId: String, iv: String, ct: String, tag: String, promise: Promise ->
       try {
         val key = loadOrCreateKey(keyId)
+        require(unhex(iv).size == IV_BYTES) { "iv must be exactly $IV_BYTES bytes" }
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(TAG_BITS, unhex(iv)))
         val joined = unhex(ct) + unhex(tag)
