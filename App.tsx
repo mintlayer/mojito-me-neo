@@ -172,48 +172,72 @@ function Shell() {
     return () => sub.remove();
   }, [session?.settings.autoLock]);
 
+  /** Terminal key state guidance: the phrase is the only way back, so the
+   *  alert offers the erase. */
+  const alertInvalidated = () => {
+    Alert.alert(t('onboarding.unlock.invalidatedTitle'), t('onboarding.unlock.invalidatedBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('onboarding.unlock.invalidatedErase'), style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
+
   const unlock = () => {
     void (async () => {
+      let meta: VaultMeta | null = null;
       try {
-        const meta = await walletVault.meta();
-        // null meta means the blob is gone (post-wipe recovery window); there
-        // is nothing to re-seal and nothing to gate, unlock as before.
-        if (meta) await upgradeUngatedKey(meta);
-        setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
-        setLocked(false);
+        meta = await walletVault.meta();
       } catch (e) {
         // The native key gate prompts inside the module. A cancelled or
         // failed prompt keeps the wallet locked; the next attempt re-runs
-        // the prompt. A terminal key state gets its own recovery guidance:
-        // the phrase is the only way back, so the alert offers the erase.
-        if (e instanceof VaultKeyInvalidatedError) {
-          Alert.alert(t('onboarding.unlock.invalidatedTitle'), t('onboarding.unlock.invalidatedBody'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('onboarding.unlock.invalidatedErase'), style: 'destructive', onPress: () => signOut() },
-          ]);
-        }
+        // the prompt.
+        if (e instanceof VaultKeyInvalidatedError) alertInvalidated();
         setLocked(true);
+        return;
+      }
+      // Gate-alignment failure is retryable by construction: the two-slot
+      // re-seal keeps the old vault intact until the new slot verifies, so
+      // the session continues on the old vault, one message says so, and
+      // the next unlock retries. The old key dying mid-upgrade is terminal
+      // and gets the same recovery guidance as a failed unlock.
+      let upgradeFailed = false;
+      if (meta) {
+        try {
+          await upgradeKeyGating(meta);
+        } catch (e) {
+          if (e instanceof VaultKeyInvalidatedError) {
+            alertInvalidated();
+            setLocked(true);
+            return;
+          }
+          // VaultUpgradeError (the re-seal bailed before the verified
+          // readback) and a declined prompt on the old gated key are both
+          // retryable with the old vault intact; nothing on this path can
+          // lose the wallet, and it must not escape as an unhandled
+          // rejection.
+          upgradeFailed = true;
+        }
+      }
+      // null meta means the blob is gone (post-wipe recovery window); there
+      // is nothing to re-seal and nothing to gate, unlock as before.
+      setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
+      setLocked(false);
+      if (upgradeFailed) {
+        Alert.alert(t('onboarding.unlock.upgradeTitle'), t('onboarding.unlock.upgradeBody'));
       }
     })();
   };
 
-  /** Downgrade guard: the persisted choice says biometrics, but the vault
-   *  key predates the choice-based gate and carries none. The session seed
-   *  is re-sealed under a fresh gated key. The wipe-save window is
-   *  unavoidable with a single key slot; if the re-seal fails (a declined
-   *  prompt among others) the wallet is gone and the phrase is the only way
-   *  back, which the unlock error alert states outright. */
-  const upgradeUngatedKey = async (meta: VaultMeta): Promise<void> => {
-    if (!session?.bioChoice || (await walletVault.keyGated())) return;
+  /** Gate alignment at unlock, both directions: the persisted Secure-screen
+   *  choice decides the vault key's native gate. A biometrics choice over a
+   *  legacy ungated key re-seals gated; a disabled toggle re-seals ungated,
+   *  so after it settles the PIN alone always opens. walletVault.upgradeGating
+   *  only deletes the old slot after the new one verifies, so a failure
+   *  here is retryable and never loses data. */
+  const upgradeKeyGating = async (meta: VaultMeta): Promise<void> => {
+    const wantGated = session?.bioChoice ?? false;
+    if ((await walletVault.keyGated()) === wantGated) return;
     const words = await walletVault.openWords();
-    await walletVault.wipe();
-    // The unlock catch surfaces the terminal guidance (with the erase
-    // option); this layer only escalates.
-    try {
-      await walletVault.save(words, meta, true);
-    } catch {
-      throw new VaultKeyInvalidatedError('vault key upgrade failed; restore from the recovery phrase');
-    }
+    await walletVault.upgradeGating(words, meta, wantGated);
   };
 
   const finishOnboarding = (r: OnboardingResult) => {
