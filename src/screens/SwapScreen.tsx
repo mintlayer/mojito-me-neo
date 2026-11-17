@@ -8,7 +8,7 @@ import { C, G } from '../theme';
 import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
 
 /** One side of a swap: token, chain, typed amount and provider balance. */
-type SwapPanelData = { sym: string; chain: string; amt: string; bal: string };
+type SwapPanelData = { sym: string; chain: string; amt: string; bal: number };
 
 export function SwapScreen() {
   const assets = useData((d) => d.getAssets());
@@ -28,14 +28,15 @@ export function SwapScreen() {
   /** Build a panel from the provider asset row; a fresh pick starts at amount zero. */
   const sideDefaults = (sym: string): SwapPanelData => {
     const asset = assets?.find((a) => a.sym === sym);
-    return { sym, chain: asset?.chain ?? '', amt: '0', bal: asset ? asset.amt.toLocaleString() : '' };
+    return { sym, chain: asset?.chain ?? '', amt: '0', bal: asset ? asset.amt : 0 };
   };
   const fromPanel = from ?? sideDefaults('BTC');
   const toPanel = to ?? sideDefaults('ML');
 
   const flip = () => {
     setFrom(toPanel);
-    setTo(fromPanel);
+    // The receive side has no quote yet, so it never carries a typed amount.
+    setTo({ ...fromPanel, amt: '0' });
   };
 
   const pick = (sym: string) => {
@@ -73,9 +74,9 @@ export function SwapScreen() {
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label={t('common.youSend')} data={fromPanel} price={priceMap[fromPanel.sym]} onChange={(amt) => setFrom({ ...fromPanel, amt })} onPickToken={() => setPicking('from')} amountLabel={t('common.youSend')} />
+        <SwapPanel label={t('common.youSend')} data={fromPanel} price={priceMap[fromPanel.sym]} onChange={(amt) => setFrom({ ...fromPanel, amt })} onPickToken={() => setPicking('from')} />
         <View className="h-2" />
-        <SwapPanel label={t('common.youReceive')} data={toPanel} price={priceMap[toPanel.sym]} onPickToken={() => setPicking('to')} amountLabel={t('common.youReceive')} />
+        <SwapPanel label={t('common.youReceive')} data={toPanel} price={priceMap[toPanel.sym]} onPickToken={() => setPicking('to')} />
 
         <Pressable
           onPress={flip}
@@ -132,17 +133,19 @@ function SwapPanel({
       <View className="flex-row justify-between items-center">
         <Label>{label}</Label>
         <Txt mono className="text-[11px] text-text2">
-          {t('common.bal', { bal: data.bal, sym: data.sym })}
+          {t('common.bal', { bal: data.bal.toLocaleString(), sym: data.sym })}
         </Txt>
       </View>
       <View className="mt-3">
-        <AmountRow symbol={data.sym} chain={data.chain} value={data.amt} onChangeText={onChange} onPickToken={onPickToken} accessibilityLabel={amountLabel} />
+        {/* The receive side has no quote until M2 wires rates: show a dash
+            instead of mirroring the sent amount. */}
+        <AmountRow symbol={data.sym} chain={data.chain} value={onChange ? data.amt : '-'} onChangeText={onChange} onPickToken={onPickToken} accessibilityLabel={amountLabel ?? label} />
       </View>
       <View className="flex-row justify-between items-center mt-2">
         <Txt mono className="text-[11px] text-text2">
           {t('common.approxUsd', { usd: `$${usdValue}` })}
         </Txt>
-        {onChange && <PctButtons compact onPick={(f) => onChange(String(parseFloat(data.amt || '0') * (f === 1 ? 2 : f)))} />}
+        {onChange && <PctButtons compact onPick={(f) => onChange(String(data.bal * f))} />}
       </View>
     </Card>
   );

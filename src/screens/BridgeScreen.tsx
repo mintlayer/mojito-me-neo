@@ -8,6 +8,7 @@ import type { ChainName } from '../theme';
 import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, KVGrid, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop, tile } from '../ui';
 
 export function BridgeScreen() {
+  const assets = useData((d) => d.getAssets());
   const assetBalances = useData((d) => d.getAssetBalances());
   const assetSymbols = useData((d) => d.getAssetSymbols());
   const bridgeChains = useData((d) => d.getBridgeChains());
@@ -24,8 +25,10 @@ export function BridgeScreen() {
   // The picked chain always lands on whichever side isn't Mintlayer.
   const pickChain = (name: ChainName) => (src === HOME_CHAIN ? setDst(name) : setSrc(name));
 
-  if (!assetBalances || !assetSymbols || !bridgeChains || !bridgeQuote || !bridgeRoute) return <Screen />;
+  if (!assets || !assetBalances || !assetSymbols || !bridgeChains || !bridgeQuote || !bridgeRoute) return <Screen />;
   const counterpartyChains = bridgeChains.map((c) => c.name).filter((n) => n !== HOME_CHAIN);
+  // Same source the token picker uses, so the caption cannot drift from it.
+  const tokenBalance = assets.find((a) => a.sym === token)?.amt ?? 0;
 
   if (submitted) {
     return (
@@ -137,7 +140,7 @@ export function BridgeScreen() {
           <View className="flex-row justify-between items-center mb-3">
             <Label>{t('common.amount')}</Label>
             <Txt mono className="text-[11px] text-text2">
-              {t('bridge.available', { amount: (assetBalances[token] ?? '').replace(/ [^ ]+$/, '') || '0', token })}
+              {t('bridge.available', { amount: tokenBalance.toLocaleString(), token })}
             </Txt>
           </View>
           <AmountRow symbol={token} value={amount} onChangeText={setAmount} onPickToken={() => setTokenPicker(true)} />

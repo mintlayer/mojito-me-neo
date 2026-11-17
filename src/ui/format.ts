@@ -3,5 +3,5 @@
 /** USD value of amount (raw number or decimal string) at price, 2 decimals. */
 export function usd(amount: string | number, price: number): string {
   const value = (typeof amount === 'string' ? parseFloat(amount || '0') : amount) * price;
-  return value.toFixed(2);
+  return (Number.isFinite(value) ? value : 0).toFixed(2);
 }
