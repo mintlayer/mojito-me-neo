@@ -129,8 +129,8 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
         <ProgressBar pct={pct} color={done ? C.green : C.amber} />
 
         <Callout tone={C.teal} icon="shield" className="mt-4">
-          Your drawing is mixed with the device's secure random generator — it never replaces it. A drawing alone holds far less
-          randomness than it appears to.
+          This screen only meters the randomness of your drawing. The drawing will be mixed with the device's secure random
+          generator before it seeds a phrase. A drawing alone holds far less randomness than it appears to.
         </Callout>
 
         <View className="flex-row gap-2.5 mt-4">

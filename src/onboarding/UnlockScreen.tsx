@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { C } from '../theme';
 import { Btn, MojitoLogo, Txt } from '../ui';
@@ -9,7 +9,9 @@ export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; on
   const [mode, setMode] = useState<'bio' | 'pin'>('bio');
   const scan = useBioScan(onUnlock);
   const onUnlockRef = useRef(onUnlock);
-  onUnlockRef.current = onUnlock;
+  useEffect(() => {
+    onUnlockRef.current = onUnlock;
+  });
 
   const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
     target: pin,

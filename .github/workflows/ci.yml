@@ -26,4 +26,4 @@ jobs:
       # Catches anything that typechecks but won't bundle (native module
       # resolution, Metro config drift).
       - name: Bundle
-        run: npx expo export --platform android --output-dir .ci-export
+        run: npx expo export --platform android --output-dir .expo-export

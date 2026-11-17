@@ -25,12 +25,6 @@ const CHECK_WORDS = new Set<string>(['brave', 'coin', 'claim', 'beach', 'army', 
 export const checksumOK = (words: string[]): boolean =>
   words.length > 0 && words.every((w) => BIP39.includes(w)) && CHECK_WORDS.has(words[words.length - 1]);
 
-export const DEMO_PHRASES = {
-  valid12: 'autumn balance camera castle cherry clever cliff coral cotton crane crystal coin',
-  valid24: SEED.join(' '),
-  badsum24: SEED.slice(0, 23).join(' ') + ' bridge', // duplicate word: fails the mock checksum
-};
-
 export const ACCOUNTS = [
   { name: 'Account 1', path: "m/84'/0'/0'", btc: '0.03420000', ml: '1,250.00', usd: '$2,103.18' },
   { name: 'Account 2', path: "m/84'/0'/1'", btc: '0.00180000', ml: '86.40', usd: '$112.55' },

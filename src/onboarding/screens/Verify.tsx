@@ -64,7 +64,7 @@ export function Verify({ ctx }: { ctx: Ctx }) {
                   Word {i + 1}
                 </Txt>
                 <Txt mono className="flex-1 text-[14px] font-medium" style={{ color: filled ? C.text0 : C.text3 }}>
-                  {fills[i] ?? (isActive ? '· · ·' : '—')}
+                  {fills[i] ?? '· · ·'}
                 </Txt>
                 {filled && <Icon name="check" size={14} color={C.green} stroke={2.5} />}
                 {filled && (

@@ -30,6 +30,9 @@ export const WordSlot = forwardRef<
       </Txt>
       <TextInput
         ref={ref}
+        // Remount on the masked switch: Android misrenders live secureTextEntry
+        // toggles, so the key change forces a fresh input instead.
+        key={masked ? 'm' : 'v'}
         value={value}
         // Raw text goes up: RN has no onPaste, so the parent detects a
         // multi-word paste before the single-word sanitiser runs.
@@ -41,6 +44,9 @@ export const WordSlot = forwardRef<
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
+        autoComplete="off"
+        textContentType="none"
+        importantForAutofill="no"
         secureTextEntry={masked}
         className="flex-1 font-mono text-[11.5px] font-medium text-text0 p-0"
       />
