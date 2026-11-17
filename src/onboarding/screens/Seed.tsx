@@ -86,7 +86,6 @@ export function Seed({ ctx }: { ctx: Ctx }) {
       <Sheet open={skipSheet} onClose={() => setSkipSheet(false)}>
         <Txt className="text-[18px] font-bold tracking-tightest">{t('onboarding.seed.skipTitle')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[20px]">
-          <Txt className="text-[13px] font-semibold">{t('onboarding.seed.skipBold')}</Txt>
           {t('onboarding.seed.skipBody')}
         </Txt>
         <Btn tone="primary" className="mt-[18px]" onPress={() => setSkipSheet(false)}>

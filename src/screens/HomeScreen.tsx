@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { useData } from '../data/providers/context';
+import { useData, useProviders } from '../data/providers/context';
 import type { AssetRow } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
-import { AreaChart, Avatar, Callout, Card, ChainBadge, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
+import { AreaChart, Avatar, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
+  const { mode } = useProviders();
   const balance = useData((d) => d.getPortfolio());
   const assets = useData((d) => d.getAssets());
   const activity = useData((d) => d.getActivity(20));
@@ -43,6 +44,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <Txt className="text-[13px] font-semibold">{profile.name} ▾</Txt>
           </View>
         </View>
+        {mode === 'mock' && (
+          <View className="flex-1 items-start pl-2">
+            <Chip dot={false}>{t('home.demoData')}</Chip>
+          </View>
+        )}
         <View className="flex-row gap-2">
           {onLock && <IconBtn name="lock" label={t('home.lock')} onPress={onLock} />}
           <IconBtn name="settings" label={t('settings.title')} onPress={onOpenSettings} />
@@ -87,7 +93,8 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
           <View className="flex-row items-baseline gap-2 mt-1.5">
             {hidden ? (
-              <Txt className="text-[38px] font-bold tracking-tightest">{t('home.balance.hidden')}</Txt>
+              // Balance mask is decoration, kept in code rather than en.ts.
+              <Txt className="text-[38px] font-bold tracking-tightest">••••••</Txt>
             ) : (
               <Txt className="text-[38px] font-bold tracking-tightest">
                 <Txt className="text-[38px] font-medium text-text2">$</Txt>

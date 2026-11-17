@@ -1,6 +1,7 @@
 // Back/close + centred title. Shared by Send, Receive and Settings.
 import React from 'react';
 import { View } from 'react-native';
+import { t } from '../i18n';
 import { IconBtn } from './IconBtn';
 import { Txt } from './Txt';
 
@@ -11,7 +12,7 @@ export function SheetHeader({ title, onClose, onBack }: { title?: string; onClos
         name={onBack ? 'arrow_l' : 'close'}
         iconSize={16}
         radius={12}
-        label={onBack ? 'Go back' : 'Close'}
+        label={onBack ? t('common.goBack') : t('common.close')}
         onPress={onBack ?? onClose}
       />
       <Txt className="text-[16px] font-semibold">{title}</Txt>

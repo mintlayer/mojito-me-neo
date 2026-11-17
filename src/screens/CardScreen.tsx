@@ -21,6 +21,18 @@ export function CardScreen() {
   const pct = (waitlist.taken / waitlist.total) * 100;
   const blackTier = cardTiers.find((tier) => tier.name === 'Black');
 
+  // Same handler for the primary button and the email field's return key.
+  const join = () => {
+    void providers.waitlist.join(email).then((r) => {
+      if (r.ok) {
+        setResult(r);
+        setJoinError(null);
+      } else if (r.reason === 'invalid' || r.reason === 'duplicate') {
+        setJoinError(r.reason);
+      }
+    });
+  };
+
   return (
     <Screen>
       <ScreenIntro title={t('card.title')} chip={t('card.chip')} tone={C.amber} blurb={t('card.blurb')} />
@@ -32,12 +44,9 @@ export function CardScreen() {
       {/* Waitlist */}
       <View className="px-5 pt-2 items-center">
         <Label>{t('card.waitlist.title')}</Label>
-        <View className="flex-row items-baseline gap-1.5 mt-1">
-          <Txt mono className="text-[28px] font-bold tracking-tightest" style={{ color: C.amber }}>
-            {waitlist.taken.toLocaleString()}
-          </Txt>
-          <Txt className="text-[12px] text-text2">{t('card.waitlist.spots', { total: waitlist.total.toLocaleString() })}</Txt>
-        </View>
+        <Txt mono className="text-[28px] font-bold tracking-tightest mt-1" style={{ color: C.amber }}>
+          {t('card.waitlist.spots', { taken: waitlist.taken.toLocaleString(), total: waitlist.total.toLocaleString() })}
+        </Txt>
         <View className="w-full mt-2.5">
           <ProgressBar pct={pct} />
         </View>
@@ -79,6 +88,7 @@ export function CardScreen() {
                 placeholderTextColor={C.text3}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                onSubmitEditing={join}
                 className="flex-1 text-[14px] text-text0 p-0"
               />
               <Txt mono className="text-[11px] text-text3">
@@ -89,16 +99,7 @@ export function CardScreen() {
               tone="primary"
               className="mt-3"
               disabled={!email.trim()}
-              onPress={() => {
-                void providers.waitlist.join(email).then((r) => {
-                  if (r.ok) {
-                    setResult(r);
-                    setJoinError(null);
-                  } else if (r.reason === 'invalid' || r.reason === 'duplicate') {
-                    setJoinError(r.reason);
-                  }
-                });
-              }}>
+              onPress={join}>
               {t('card.waitlist.submit', { position: (waitlist.taken + 1).toLocaleString() })}
             </Btn>
             {joinError && (
@@ -215,6 +216,8 @@ function CardHero({ tierName }: { tierName: string }) {
           ))}
         </Svg>
 
+        {/* Card face print (wordmark, number, expiry, cardholder): deliberately
+            untranslated (i18n exemption), same convention as the Welcome wordmark. */}
         <View className="flex-row justify-between items-start">
           <View>
             <Txt className="text-[10px] font-semibold tracking-widest" style={{ color: C.amber }}>

@@ -122,10 +122,8 @@ export function BridgeScreen() {
             </View>
           </View>
 
-          <View className="flex-row justify-between mt-1">
-            <Txt mono className="text-[10px] text-text3">
-              {t('bridge.finalOn', { chain: src.toUpperCase() })}
-            </Txt>
+          {/* Finality only applies to the destination side. */}
+          <View className="mt-1 items-end">
             <Txt mono className="text-[10px] text-text3">
               {t('bridge.finalOn', { chain: dst.toUpperCase() })}
             </Txt>

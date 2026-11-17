@@ -100,11 +100,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
       <View className="px-6 pt-5">
         <Callout tone={accent} glyph="ⓘ">
           <Txt className="text-[11px] text-text1 leading-[17px]">
-            {t('receive.warning.pre')}{' '}
-            <Txt className="text-[11px] font-semibold" style={{ color: accent }}>
-              {chain}
-            </Txt>{' '}
-            {t('receive.warning.post')}
+            {t('receive.warning', { chain })}
           </Txt>
         </Callout>
       </View>
