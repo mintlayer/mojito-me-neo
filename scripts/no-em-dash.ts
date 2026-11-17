@@ -4,9 +4,28 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SCAN_ROOTS = ['src', 'modules', 'specs'];
-const SCAN_FILES = ['App.tsx', 'eslint.config.js', 'nativewind-env.d.ts'];
-const EXTENSIONS = ['.ts', '.tsx', '.js', '.json', '.md'];
+const SCAN_ROOTS = ['src', 'modules', 'specs', 'scripts', '.github'];
+// Root config files and docs that sit outside the scanned roots (decision D9:
+// no dash characters anywhere in specs or code).
+const SCAN_FILES = [
+  'App.tsx',
+  'eslint.config.js',
+  'nativewind-env.d.ts',
+  'css.d.ts',
+  'tailwind.config.ts',
+  'metro.config.js',
+  'babel.config.js',
+  'tsconfig.json',
+  'app.json',
+  'eas.json',
+  'index.js',
+  'package.json',
+  'README.md',
+  'SECURITY.md',
+  'CODE_OF_CONDUCT.md',
+  'LICENSE',
+];
+const EXTENSIONS = ['.ts', '.tsx', '.js', '.json', '.md', '.yml', '.yaml'];
 
 const offenders: string[] = [];
 

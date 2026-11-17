@@ -8,7 +8,7 @@ body:
         Thanks for taking the time to file this.
 
         **Before you start:** Mojito ME is pre-production and its cryptography is deliberately
-        mocked — the demo recovery phrase, the stand-in checksum, the truncated BIP39 list and
+        mocked: the demo recovery phrase, the stand-in checksum, the truncated BIP39 list and
         the simulated biometrics are all expected. See the README's *Project status* section.
 
         **Security issues:** do not file them here. Email security@mintlayer.org.

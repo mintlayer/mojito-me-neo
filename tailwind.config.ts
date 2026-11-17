@@ -11,7 +11,7 @@ export default {
       colors: C,
       borderColor: { DEFAULT: C.lineSoft },
       fontFamily: {
-        // ponytail: system font instead of bundling Inter — SF Pro / Roboto are
+        // ponytail: system font instead of bundling Inter. SF Pro / Roboto are
         // near-identical here and cost 0 KB. Swap in expo-font if brand-exact.
         sans: ['System'],
         mono: ['Menlo', 'monospace'],

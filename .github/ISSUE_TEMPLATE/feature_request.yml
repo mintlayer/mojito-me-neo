@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Several screens are known to be unbuilt and may already be claimed — please check open
+        Several screens are known to be unbuilt and may already be claimed. Please check open
         issues first so two people don't build the same thing.
 
   - type: textarea

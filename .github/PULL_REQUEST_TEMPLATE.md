@@ -16,9 +16,9 @@ Security fix? Do not open a public PR. Email security@mintlayer.org first.
 
 ## Checklist
 
-- [ ] `npm run check` passes (theme test + `tsc --noEmit` + `eslint .`)
-- [ ] Verified on a simulator or device — required if this touches UI, navigation or gestures,
-      since a green typecheck has missed real runtime breakage here before
+- [ ] `npm run check` passes (unit tests + `tsc --noEmit` + `eslint .` + dash scan)
+- [ ] Verified on a simulator or device (required if this touches UI, navigation or gestures,
+      since a green typecheck has missed real runtime breakage here before)
 - [ ] Reused existing primitives from `src/ui/index.tsx` rather than adding a near-duplicate
 - [ ] No hardcoded colours or spacing: values come from `src/theme.ts` or Tailwind tokens
 - [ ] New icon-only controls and inputs have `accessibilityLabel`
