@@ -3,16 +3,18 @@ import { TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { t } from '../i18n';
-import { useData } from '../data/providers/context';
+import { useData, useProviders } from '../data/providers/context';
+import type { WaitlistResult } from '../data/providers';
 import { C, G, alpha, black } from '../theme';
 import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
 
 export function CardScreen() {
+  const providers = useProviders();
   const waitlist = useData((d) => d.getWaitlist());
   const cardFeatures = useData((d) => d.getCardFeatures());
   const cardTiers = useData((d) => d.getCardTiers());
   const [email, setEmail] = useState('');
-  const [registered, setRegistered] = useState(false);
+  const [result, setResult] = useState<WaitlistResult | null>(null);
 
   if (!waitlist || !cardFeatures || !cardTiers) return <Screen />;
   const pct = (waitlist.taken / waitlist.total) * 100;
@@ -42,7 +44,7 @@ export function CardScreen() {
 
       {/* Pre-register */}
       <View className="px-5 pt-6">
-        {registered ? (
+        {result?.ok ? (
           <Enter>
             <Card grad={G.raisedGreen} accent={alpha(C.green, 0.4)} className="p-[18px] items-center rounded-[18px]">
               <View
@@ -52,7 +54,7 @@ export function CardScreen() {
               </View>
               <Txt className="text-[16px] font-semibold mt-3">{t('card.waitlist.successTitle')}</Txt>
               <Txt className="text-[12px] text-text2 mt-1 text-center">
-                {t('card.waitlist.successBody', { position: (waitlist.taken + 1).toLocaleString(), email })}
+                {t('card.waitlist.successBody', { position: (result.position ?? waitlist.taken + 1).toLocaleString(), email })}
               </Txt>
               <View className="mt-3.5">
                 <Chip tone={C.amber} dot={false}>
@@ -82,7 +84,15 @@ export function CardScreen() {
                 ↵
               </Txt>
             </View>
-            <Btn tone="primary" className="mt-3" disabled={!email.trim()} onPress={() => setRegistered(true)}>
+            <Btn
+              tone="primary"
+              className="mt-3"
+              disabled={!email.trim()}
+              onPress={() => {
+                void providers.waitlist.join(email).then((r) => {
+                  if (r.ok) setResult(r);
+                });
+              }}>
               {t('card.waitlist.submit', { position: (waitlist.taken + 1).toLocaleString() })}
             </Btn>
             <View className="flex-row justify-between mt-2.5">
