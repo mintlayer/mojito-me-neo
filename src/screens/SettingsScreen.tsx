@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Sheet } from './types';
+import Constants from 'expo-constants';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
@@ -112,7 +113,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
       </View>
 
       <Txt mono className="text-[10px] text-text3 text-center pt-4">
-        {t('settings.version', { version: '2.4.1', build: '8821' })}
+        {t('settings.version', { version: Constants.nativeApplicationVersion ?? 'dev', build: Constants.nativeBuildVersion ?? '-' })}
       </Txt>
 
       <PickerSheet
