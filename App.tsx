@@ -131,12 +131,21 @@ function Shell() {
             detectBio(),
             loadAppSettings().catch(() => ({ biometrics: null, autoLock: true })),
           ]);
-          const wantBio = (saved.biometrics ?? detected !== null) && detected !== null;
+          // Self-heal a persisted biometrics choice on hardware that cannot
+          // honor it: gating the vault key here would seal the wallet behind
+          // a prompt that can never succeed. The Settings toggle now guards
+          // the write; this repairs state persisted before that guard.
+          const bioUsable = detected !== null;
+          const bioChoice = saved.biometrics === true && bioUsable;
+          if (saved.biometrics === true && !bioUsable) {
+            void saveAppSettings({ biometrics: false }).catch(() => undefined);
+          }
+          const wantBio = (saved.biometrics ?? bioUsable) && bioUsable;
           setSession({
             vault: null,
             deferred: false,
             bio: detected ?? 'face',
-            bioChoice: saved.biometrics === true,
+            bioChoice,
             settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
           });
           setLocked(true);

@@ -6,6 +6,7 @@ import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
+import { detectBio } from '../onboarding/ui/useBioScan';
 import { C, G } from '../theme';
 import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
@@ -23,6 +24,10 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
   /** Which security control is waiting for its disable step-up. */
   const [confirm, setConfirm] = useState<'biometric' | 'autoLock' | null>(null);
+  /** Device biometric capability; null until the probe lands. The enable
+   *  path must never write biometrics:true on hardware that cannot honor
+   *  it: the vault key would seal behind a prompt that can never succeed. */
+  const [bioAvailable, setBioAvailable] = useState<boolean | null>(null);
   const set = (k: keyof typeof flags) => (v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
 
   // Load the persisted toggles once; every change writes straight through.
@@ -38,11 +43,28 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
     };
   }, []);
 
+  // Same probe the Secure screen uses: no hardware, nothing enrolled.
+  useEffect(() => {
+    let alive = true;
+    void detectBio().then((bio) => {
+      if (alive) setBioAvailable(bio !== null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   /** Persist a toggle change. Disabling a security control is a step-up
    *  boundary: someone holding the unlocked phone must not be able to
    *  switch auto-lock or biometrics off without proving knowledge of the
-   *  PIN. Enabling needs no step-up; it only adds a control. */
+   *  PIN. Enabling needs no step-up; it only adds a control, but enabling
+   *  biometrics on biometrics-less hardware is refused: the persisted true
+   *  would gate the vault key on a prompt that can never succeed and brick
+   *  the wallet at the next cold start. While the probe is still running
+   *  (bioAvailable null) an enable tap is swallowed too; the probe resolves
+   *  in milliseconds and the switch is disabled meanwhile. */
   const applySecurityFlag = (k: 'biometric' | 'autoLock', v: boolean) => {
+    if (k === 'biometric' && v && bioAvailable !== true) return;
     setConfirm(null);
     setSecurity((s) => ({ ...s, [k]: v }));
     void saveAppSettings(k === 'biometric' ? { biometrics: v } : { autoLock: v }).catch(() => undefined);
@@ -85,6 +107,11 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
 
   if (!profile || !networks || !dapps) return <Screen />;
 
+  // Displayed biometrics state folds in the capability probe: a persisted
+  // true on hardware without biometrics reads as off (the unlock flow treats
+  // it the same way).
+  const biometricsOn = security.biometric && bioAvailable !== false;
+
   return (
     <Screen>
       <SheetHeader title={t('settings.title')} onClose={onClose} />
@@ -106,8 +133,12 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </View>
 
       <Section title={t('settings.section.security')}>
-        <ListRow icon="fingerprint" iconColor={C.amber} label={t('settings.security.biometrics')} sub={t('settings.security.biometricsSub')}>
-          <Toggle on={security.biometric} onChange={setSecurityFlag('biometric')} />
+        <ListRow
+          icon="fingerprint"
+          iconColor={C.amber}
+          label={t('settings.security.biometrics')}
+          sub={bioAvailable === false ? t('onboarding.secure.unavailable') : t('settings.security.biometricsSub')}>
+          <Toggle on={biometricsOn} disabled={bioAvailable === false} onChange={setSecurityFlag('biometric')} />
         </ListRow>
         <ListRow icon="lock" label={t('settings.security.autolock')} sub={t('settings.security.autolockSub')} divider>
           <Toggle on={security.autoLock} onChange={setSecurityFlag('autoLock')} />
