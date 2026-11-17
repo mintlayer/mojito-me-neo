@@ -1,14 +1,16 @@
 // The single registration point for data providers. Screens never construct
 // providers; they consume handles through useProviders (React context).
-// The mode switch reads EXPO_PUBLIC_DATA_MODE: 'mock' (default) or 'real'.
-// 'real' throws in M0 so nothing silently pretends to work.
+// The mode switch reads EXPO_PUBLIC_DATA_MODE: 'mock' (default, from the
+// endpoints FLAGS) or 'real'. 'real' throws in M0 so nothing silently
+// pretends to work.
 import type { ProviderMode, Providers } from './types';
+import { FLAGS } from '../../config/endpoints';
 import { createFixtureBridgeProvider, createFixtureBroadcastProvider, createFixtureWalletData } from '../mock/fixtures';
 import { createFixturePriceProvider } from '../mock/priceFixtures';
 import { createLocalWaitlistProvider } from '../mock/localWaitlist';
 
 export function readDataMode(): ProviderMode {
-  return process.env.EXPO_PUBLIC_DATA_MODE === 'real' ? 'real' : 'mock';
+  return process.env.EXPO_PUBLIC_DATA_MODE === 'real' ? 'real' : FLAGS.defaultDataMode;
 }
 
 export function createProviders(mode: ProviderMode = readDataMode()): Providers {
