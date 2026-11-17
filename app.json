@@ -21,7 +21,13 @@
     ],
     "plugins": [
       "expo-build-properties",
-      "./modules/mojito-core/app.plugin.js"
+      "./modules/mojito-core/app.plugin.js",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Mojito uses Face ID to unlock your wallet and to guard the key that encrypts your recovery phrase."
+        }
+      ]
     ]
   }
 }
