@@ -1,19 +1,21 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
+import { t } from '../i18n';
 import { tile } from './style';
 import { Txt } from './Txt';
 
 export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => void; compact?: boolean }) {
+  const max = t('common.max');
   const opts: [string, number][] = compact
     ? [
         ['½', 0.5],
-        ['Max', 1],
+        [max, 1],
       ]
     : [
         ['25%', 0.25],
         ['50%', 0.5],
         ['75%', 0.75],
-        ['Max', 1],
+        [max, 1],
       ];
   return (
     <View className="flex-row gap-1.5">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { C } from '../theme';
+import { t } from '../i18n';
 import { Enter } from './motion';
 import { Btn } from './Btn';
 import type { BtnTone } from './Btn';
@@ -14,7 +15,7 @@ export function SuccessScreen({
   description,
   tone = C.green,
   btnTone = 'primary',
-  doneLabel = 'Done',
+  doneLabel = t('common.done'),
   onDone,
   header,
   children,

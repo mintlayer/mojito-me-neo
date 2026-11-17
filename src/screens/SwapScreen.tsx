@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as SvgText } from 'react-native-svg';
+import { t } from '../i18n';
 import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, HTLC_STEPS, SWAP_STATS } from '../data';
 import { C, G } from '../theme';
 import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
@@ -29,9 +30,9 @@ export function SwapScreen() {
   if (submitted) {
     return (
       <SuccessScreen
-        title="Swap initiated"
+        title={t('swap.success.title')}
         summary={`${from.amt} ${from.sym} → ${to.amt} ${to.sym}`}
-        description={`The HTLC is locked on ${from.chain}. Settlement completes once the counterparty reveals the preimage.`}
+        description={t('swap.success.desc', { chain: from.chain })}
         onDone={() => setSubmitted(false)}
       />
     );
@@ -39,7 +40,7 @@ export function SwapScreen() {
 
   return (
     <Screen>
-      <ScreenIntro title="Atomic Swap" chip="HTLC" tone={C.amber} blurb="Trustless cross-chain swap. No bridge, no custodian." />
+      <ScreenIntro title={t('swap.title')} chip={t('swap.chip')} tone={C.amber} blurb={t('swap.blurb')} />
 
       <TokenPicker
         open={picking !== null}
@@ -51,9 +52,9 @@ export function SwapScreen() {
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label="You send" data={from} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
+        <SwapPanel label={t('common.youSend')} data={from} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
         <View className="h-2" />
-        <SwapPanel label="You receive" data={to} onPickToken={() => setPicking('to')} />
+        <SwapPanel label={t('common.youReceive')} data={to} onPickToken={() => setPicking('to')} />
 
         <Pressable
           onPress={flip}
@@ -76,7 +77,7 @@ export function SwapScreen() {
 
       {/* HTLC protocol */}
       <View className="px-5 pt-5">
-        <Label className="mb-3">Swap protocol · HTLC</Label>
+        <Label className="mb-3">{t('swap.protocol')}</Label>
         <Card grad={G.raisedAmber} className="p-4">
           <HtlcRail />
           <Steps steps={HTLC_STEPS} />
@@ -85,7 +86,7 @@ export function SwapScreen() {
 
       <View className="px-5 pt-4">
         <Btn tone="primary" onPress={() => setSubmitted(true)}>
-          Initiate atomic swap
+          {t('swap.cta')}
         </Btn>
       </View>
     </Screen>
@@ -109,7 +110,7 @@ function SwapPanel({
       <View className="flex-row justify-between items-center">
         <Label>{label}</Label>
         <Txt mono className="text-[11px] text-text2">
-          Bal {data.bal} {data.sym}
+          {t('common.bal', { bal: data.bal, sym: data.sym })}
         </Txt>
       </View>
       <View className="mt-3">
@@ -117,7 +118,7 @@ function SwapPanel({
       </View>
       <View className="flex-row justify-between items-center mt-2">
         <Txt mono className="text-[11px] text-text2">
-          ≈ ${usd}
+          {t('common.approxUsd', { usd: `$${usd}` })}
         </Txt>
         {onChange && <PctButtons compact onPick={(f) => onChange(String(parseFloat(data.amt || '0') * (f === 1 ? 2 : f)))} />}
       </View>
@@ -167,6 +168,6 @@ function HtlcRail() {
 /**
  * Mojito bridges Mintlayer <-> everything else, so one endpoint is always
  * Mintlayer. Only the counterparty is selectable and the arrow decides which
- * direction Mintlayer sits on — an unroutable pair like Ethereum -> Arbitrum
+ * direction Mintlayer sits on, so an unroutable pair like Ethereum -> Arbitrum
  * is therefore unrepresentable rather than merely rejected.
  */

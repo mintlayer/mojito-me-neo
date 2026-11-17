@@ -3,9 +3,10 @@ import { Animated, Easing, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { C, G, alpha, white } from '../theme';
+import { t } from '../i18n';
 import { Enter, FlowX, MojitoLogo, PulseRings, Txt, gradColors } from '../ui';
 
-// The onboarding flow itself lives in src/onboarding — this file is just the
+// The onboarding flow itself lives in src/onboarding; this file is just the
 // cold-start splash that runs before it.
 
 /** Particles converge into the mark, then the wordmark and tagline reveal. */
@@ -13,7 +14,7 @@ export function Splash({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState(0);
   const converge = useRef(new Animated.Value(0)).current;
 
-  // Deterministic scatter — no Math.random, so the field is stable across renders.
+  // Deterministic scatter: no Math.random, so the field is stable across renders.
   const particles = useMemo(
     () =>
       Array.from({ length: 28 }, (_, i) => {
@@ -83,7 +84,7 @@ export function Splash({ onDone }: { onDone: () => void }) {
 
       {phase >= 2 && (
         <Enter duration={500} offset={6}>
-          <Txt className="text-[12px] text-text2 tracking-widest mt-1.5">BITCOIN · MINTLAYER · EVM</Txt>
+          <Txt className="text-[12px] text-text2 tracking-widest mt-1.5">{t('splash.tagline')}</Txt>
         </Enter>
       )}
 
@@ -95,7 +96,7 @@ export function Splash({ onDone }: { onDone: () => void }) {
         )}
       </View>
 
-      {phase >= 2 && <Txt className="absolute bottom-[92px] text-[11px] text-text3 tracking-wider">Securing keys · Syncing chains</Txt>}
+      {phase >= 2 && <Txt className="absolute bottom-[92px] text-[11px] text-text3 tracking-wider">{t('splash.status')}</Txt>}
     </View>
   );
 }

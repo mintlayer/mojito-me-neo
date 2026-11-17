@@ -15,6 +15,7 @@ export function PickerSheet<T extends string>({
   onSelect,
   renderLeading,
   subtitleFor,
+  labels,
 }: {
   open: boolean;
   onClose: () => void;
@@ -24,6 +25,8 @@ export function PickerSheet<T extends string>({
   onSelect: (v: T) => void;
   renderLeading?: (v: T) => React.ReactNode;
   subtitleFor?: (v: T) => string | undefined;
+  /** Display copy per option; ids stay internal so copy comes from i18n. */
+  labels?: Partial<Record<T, string>>;
 }) {
   return (
     <Sheet open={open} onClose={onClose} title={title}>
@@ -39,7 +42,7 @@ export function PickerSheet<T extends string>({
             style={i > 0 ? hairlineTop : undefined}>
             {renderLeading?.(o)}
             <View className="flex-1">
-              <Txt className="text-[14px] font-medium">{o}</Txt>
+              <Txt className="text-[14px] font-medium">{labels?.[o] ?? o}</Txt>
               {subtitleFor?.(o) ? <Txt className="text-[11px] text-text2 mt-0.5">{subtitleFor(o)}</Txt> : null}
             </View>
             {value === o && <Icon name="check" size={16} color={C.amber} stroke={2.5} />}

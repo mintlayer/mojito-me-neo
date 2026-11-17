@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
+import { t } from '../i18n';
 import { ASSET_BALANCES, ASSET_SYMBOLS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE } from '../data';
 import { C, CHAINS, G, alpha } from '../theme';
 import type { ChainName } from '../theme';
@@ -21,11 +22,11 @@ export function BridgeScreen() {
   if (submitted) {
     return (
       <SuccessScreen
-        title="Bridge started"
+        title={t('bridge.success.title')}
         tone={C.violet}
         btnTone="violet"
         summary={`${amount} ${token} · ${src} → ${dst}`}
-        description={`Locked on ${src}. Funds mint on ${dst} once validators attest — usually about a minute.`}
+        description={t('bridge.success.desc', { src, dst })}
         onDone={() => setSubmitted(false)}
       />
     );
@@ -33,12 +34,12 @@ export function BridgeScreen() {
 
   return (
     <Screen>
-      <ScreenIntro title="Bridge" chip="ML ⇄ EVM" tone={C.violet} blurb="Move Mintlayer assets to Ethereum and other EVM chains." />
+      <ScreenIntro title={t('bridge.title')} chip={t('bridge.chip')} tone={C.violet} blurb={t('bridge.blurb')} />
 
       <PickerSheet
         open={chainPicker}
         onClose={() => setChainPicker(false)}
-        title={src === HOME_CHAIN ? 'Bridge to' : 'Bridge from'}
+        title={src === HOME_CHAIN ? t('bridge.to') : t('bridge.from')}
         options={COUNTERPARTY_CHAINS}
         value={src === HOME_CHAIN ? dst : src}
         onSelect={pickChain}
@@ -59,7 +60,7 @@ export function BridgeScreen() {
       <View className="px-5 pt-6">
         <Card grad={G.raisedViolet} className="px-5 py-7 rounded-[22px]">
           <View className="flex-row items-center gap-3">
-            <ChainCard name={src} side="From" onPress={src === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
+            <ChainCard name={src} side={t('bridge.sideFrom')} onPress={src === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
             <Pressable
               onPress={() => {
                 setSrc(dst);
@@ -69,7 +70,7 @@ export function BridgeScreen() {
               style={{ backgroundColor: C.bg1, borderWidth: 1, borderColor: C.line }}>
               <Icon name="swap" size={14} color={C.violet} />
             </Pressable>
-            <ChainCard name={dst} side="To" onPress={dst === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
+            <ChainCard name={dst} side={t('bridge.sideTo')} onPress={dst === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
           </View>
 
           <View className="h-[60px] mt-6 justify-center">
@@ -108,17 +109,17 @@ export function BridgeScreen() {
               className="absolute self-center px-3 py-1 rounded-lg"
               style={{ backgroundColor: alpha(C.bg1, 0.9), borderWidth: 1, borderColor: C.line }}>
               <Txt mono className="text-[10px] font-semibold tracking-wider" style={{ color: C.violet }}>
-                MOJITO BRIDGE · v2
+                {t('bridge.badge')}
               </Txt>
             </View>
           </View>
 
           <View className="flex-row justify-between mt-1">
             <Txt mono className="text-[10px] text-text3">
-              FINAL ON {src.toUpperCase()}
+              {t('bridge.finalOn', { chain: src.toUpperCase() })}
             </Txt>
             <Txt mono className="text-[10px] text-text3">
-              FINAL ON {dst.toUpperCase()}
+              {t('bridge.finalOn', { chain: dst.toUpperCase() })}
             </Txt>
           </View>
         </Card>
@@ -128,9 +129,9 @@ export function BridgeScreen() {
       <View className="px-5 pt-4">
         <Card className="p-4 rounded-[18px]">
           <View className="flex-row justify-between items-center mb-3">
-            <Label>Amount</Label>
+            <Label>{t('common.amount')}</Label>
             <Txt mono className="text-[11px] text-text2">
-              Available 1,240.00 {token}
+              {t('bridge.available', { amount: '1,240.00', token })}
             </Txt>
           </View>
           <AmountRow symbol={token} value={amount} onChangeText={setAmount} onPickToken={() => setTokenPicker(true)} />
@@ -139,7 +140,7 @@ export function BridgeScreen() {
 
       {/* Route */}
       <View className="px-5 pt-4">
-        <Label className="mb-2">Route</Label>
+        <Label className="mb-2">{t('bridge.route')}</Label>
         <Card className="p-3.5 rounded-2xl">
           {BRIDGE_ROUTE.map((r, i) => (
             <ListRow
@@ -173,7 +174,7 @@ export function BridgeScreen() {
 
       <View className="px-5 pt-4">
         <Btn tone="violet" icon="bridge" onPress={() => setSubmitted(true)}>
-          Bridge {amount} {token} to {dst}
+          {t('bridge.cta', { amount, token, chain: dst })}
         </Btn>
       </View>
     </Screen>

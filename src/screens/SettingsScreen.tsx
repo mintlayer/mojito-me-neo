@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Sheet } from './types';
 import { Alert, Linking, Pressable, View } from 'react-native';
+import { t, type I18nKey } from '../i18n';
 import { PROFILE } from '../data';
 import { C, G } from '../theme';
 import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
@@ -15,8 +16,8 @@ type SettingsNav = Sheet & {
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: SettingsNav) {
   const [flags, setFlags] = useState({ biometric: true, autoLock: true, testnet: false, notifs: true, hideBal: false });
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
-  const [appearance, setAppearance] = useState<(typeof APPEARANCES)[number]>('Dark');
-  const [dex, setDex] = useState<(typeof DEXES)[number]>('Mintlayer onchain');
+  const [appearance, setAppearance] = useState<AppearanceId>('dark');
+  const [dex, setDex] = useState<DexId>('mintlayer');
   const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
   const set = (k: keyof typeof flags) => (v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
 
@@ -24,17 +25,17 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
   // way back. Confirm destructively rather than on a single tap.
   const confirmSignOut = () =>
     Alert.alert(
-      'Sign out of this wallet?',
-      'This device forgets your keys. You can only get back in with your 24-word recovery phrase — make sure you have it written down.',
+      t('settings.signout.title'),
+      t('settings.signout.body'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign out', style: 'destructive', onPress: () => onLock?.() },
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('settings.signout.cta'), style: 'destructive', onPress: () => onLock?.() },
       ],
     );
 
   return (
     <Screen>
-      <SheetHeader title="Settings" onClose={onClose} />
+      <SheetHeader title={t('settings.title')} onClose={onClose} />
 
       {/* Profile */}
       <View className="px-5 pt-3">
@@ -47,46 +48,53 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
             </Txt>
           </View>
           <Pressable className="px-2.5 py-1.5 rounded-lg" style={tile(0.05, C.line)}>
-            <Txt className="text-[11px] font-medium text-text1">Edit</Txt>
+            <Txt className="text-[11px] font-medium text-text1">{t('settings.edit')}</Txt>
           </Pressable>
         </Card>
       </View>
 
-      <Section title="Security">
-        <ListRow icon="fingerprint" iconColor={C.amber} label="Face ID" sub="Unlock + sign transactions">
+      <Section title={t('settings.section.security')}>
+        <ListRow icon="fingerprint" iconColor={C.amber} label={t('settings.security.biometrics')} sub={t('settings.security.biometricsSub')}>
           <Toggle on={flags.biometric} onChange={set('biometric')} />
         </ListRow>
-        <ListRow icon="lock" label="Auto-lock" sub="After 1 minute of inactivity" divider>
+        <ListRow icon="lock" label={t('settings.security.autolock')} sub={t('settings.security.autolockSub')} divider>
           <Toggle on={flags.autoLock} onChange={set('autoLock')} />
         </ListRow>
-        <ListRow icon="shield" iconColor={C.green} label="Recovery phrase" sub="Back up your 24 words" trailing="→" divider onPress={onBackup} />
-        <ListRow icon="lock" label="Change PIN" trailing="→" divider onPress={onChangePin} />
-        <ListRow icon="history" label="Connected dApps" sub="3 active sessions" trailing="→" divider />
+        <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub')} trailing="→" divider onPress={onBackup} />
+        <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
+        <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub')} trailing="→" divider />
       </Section>
 
-      <Section title="Networks">
-        <ListRow icon="bridge" iconColor={C.violet} label="Manage networks" sub="5 enabled · Add custom RPC" trailing="→" />
-        <ListRow icon="flash" iconColor={C.amber} label="Testnet mode" sub="Show test networks" divider>
+      <Section title={t('settings.section.networks')}>
+        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub')} trailing="→" />
+        <ListRow icon="flash" iconColor={C.amber} label={t('settings.network.testnet')} sub={t('settings.network.testnetSub')} divider>
           <Toggle on={flags.testnet} onChange={set('testnet')} />
         </ListRow>
-        <ListRow icon="chart" iconColor={C.teal} label="Default DEX" sub={dex} trailing="→" divider onPress={() => setSheet('dex')} />
+        <ListRow icon="chart" iconColor={C.teal} label={t('settings.dex')} sub={t(dex === 'mintlayer' ? 'settings.dexes.mintlayer' : 'settings.dexes.auto')} trailing="→" divider onPress={() => setSheet('dex')} />
       </Section>
 
-      <Section title="Preferences">
-        <ListRow icon="eye" label="Hide balances" sub="Until you tap to reveal">
+      <Section title={t('settings.section.preferences')}>
+        <ListRow icon="eye" label={t('settings.display.hideBalances')} sub={t('settings.display.hideBalancesSub')}>
           <Toggle on={flags.hideBal} onChange={set('hideBal')} />
         </ListRow>
-        <ListRow icon="bell" iconColor={C.amber} label="Notifications" sub="Transactions, price alerts" divider>
+        <ListRow icon="bell" iconColor={C.amber} label={t('settings.notifications')} sub={t('settings.notificationsSub')} divider>
           <Toggle on={flags.notifs} onChange={set('notifs')} />
         </ListRow>
-        <ListRow icon="settings" label="Display currency" sub={currency} trailing="→" divider onPress={() => setSheet('currency')} />
-        <ListRow icon="settings" label="Appearance" sub={appearance} trailing="→" divider onPress={() => setSheet('appearance')} />
+        <ListRow icon="settings" label={t('settings.currency')} sub={currency} trailing="→" divider onPress={() => setSheet('currency')} />
+        <ListRow
+          icon="settings"
+          label={t('settings.appearance')}
+          sub={t(APPEARANCE_LABEL_KEYS[appearance])}
+          trailing="→"
+          divider
+          onPress={() => setSheet('appearance')}
+        />
       </Section>
 
-      <Section title="Support">
-        <ListRow icon="shield" label="Help center" trailing="→" onPress={() => Linking.openURL('https://mintlayer.org/support')} />
-        <ListRow icon="bell" label="Contact us" trailing="→" divider onPress={() => Linking.openURL('mailto:support@mintlayer.org')} />
-        <ListRow icon="settings" label="Terms & privacy" trailing="→" divider onPress={() => Linking.openURL('https://mintlayer.org/terms')} />
+      <Section title={t('settings.section.support')}>
+        <ListRow icon="shield" label={t('settings.support.help')} trailing="→" onPress={() => Linking.openURL('https://mintlayer.org/support')} />
+        <ListRow icon="bell" label={t('settings.support.contact')} trailing="→" divider onPress={() => Linking.openURL('mailto:support@mintlayer.org')} />
+        <ListRow icon="settings" label={t('settings.support.terms')} trailing="→" divider onPress={() => Linking.openURL('https://mintlayer.org/terms')} />
       </Section>
 
       <View className="px-5 pt-4">
@@ -95,19 +103,19 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
           className="py-3.5 rounded-[14px] items-center"
           style={tint(C.red, 0.08)}>
           <Txt className="text-[14px] font-semibold" style={{ color: C.red }}>
-            Sign out
+            {t('settings.signout.cta')}
           </Txt>
         </Pressable>
       </View>
 
       <Txt mono className="text-[10px] text-text3 text-center pt-4">
-        mojito · v2.4.1 · build 8821
+        {t('settings.version', { version: '2.4.1', build: '8821' })}
       </Txt>
 
       <PickerSheet
         open={sheet === 'currency'}
         onClose={() => setSheet(null)}
-        title="Display currency"
+        title={t('settings.currency')}
         options={CURRENCIES}
         value={currency}
         onSelect={setCurrency}
@@ -115,18 +123,20 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
       <PickerSheet
         open={sheet === 'appearance'}
         onClose={() => setSheet(null)}
-        title="Appearance"
+        title={t('settings.appearance')}
         options={APPEARANCES}
         value={appearance}
         onSelect={setAppearance}
+        labels={{ dark: t('settings.appearance.dark'), light: t('settings.appearance.light'), system: t('settings.appearance.system') }}
       />
       <PickerSheet
         open={sheet === 'dex'}
         onClose={() => setSheet(null)}
-        title="Default DEX"
+        title={t('settings.dex')}
         options={DEXES}
         value={dex}
         onSelect={setDex}
+        labels={{ mintlayer: t('settings.dexes.mintlayer'), auto: t('settings.dexes.auto') }}
       />
     </Screen>
   );
@@ -134,7 +144,16 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'BTC'] as const;
 
-const APPEARANCES = ['Dark', 'Light', 'System'] as const;
+// Selectable values stay internal ids; the display copy comes from i18n.
+type AppearanceId = 'dark' | 'light' | 'system';
+const APPEARANCES: readonly AppearanceId[] = ['dark', 'light', 'system'];
 
-const DEXES = ['Mintlayer onchain', 'Auto-route'] as const;
+const APPEARANCE_LABEL_KEYS: Record<AppearanceId, I18nKey> = {
+  dark: 'settings.appearance.dark',
+  light: 'settings.appearance.light',
+  system: 'settings.appearance.system',
+};
+
+type DexId = 'mintlayer' | 'auto';
+const DEXES: readonly DexId[] = ['mintlayer', 'auto'];
 

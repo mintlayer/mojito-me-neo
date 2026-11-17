@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { t } from '../i18n';
 import { ASKS, BIDS, MARKET, TIMEFRAMES } from '../data';
 import { C, G, alpha, black } from '../theme';
 import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile } from '../ui';
@@ -22,14 +23,14 @@ export function DexScreen() {
           <View className="flex-row items-center gap-2">
             <Txt className="text-[18px] font-bold">{MARKET.pair}</Txt>
             <Chip tone={C.teal} dot={false}>
-              MINTLAYER DEX
+              {t('dex.badge')}
             </Chip>
           </View>
           <Txt mono className="text-[11px] text-text2 mt-0.5">
             {MARKET.volume}
           </Txt>
         </View>
-        <IconBtn name="chart" label="Full chart" />
+        <IconBtn name="chart" label={t('dex.fullChart')} />
       </View>
 
       {/* Price + candles */}
@@ -37,7 +38,7 @@ export function DexScreen() {
         <Card grad={G.raisedTeal} className="p-4">
           <View className="flex-row justify-between items-end">
             <View>
-              <Label>Last price</Label>
+              <Label>{t('dex.lastPrice')}</Label>
               <View className="flex-row items-baseline gap-2 mt-0.5">
                 <Txt mono className="text-[28px] font-bold">
                   ${MARKET.last}
@@ -49,11 +50,11 @@ export function DexScreen() {
               </Txt>
             </View>
             <View className="items-end">
-              <Txt className="text-[10px] text-text3">24H HIGH</Txt>
+              <Txt className="text-[10px] text-text3">{t('dex.high24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.green }}>
                 {MARKET.high}
               </Txt>
-              <Txt className="text-[10px] text-text3 mt-1">24H LOW</Txt>
+              <Txt className="text-[10px] text-text3 mt-1">{t('dex.low24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.red }}>
                 {MARKET.low}
               </Txt>
@@ -73,16 +74,16 @@ export function DexScreen() {
           value={book}
           onChange={setBook}
           variant="tabs"
-          labels={{ book: 'Order book', trades: 'Trades', depth: 'Depth' }}
+          labels={{ book: t('dex.book'), trades: t('dex.trades'), depth: t('dex.depth') }}
         />
       </View>
 
       {/* Order book */}
       <View className="pt-3">
         <View className="flex-row px-4 py-1">
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label">PRICE (USDT)</Txt>
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-center">SIZE (ML)</Txt>
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-right">TOTAL</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label">{t('dex.col.price')}</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-center">{t('dex.col.size')}</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-right">{t('dex.col.total')}</Txt>
         </View>
 
         {ASKS.map((r, i) => (
@@ -93,7 +94,7 @@ export function DexScreen() {
           className="mx-4 my-2 px-3 py-2 rounded-[10px] flex-row justify-between items-center"
           style={tile()}>
           <Txt mono className="text-[12px] text-text2">
-            Spread
+            {t('dex.spread')}
           </Txt>
           <Txt mono className="text-[12px] font-semibold">
             0.0006 · 0.17%
@@ -126,29 +127,36 @@ export function DexScreen() {
                     borderColor: on ? alpha(c, 0.4) : 'transparent',
                   }}>
                   <Txt className="text-[13px] font-semibold capitalize" style={{ color: on ? c : C.text2 }}>
-                    {s}
+                    {t(s === 'buy' ? 'dex.buy' : 'dex.sell')}
                   </Txt>
                 </Pressable>
               );
             })}
           </View>
 
-          <Segmented options={['Limit', 'Market', 'Stop'] as const} value={orderType} onChange={setOrderType} variant="tabs" className="mb-3.5" />
+          <Segmented
+            options={['Limit', 'Market', 'Stop'] as const}
+            value={orderType}
+            onChange={setOrderType}
+            variant="tabs"
+            className="mb-3.5"
+            labels={{ Limit: t('dex.order.limit'), Market: t('dex.order.market'), Stop: t('dex.order.stop') }}
+          />
 
           <View className="gap-2">
-            <Field label="Price" value={MARKET.price.toFixed(4)} unit="USDT" />
-            <Field label="Amount" value={amount} unit="ML" onChangeText={setAmount} />
+            <Field label={t('dex.price')} value={MARKET.price.toFixed(4)} unit="USDT" />
+            <Field label={t('common.amount')} value={amount} unit="ML" onChangeText={setAmount} />
             <PctButtons onPick={(f) => setAmount(String(Math.round(12480.5 * f)))} />
-            <Field label="Total" value={total} unit="USDT" tone={C.text1} />
+            <Field label={t('common.total')} value={total} unit="USDT" tone={C.text1} />
           </View>
 
           <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-3.5">
-            {side === 'buy' ? 'Place buy order' : 'Place sell order'} · {amount} ML
+            {side === 'buy' ? t('dex.placeBuy', { amount }) : t('dex.placeSell', { amount })}
           </Btn>
 
           <View className="mt-3 gap-1">
-            <KVRow k="Network fee" v="0.00012 ML · ~$0.00" />
-            <KVRow k="Onchain settlement" v="~12s" tone={C.teal} />
+            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue')} />
+            <KVRow k={t('dex.onchainSettlement')} v={t('dex.settlementEta')} tone={C.teal} />
           </View>
         </Card>
       </View>

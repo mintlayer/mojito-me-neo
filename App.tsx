@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import './global.css';
 
+import { t } from './src/i18n';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, OnboardingResult, UnlockScreen } from './src/onboarding';
@@ -22,12 +24,12 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 type TabId = 'home' | 'dex' | 'swap' | 'bridge' | 'card';
 type Overlay = 'send' | 'receive' | 'settings' | null;
 
-const TABS: { id: TabId; icon: IconName; label: string }[] = [
-  { id: 'home', icon: 'home', label: 'Wallet' },
-  { id: 'dex', icon: 'chart', label: 'DEX' },
-  { id: 'swap', icon: 'swap', label: 'Swap' },
-  { id: 'bridge', icon: 'bridge', label: 'Bridge' },
-  { id: 'card', icon: 'card', label: 'Card' },
+const TABS: { id: TabId; icon: IconName; labelKey: 'tabs.wallet' | 'tabs.dex' | 'tabs.swap' | 'tabs.bridge' | 'tabs.card' }[] = [
+  { id: 'home', icon: 'home', labelKey: 'tabs.wallet' },
+  { id: 'dex', icon: 'chart', labelKey: 'tabs.dex' },
+  { id: 'swap', icon: 'swap', labelKey: 'tabs.swap' },
+  { id: 'bridge', icon: 'bridge', labelKey: 'tabs.bridge' },
+  { id: 'card', icon: 'card', labelKey: 'tabs.card' },
 ];
 
 // Only Home consumes the nav callbacks; the rest ignore them.
@@ -47,6 +49,14 @@ const OVERLAYS: Record<string, React.ComponentType<any>> = {
 };
 
 export default function App() {
+  // Expo Go lacks the local native module; only dev builds launch the app.
+  if (Constants.appOwnership === 'expo') {
+    return (
+      <View className="flex-1 items-center justify-center px-8" style={{ backgroundColor: C.bg0 }}>
+        <Txt className="text-[14px] text-text2 text-center leading-[20px]">{t('common.devClientRequired')}</Txt>
+      </View>
+    );
+  }
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
@@ -70,7 +80,7 @@ function Layer({ children, z }: { children: React.ReactNode; z: number }) {
 
 function Shell() {
   const [splashDone, setSplashDone] = useState(false);
-  /** null until onboarding completes — there is no wallet before that. */
+  /** null until onboarding completes; there is no wallet before that. */
   const [session, setSession] = useState<OnboardingResult | null>(null);
   const [locked, setLocked] = useState(false);
   /** Re-entering just the backup flow from the deferred-backup banner. */
@@ -179,15 +189,16 @@ function TabBar({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void })
       <BlurView intensity={40} tint="dark" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: alpha(C.bg1, 0.6) }} />
 
-      {TABS.map((t) => {
-        const on = t.id === tab;
+      {TABS.map((entry) => {
+        const on = entry.id === tab;
+        const label = t(entry.labelKey);
         return (
           <Pressable
-            key={t.id}
-            onPress={() => onChange(t.id)}
+            key={entry.id}
+            onPress={() => onChange(entry.id)}
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
-            accessibilityLabel={t.label}
+            accessibilityLabel={label}
             className="flex-1 items-center justify-center gap-[3px]">
             {on && (
               <View
@@ -195,9 +206,9 @@ function TabBar({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void })
                 style={{ backgroundColor: C.amber, shadowColor: C.amber, shadowOpacity: 0.8, shadowRadius: 6 }}
               />
             )}
-            <Icon name={t.icon} size={20} color={on ? C.amber : C.text2} stroke={on ? 1.8 : 1.6} />
+            <Icon name={entry.icon} size={20} color={on ? C.amber : C.text2} stroke={on ? 1.8 : 1.6} />
             <Txt className="text-[10px] font-medium tracking-wider" style={{ color: on ? C.text0 : C.text2 }}>
-              {t.label}
+              {label}
             </Txt>
           </Pressable>
         );

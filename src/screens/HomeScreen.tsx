@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
+import { t, type I18nKey } from '../i18n';
 import { ACTIVITY, ASSETS, BALANCE, NETWORKS, RANGES } from '../data';
 import { C, CHAINS, G, alpha, white } from '../theme';
 import { AreaChart, Avatar, Callout, Card, ChainBadge, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
@@ -10,17 +11,17 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const [range, setRange] = useState('1D');
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
 
-  const actions: { icon: IconName; label: string; color: string; press?: () => void; locked?: boolean }[] = [
-    { icon: 'arrow_up', label: 'Send', color: C.text0, press: onOpenSend },
+  const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean }[] = [
+    { icon: 'arrow_up', labelKey: 'home.actions.send', color: C.text0, press: onOpenSend },
     {
       icon: deferred ? 'lock' : 'arrow_dn',
-      label: 'Receive',
+      labelKey: 'home.actions.receive',
       color: deferred ? C.text3 : C.text0,
       press: deferred ? undefined : onOpenReceive,
       locked: deferred,
     },
-    { icon: 'swap', label: 'Swap', color: C.amber, press: () => onGoto?.('swap') },
-    { icon: 'bridge', label: 'Bridge', color: C.violet, press: () => onGoto?.('bridge') },
+    { icon: 'swap', labelKey: 'home.actions.swap', color: C.amber, press: () => onGoto?.('swap') },
+    { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
   ];
 
   return (
@@ -29,14 +30,14 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
         <View className="flex-row items-center gap-2.5">
           <Avatar letter="S" size={32} />
           <View>
-            <Label>Wallet</Label>
+            <Label>{t('home.wallet.label')}</Label>
             <Txt className="text-[13px] font-semibold">satoshi.ml ▾</Txt>
           </View>
         </View>
         <View className="flex-row gap-2">
-          {onLock && <IconBtn name="lock" label="Lock wallet" onPress={onLock} />}
-          <IconBtn name="settings" label="Settings" onPress={onOpenSettings} />
-          <IconBtn name="bell" label="Notifications" badge={C.amber} />
+          {onLock && <IconBtn name="lock" label={t('home.lock')} onPress={onLock} />}
+          <IconBtn name="settings" label={t('settings.title')} onPress={onOpenSettings} />
+          <IconBtn name="bell" label={t('settings.notifications')} badge={C.amber} />
         </View>
       </View>
 
@@ -47,15 +48,15 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             action={
               <Pressable onPress={onBackUp} className="px-3 py-1.5 rounded-[9px]" style={{ backgroundColor: C.amber }}>
                 <Txt className="text-[11px] font-bold" style={{ color: '#1a1208' }}>
-                  Back up
+                  {t('home.backup.cta')}
                 </Txt>
               </Pressable>
             }>
             <Txt className="text-[12px] text-text1 leading-[17px]">
               <Txt className="text-[12px] font-bold" style={{ color: C.amber }}>
-                Backup required.
+                {t('home.backup.bannerBold')}
               </Txt>{' '}
-              Receive is locked until your recovery phrase is verified.
+              {t('home.backup.banner')}
             </Txt>
           </Callout>
         </View>
@@ -69,7 +70,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           </Float>
 
           <View className="flex-row items-center gap-2">
-            <Label>Total balance</Label>
+            <Label>{t('home.balance.total')}</Label>
             <Pressable onPress={() => setHidden((h) => !h)}>
               <Icon name={hidden ? 'eye_off' : 'eye'} size={14} color={C.text2} />
             </Pressable>
@@ -77,7 +78,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
           <View className="flex-row items-baseline gap-2 mt-1.5">
             {hidden ? (
-              <Txt className="text-[38px] font-bold tracking-tightest">••••••</Txt>
+              <Txt className="text-[38px] font-bold tracking-tightest">{t('home.balance.hidden')}</Txt>
             ) : (
               <Txt className="text-[38px] font-bold tracking-tightest">
                 <Txt className="text-[38px] font-medium text-text2">$</Txt>
@@ -101,7 +102,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             {RANGES.map((r) => (
               <Pressable key={r} onPress={() => setRange(r)}>
                 <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
-                  {r}
+                  {t(`home.ranges.${r}` as I18nKey)}
                 </Txt>
               </Pressable>
             ))}
@@ -112,13 +113,13 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Quick actions */}
       <View className="px-5 pt-4 flex-row gap-2">
         {actions.map((a, i) => (
-          <Enter key={a.label} delay={i * 80} style={{ flex: 1 }}>
+          <Enter key={a.labelKey} delay={i * 80} style={{ flex: 1 }}>
             <Pressable
               onPress={a.press}
               className="py-3.5 rounded-2xl items-center gap-1.5"
               style={[tile(), { opacity: a.locked ? 0.45 : 1 }]}>
               <Icon name={a.icon} size={20} color={a.color} />
-              <Txt className="text-[11px] font-medium">{a.label}</Txt>
+              <Txt className="text-[11px] font-medium">{t(a.labelKey)}</Txt>
             </Pressable>
           </Enter>
         ))}
@@ -127,9 +128,9 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Networks */}
       <View className="pt-5">
         <View className="px-5 flex-row items-center justify-between mb-2.5">
-          <Label>Connected networks</Label>
+          <Label>{t('home.networks.title')}</Label>
           <Txt mono className="text-[11px] text-text2">
-            {NETWORKS.length} active
+            {t('home.networks.active', { count: NETWORKS.length })}
           </Txt>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
@@ -149,8 +150,13 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Assets */}
       <View className="px-5 pt-6">
         <View className="flex-row items-center justify-between mb-3">
-          <Txt className="text-[14px] font-semibold">Assets</Txt>
-          <Segmented options={['Tokens', 'NFTs', 'DeFi'] as const} value={tab} onChange={setTab} />
+          <Txt className="text-[14px] font-semibold">{t('home.assets.title')}</Txt>
+          <Segmented
+            options={['Tokens', 'NFTs', 'DeFi'] as const}
+            value={tab}
+            onChange={setTab}
+            labels={{ Tokens: t('home.tabs.tokens'), NFTs: t('home.tabs.nfts'), DeFi: t('home.tabs.defi') }}
+          />
         </View>
 
         {ASSETS.map((a, i) => (
@@ -163,8 +169,8 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Activity */}
       <View className="px-5 pt-6">
         <View className="flex-row items-center justify-between mb-3">
-          <Txt className="text-[14px] font-semibold">Recent activity</Txt>
-          <Txt className="text-[11px] text-text2">See all →</Txt>
+          <Txt className="text-[14px] font-semibold">{t('home.activity.title')}</Txt>
+          <Txt className="text-[11px] text-text2">{t('common.seeAll')}</Txt>
         </View>
         <Card variant="glass" className="p-1">
           {ACTIVITY.map((r, i) => (
@@ -193,7 +199,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   );
 }
 
-/** Asset list line — token icon, symbol + chain, sparkline, value + change. */
+/** Asset list line: token icon, symbol + chain, sparkline, value + change. */
 
 /* ══ Home ═══════════════════════════════════════════════════ */
 

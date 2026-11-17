@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
+import { t } from '../i18n';
 import { ADDRESSES, CHAIN_GLYPH } from '../data';
 import { C, CHAINS } from '../theme';
 import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
@@ -19,7 +20,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      Alert.alert('Could not copy', 'Copy the address manually — it is shown in full above.');
+      Alert.alert(t('receive.copyError.title'), t('receive.copyError.body'));
     }
   };
 
@@ -31,7 +32,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
 
   return (
     <Screen>
-      <SheetHeader title="Receive" onClose={onClose} />
+      <SheetHeader title={t('receive.title')} onClose={onClose} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8 }}>
         <Segmented
@@ -59,7 +60,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
 
       {/* Address */}
       <View className="px-6 pt-6">
-        <Label className="mb-2 text-center">{`${chain} address`}</Label>
+        <Label className="mb-2 text-center">{t('receive.address.label', { chain })}</Label>
         <Card className="px-4 py-3.5 rounded-[14px]">
           <Txt mono className="text-[12px]">
             {addr}
@@ -68,11 +69,11 @@ export function ReceiveScreen({ onClose }: Sheet) {
         <View className="flex-row gap-2 mt-2.5">
           <View className="flex-1">
             <Btn tone={copied ? 'green' : 'default'} onPress={copy}>
-              {copied ? '✓ Copied' : 'Copy'}
+              {copied ? t('common.copied') : t('common.copy')}
             </Btn>
           </View>
           <View className="flex-1">
-            <Btn onPress={share}>Share</Btn>
+            <Btn onPress={share}>{t('common.share')}</Btn>
           </View>
         </View>
       </View>
@@ -83,8 +84,8 @@ export function ReceiveScreen({ onClose }: Sheet) {
           <ListRow
             icon="plus"
             iconColor={C.amber}
-            label="Request specific amount"
-            sub="Encode the amount in your QR code"
+            label={t('receive.request')}
+            sub={t('receive.requestSub')}
             trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
           />
         </Card>
@@ -94,11 +95,11 @@ export function ReceiveScreen({ onClose }: Sheet) {
       <View className="px-6 pt-5">
         <Callout tone={accent} glyph="ⓘ">
           <Txt className="text-[11px] text-text1 leading-[17px]">
-            Send only{' '}
+            {t('receive.warning.pre')}{' '}
             <Txt className="text-[11px] font-semibold" style={{ color: accent }}>
               {chain}
             </Txt>{' '}
-            assets to this address. Sending other assets may result in permanent loss.
+            {t('receive.warning.post')}
           </Txt>
         </Callout>
       </View>
