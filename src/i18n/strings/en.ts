@@ -254,7 +254,7 @@ export const en = {
   'onboarding.unlock.bioReason': 'Verify it is you to unlock',
   'onboarding.unlock.pinFallback': 'Two tries failed. Use your PIN instead.',
   'onboarding.unlock.failed': 'Unlock failed. Try again or use your PIN.',
-  'onboarding.unlock.unlocked': 'Unlocked',
+  'onboarding.unlock.verifying': 'Verifying…',
   'onboarding.unlock.tapToUnlock': 'Tap to unlock with {bio}',
   'onboarding.unlock.usePin': 'Use PIN',
   'onboarding.unlock.pinPrompt': 'Enter your 6-digit PIN',

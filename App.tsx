@@ -190,16 +190,22 @@ function Shell() {
     ]);
   };
 
+  /** Returns the promise so the unlock screen can hold its Verifying state
+   *  until the real gate resolution lands (and drop it when re-locked). */
   const unlock = () => {
-    void (async () => {
+    return (async () => {
       let meta: VaultMeta | null = null;
       try {
         meta = await walletVault.meta();
       } catch (e) {
         // The native key gate prompts inside the module. A cancelled or
         // failed prompt keeps the wallet locked; the next attempt re-runs
-        // the prompt.
+        // the prompt. Terminal vs retryable failures get distinct copy:
+        // invalidated keys can never unlock again, everything else (a
+        // declined prompt, a read error) is worth one explicit failure
+        // message instead of a silent return to the lock screen.
         if (e instanceof VaultKeyInvalidatedError) alertInvalidated();
+        else Alert.alert(t('onboarding.unlock.failed'));
         setLocked(true);
         return;
       }

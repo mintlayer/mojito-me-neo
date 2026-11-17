@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../i18n';
 import { pinStore } from '../storage/pinStore';
@@ -15,12 +15,30 @@ import { bioName } from './context';
  * lockout survives app restarts: the deadline lives in pinStore, and both
  * paths (PIN and bio) are blocked while it is armed.
  */
-export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometrics: boolean; onUnlock: () => void }) {
+export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometrics: boolean; onUnlock: () => void | Promise<void> }) {
   const [mode, setMode] = useState<'bio' | 'pin'>(biometrics ? 'bio' : 'pin');
-  const scan = useBioScan(onUnlock);
+  const [verifying, setVerifying] = useState(false);
   const onUnlockRef = useRef(onUnlock);
   useEffect(() => {
     onUnlockRef.current = onUnlock;
+  });
+
+  // The scan's ok phase only means the UI-level check passed; the real gate
+  // prompt for the vault key fires inside the native module afterwards. The
+  // label shows Verifying while that resolution is in flight, and when it
+  // comes back declined (the app re-locks, this screen stays mounted) the
+  // ok phase drops so the copy never claims an unlock that did not happen.
+  const resetRef = useRef<() => void>(() => undefined);
+  const runUnlock = useCallback(() => {
+    setVerifying(true);
+    void Promise.resolve(onUnlockRef.current()).finally(() => {
+      setVerifying(false);
+      resetRef.current();
+    });
+  }, []);
+  const scan = useBioScan(runUnlock);
+  useEffect(() => {
+    resetRef.current = scan.reset;
   });
 
   // Bio attempts consult the same armed lockout as the PIN path: a lockout
@@ -60,7 +78,9 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
     settle: 200,
     onMatch: () => {
       void pinStore.resetAttempts();
-      onUnlockRef.current();
+      // The store-backed verdict matched, but the vault key gate still has
+      // to resolve: the PIN path drives the same Verifying state as bio.
+      runUnlock();
     },
     // Store-backed verdict shared with the Settings disable step-up; the
     // lockout bookkeeping (registerFailure, escalation) lives in one place.
@@ -85,7 +105,7 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
                 : scan.phase === 'scan'
                   ? t('onboarding.bio.scanning')
                   : scan.phase === 'ok'
-                    ? t('onboarding.unlock.unlocked')
+                    ? t('onboarding.unlock.verifying')
                     : scan.failures >= 2
                       ? t('onboarding.unlock.pinFallback')
                       : scan.unavailable
@@ -104,14 +124,18 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
             <PinDots value={val} error={err} />
           </View>
           <Txt className="text-[12px] text-center mt-4 h-4" style={{ color: err || locked ? C.red : C.text3 }}>
-            {locked ? t('onboarding.pin.locked', { seconds: lockLeft }) : msg}
+            {locked
+              ? t('onboarding.pin.locked', { seconds: lockLeft })
+              : verifying
+                ? t('onboarding.unlock.verifying')
+                : msg}
           </Txt>
           {/* No bio switch while a lockout is active: bio attempts during the
               countdown would bypass the app's escalating counter (decisions.md
               records the biometry-only product decision). */}
           <View className="flex-1" />
           <Keypad
-            disabled={locked}
+            disabled={locked || verifying}
             onKey={(k) => {
               if (val.length < 6) setValue(val + k);
             }}

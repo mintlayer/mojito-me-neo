@@ -30,6 +30,10 @@ export type BioScan = {
   /** Failed prompt attempts since mount; drives the PIN fallback copy. */
   failures: number;
   start: () => void;
+  /** Drops the ok phase after a settle: the unlock screen calls it when the
+   *  real gate resolution comes back declined, so the label never claims an
+   *  unlock that did not happen. */
+  reset: () => void;
 };
 
 /**
@@ -91,5 +95,7 @@ export function useBioScan(onDone: () => void, onFail?: () => void): BioScan {
       });
   }, [unavailable]);
 
-  return { phase, unavailable, start, failures };
+  const reset = useCallback(() => setPhase('idle'), []);
+
+  return { phase, unavailable, start, reset, failures };
 }
