@@ -9,8 +9,12 @@ export type Sheet = {
   onChangePin?: () => void;
   /** Locks the app (Settings only). */
   onLock?: () => void;
+  /** Signs out: wipes the vault, the PIN and the session (Settings only). */
+  onSignOut?: () => void;
   /** Session biometric mode; SendScreen reads it for the auth copy. */
   bio?: Bio;
+  /** Recovery-phrase length from the vault meta (Settings only). */
+  wordCount?: number;
 };
 
 /** Props the tab screens receive from App. Only Home consumes them all. */

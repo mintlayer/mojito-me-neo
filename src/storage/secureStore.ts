@@ -8,24 +8,19 @@
 import type { SealedBlob } from '../../modules/mojito-core';
 import { bytesToHex, hexToBytes } from './hex';
 import { type StorageKeyId } from './keys';
+import { devFallbackAllowed } from '../config/runtime';
 
 /** Which implementation getSecureStore() handed out. */
 export type SecureStoreKind = 'native' | 'memory';
 
-declare const __DEV__: boolean | undefined;
-
-/** Memory fallback is allowed only in dev/test runtimes: React Native dev
- *  builds (__DEV__), Expo Go, and non-RN tooling (Node tests, tsx). A release
- *  build must never silently fall back. */
-function memoryFallbackAllowed(): boolean {
-  return typeof __DEV__ === 'undefined' || __DEV__ === true;
-}
-
 export interface SecureStore {
-  seal(keyId: StorageKeyId, plaintext: Uint8Array): Promise<SealedBlob>;
+  seal(keyId: StorageKeyId, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob>;
   open(keyId: StorageKeyId, blob: SealedBlob): Promise<Uint8Array>;
   wipe(keyId: StorageKeyId): Promise<void>;
   keyExists(keyId: StorageKeyId): Promise<boolean>;
+  /** Whether the resident key carries the native user-auth gate; never
+   *  triggers a biometric prompt. */
+  keyGated(keyId: StorageKeyId): Promise<boolean>;
 }
 
 const IV_BYTES = 12;
@@ -53,23 +48,23 @@ let sharedMemory: SecureStore | null = null;
 /**
  * The app-level store plus the kind it resolved to. Native-backed on dev
  * builds; memory fallback (unit tests, Expo Go, tooling) only where
- * memoryFallbackAllowed() holds. Release builds without the native core throw
+ * devFallbackAllowed() holds. Release builds without the native core throw
  * so persistence can never degrade to the test double.
  */
 export async function getSecureStore(): Promise<{ kind: SecureStoreKind; store: SecureStore }> {
   if (await getCore()) {
     return { kind: 'native', store: nativeStore };
   }
-  if (!memoryFallbackAllowed()) throw new Error('native core unavailable');
+  if (!devFallbackAllowed()) throw new Error('native core unavailable');
   if (!sharedMemory) sharedMemory = createMemorySecureStore();
   return { kind: 'memory', store: sharedMemory };
 }
 
 const nativeStore: SecureStore = {
-  async seal(keyId, plaintext) {
+  async seal(keyId, plaintext, gated) {
     const core = await getCore();
     if (!core) throw new Error('native core unavailable');
-    return core.MojitoCore.seal(keyId, plaintext);
+    return core.MojitoCore.seal(keyId, plaintext, gated);
   },
   async open(keyId, blob) {
     const core = await getCore();
@@ -86,7 +81,22 @@ const nativeStore: SecureStore = {
     if (!core) throw new Error('native core unavailable');
     return core.MojitoCore.keyExists(keyId);
   },
+  async keyGated(keyId) {
+    const core = await getCore();
+    if (!core) throw new Error('native core unavailable');
+    return core.MojitoCore.keyGated(keyId);
+  },
 };
+
+/** One xorshift step; the double's two generators (seed, keystream) share it. */
+function xorshiftNext(state: number): number {
+  state ^= state << 13;
+  state >>>= 0;
+  state ^= state >>> 17;
+  state ^= state << 5;
+  state >>>= 0;
+  return state;
+}
 
 function randomBytes(length: number): Uint8Array {
   const globalCrypto = (globalThis as { crypto?: { getRandomValues(b: Uint8Array): Uint8Array } }).crypto;
@@ -96,11 +106,7 @@ function randomBytes(length: number): Uint8Array {
   const out = new Uint8Array(length);
   let state = (Date.now() ^ 0x9e3779b9) >>> 0 || 1;
   for (let i = 0; i < length; i++) {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state >>>= 0;
+    state = xorshiftNext(state);
     out[i] = state & 0xff;
   }
   return out;
@@ -123,11 +129,7 @@ function keystream(key: Uint8Array, iv: Uint8Array, length: number): Uint8Array 
   const out = new Uint8Array(length);
   let state = seed;
   for (let i = 0; i < length; i++) {
-    state ^= state << 13;
-    state >>>= 0;
-    state ^= state >>> 17;
-    state ^= state << 5;
-    state >>>= 0;
+    state = xorshiftNext(state);
     out[i] = state & 0xff;
   }
   return out;
@@ -163,6 +165,7 @@ export function createMemorySecureStore(): SecureStore {
   };
 
   return {
+    // gated is accepted but ignored: the test double has no native gate.
     async seal(keyId, plaintext) {
       const key = loadOrCreateKey(keyId);
       const iv = randomBytes(IV_BYTES);
@@ -187,6 +190,11 @@ export function createMemorySecureStore(): SecureStore {
 
     async keyExists(keyId) {
       return keys.has(keyId);
+    },
+
+    // The memory double never gates: callers treat false as "no native gate".
+    async keyGated() {
+      return false;
     },
   };
 }

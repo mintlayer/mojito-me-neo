@@ -29,4 +29,10 @@ android {
 dependencies {
   implementation project(':expo-modules-core')
   implementation "com.facebook.react:react-android"
+  // Auth-per-use Keystore keys are authorized through a BiometricPrompt with
+  // a CryptoObject; same version expo-local-authentication pins.
+  implementation "androidx.biometric:biometric:1.2.0-alpha04"
+  // Vendored Mintlayer wallet bindings (UniFFI Kotlin), release
+  // wallet-bindings-v0.1.0; checksums in vendor/mintlayer/CHECKSUMS.txt.
+  implementation files('../../../vendor/mintlayer/mintlayer-wallet-bindings-0.1.0.aar')
 }

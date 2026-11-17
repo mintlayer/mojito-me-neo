@@ -1,0 +1,18 @@
+# Vendored Mintlayer wallet bindings, release wallet-bindings-v0.1.0.
+# Upstream: https://github.com/mintlayer/rust-sdk/releases/tag/wallet-bindings-v0.1.0
+# Every line below was verified against the upstream SHA256SUMS manifest before
+# vendoring; the xcframework below is the extraction of the zip whose hash
+# the manifest pins. Slice hashes are recorded for corruption detection.
+# The file is directly consumable by `sha256sum -c` (CI does exactly that):
+# upstream-manifest lines are comments, the actionable lines are local paths.
+
+# upstream manifest (SHA256SUMS, release wallet-bindings-v0.1.0), provenance
+# cad323bf1d59c87ba0c252952933ea467f72afc0eda8e17845da4fe78d7b0654  mintlayer-wallet-bindings-0.1.0.aar
+# aaf7197f472c01483e1d4e9f7f222df1c046c12430820ef371f83f832f4d6b97  MintlayerWalletBindings.xcframework.zip
+# 1f29e8b375e9c9c5bd1bbeff8c1fba9849ea84c7700647b30993e3445c84b72b  swift-sources/MintlayerWalletBindings.swift
+
+# local sha256 of the vendored artifacts (verified by CI)
+cad323bf1d59c87ba0c252952933ea467f72afc0eda8e17845da4fe78d7b0654  mintlayer-wallet-bindings-0.1.0.aar
+1f29e8b375e9c9c5bd1bbeff8c1fba9849ea84c7700647b30993e3445c84b72b  MintlayerWalletBindings.swift
+638910576969cb556ef3d9190b1f574e63f8b0ba532451c28dce677bf8d6f02d  MintlayerWalletBindings.xcframework/ios-arm64/libmintlayer_wallet_bindings.a
+0a7bcb37bc5b96694499f269611742ad0388cd0ea8cf2b1aac4f1c751dcbbc2a  MintlayerWalletBindings.xcframework/ios-arm64-simulator/libmintlayer_wallet_bindings.a

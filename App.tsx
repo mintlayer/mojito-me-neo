@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, AppState, Pressable, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
@@ -9,9 +9,15 @@ import './global.css';
 
 import { t } from './src/i18n';
 import { ProvidersProvider } from './src/data/providers/context';
+import { VaultKeyInvalidatedError } from './modules/mojito-core';
+import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/storage/walletVault';
+import { pinStore } from './src/storage/pinStore';
+import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
+import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
-import { Onboarding, OnboardingResult, UnlockScreen } from './src/onboarding';
+import { Onboarding, type OnboardingResult, UnlockScreen } from './src/onboarding';
+import type { Bio } from './src/onboarding/ui';
 import { Splash } from './src/screens/intro';
 import type { Nav, Sheet } from './src/screens/types';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -82,10 +88,27 @@ function Layer({ children, z }: { children: React.ReactNode; z: number }) {
   );
 }
 
+/** The app-level session: key handles and flags, never seed bytes. The
+ *  vault handle carries vault metadata only; phrase decryption stays inside
+ *  short-lived flows (walletVault.openWords for the backup reveal and the
+ *  unlock gating upgrade; the KeySession abstraction is deferred to M2). */
+type AppSession = {
+  vault: WalletVaultHandle | null;
+  deferred: boolean;
+  bio: Bio;
+  /** The persisted Secure-screen choice. Kept distinct from
+   *  settings.biometrics, which folds in hardware detection for the unlock
+   *  UI: only a real choice justifies treating the vault key as gated. */
+  bioChoice: boolean;
+  settings: { biometrics: boolean; autoLock: boolean; testnet: boolean };
+};
+
 function Shell() {
   const [splashDone, setSplashDone] = useState(false);
-  /** null until onboarding completes; there is no wallet before that. */
-  const [session, setSession] = useState<OnboardingResult | null>(null);
+  /** Whether the vault-existence check finished; drives onboarding vs lock. */
+  const [ready, setReady] = useState(false);
+  /** null until onboarding completes (or a stored wallet is found). */
+  const [session, setSession] = useState<AppSession | null>(null);
   const [locked, setLocked] = useState(false);
   /** Re-entering just the backup flow from the deferred-backup banner. */
   const [backup, setBackup] = useState(false);
@@ -93,6 +116,216 @@ function Shell() {
   const [changePin, setChangePin] = useState(false);
   const [tab, setTab] = useState<TabId>('home');
   const [overlay, setOverlay] = useState<Overlay>(null);
+
+  // Cold start: does this device already hold a sealed wallet? Existence is
+  // checked without decrypting (the native query is attribute-level, so no
+  // biometric prompt can fire behind the splash); unlock happens only after
+  // PIN or biometrics. The persisted biometrics choice (Secure screen
+  // enrolment, Settings toggle) gates the bio unlock: a "Use PIN instead"
+  // onboarding choice or a disabled toggle keeps the PIN-only lock even on
+  // capable hardware.
+  useEffect(() => {
+    void (async () => {
+      try {
+        if (await walletVault.exists()) {
+          const [detected, saved] = await Promise.all([
+            detectBio(),
+            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true })),
+          ]);
+          // Self-heal a persisted biometrics choice on hardware that cannot
+          // honor it: gating the vault key here would seal the wallet behind
+          // a prompt that can never succeed. The Settings toggle now guards
+          // the write; this repairs state persisted before that guard.
+          const bioUsable = detected !== null;
+          // The persisted choice is the gate truth at unlock. When the
+          // settings read failed (biometrics: null) on a device that holds
+          // a vault, the live key's native gate is the remaining truth: an
+          // unknown choice must not itself strip an existing gate at the
+          // next unlock, so wantGated follows walletVault.keyGated() until
+          // the choice is readable again.
+          const bioChoice =
+            saved.biometrics === null
+              ? await walletVault.keyGated().catch(() => false)
+              : saved.biometrics === true && bioUsable;
+          if (saved.biometrics === true && !bioUsable) {
+            void saveAppSettings({ biometrics: false }).catch(() => undefined);
+          }
+          const wantBio = (saved.biometrics ?? bioUsable) && bioUsable;
+          setSession({
+            vault: null,
+            deferred: false,
+            bio: detected ?? 'face',
+            bioChoice,
+            settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
+          });
+          setLocked(true);
+        }
+      } catch {
+        // The existence probe itself failed: degrade to the locked state so
+        // a cancelled prompt or a keychain hiccup can never wedge the app on
+        // the splash. Unlocking re-runs the real decrypt and surfaces the
+        // failure there. The persisted choice is unknown for the same
+        // reason, so bioChoice follows the live key's current gate (same
+        // rule as the settings-read failure above): a hiccup must not turn
+        // the next unlock into a silent un-gate.
+        const detected = await detectBio();
+        const keyGated = await walletVault.keyGated().catch(() => false);
+        setSession({
+          vault: null,
+          deferred: false,
+          bio: detected ?? 'face',
+          bioChoice: keyGated,
+          settings: { biometrics: detected !== null, autoLock: true, testnet: false },
+        });
+        setLocked(true);
+      }
+      setReady(true);
+    })();
+  }, []);
+
+  // Auto-lock: leaving the app (home button, app switcher) re-locks the
+  // session when the persisted auto-lock setting is on (default on). A lock
+  // above an open backup or change-PIN layer is harmless: unlocking simply
+  // returns to where the user was.
+  useEffect(() => {
+    if (!session?.settings.autoLock) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') setLocked(true);
+    });
+    return () => sub.remove();
+  }, [session?.settings.autoLock]);
+
+  /** Terminal key state guidance: the phrase is the only way back, so the
+   *  alert offers the erase. */
+  const alertInvalidated = () => {
+    Alert.alert(t('onboarding.unlock.invalidatedTitle'), t('onboarding.unlock.invalidatedBody'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('onboarding.unlock.invalidatedErase'), style: 'destructive', onPress: () => signOut() },
+    ]);
+  };
+
+  /** Returns the promise so the unlock screen can hold its Verifying state
+   *  until the real gate resolution lands (and drop it when re-locked). */
+  const unlock = () => {
+    return (async () => {
+      let meta: VaultMeta | null = null;
+      try {
+        meta = await walletVault.meta();
+      } catch (e) {
+        // The native key gate prompts inside the module. A cancelled or
+        // failed prompt keeps the wallet locked; the next attempt re-runs
+        // the prompt. Terminal vs retryable failures get distinct copy:
+        // invalidated keys can never unlock again, everything else (a
+        // declined prompt, a read error) is worth one explicit failure
+        // message instead of a silent return to the lock screen.
+        if (e instanceof VaultKeyInvalidatedError) alertInvalidated();
+        else Alert.alert(t('onboarding.unlock.failed'));
+        setLocked(true);
+        return;
+      }
+      // Gate-alignment failure is retryable by construction: the two-slot
+      // re-seal keeps the old vault intact until the new slot verifies, so
+      // the session continues on the old vault, one message says so, and
+      // the next unlock retries. The old key dying mid-upgrade is terminal
+      // and gets the same recovery guidance as a failed unlock.
+      let upgradeFailed = false;
+      if (meta) {
+        try {
+          await upgradeKeyGating(meta);
+        } catch (e) {
+          if (e instanceof VaultKeyInvalidatedError) {
+            alertInvalidated();
+            setLocked(true);
+            return;
+          }
+          // VaultUpgradeError (the re-seal bailed before the verified
+          // readback) and a declined prompt on the old gated key are both
+          // retryable with the old vault intact; nothing on this path can
+          // lose the wallet, and it must not escape as an unhandled
+          // rejection.
+          upgradeFailed = true;
+        }
+      }
+      // null meta means the blob is gone (post-wipe recovery window); there
+      // is nothing to re-seal and nothing to gate, unlock as before.
+      setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
+      setLocked(false);
+      if (upgradeFailed) {
+        Alert.alert(t('onboarding.unlock.upgradeTitle'), t('onboarding.unlock.upgradeBody'));
+      }
+    })();
+  };
+
+  /** Gate alignment at unlock, both directions: the persisted Secure-screen
+   *  choice decides the vault key's native gate. A biometrics choice over a
+   *  legacy ungated key re-seals gated; a disabled toggle re-seals ungated,
+   *  so after it settles the PIN alone always opens. walletVault.upgradeGating
+   *  only deletes the old slot after the new one verifies, so a failure
+   *  here is retryable and never loses data. */
+  const upgradeKeyGating = async (meta: VaultMeta): Promise<void> => {
+    const wantGated = session?.bioChoice ?? false;
+    if ((await walletVault.keyGated()) === wantGated) return;
+    const words = await walletVault.openWords();
+    await walletVault.upgradeGating(words, meta, wantGated);
+  };
+
+  const finishOnboarding = (r: OnboardingResult) => {
+    void (async () => {
+      // Persist the Secure-screen choice so cold start respects "Use PIN
+      // instead"; a failure must not block an otherwise complete onboarding.
+      await saveAppSettings({ biometrics: r.biometrics }).catch(() => undefined);
+      const meta = await walletVault.meta().catch(() => null);
+      setSession({
+        vault: meta ? { meta } : null,
+        deferred: r.deferred,
+        bio: r.bio,
+        bioChoice: r.biometrics,
+        settings: { biometrics: r.biometrics, autoLock: true, testnet: false },
+      });
+    })();
+  };
+
+  /** Recovery-phrase reveal is a step-up boundary: entering the backup flow
+   *  re-locks the session, so the phrase is only reachable through the PIN or
+   *  biometric unlock screen, never straight from an unlocked session. */
+  const revealBackup = () => {
+    setOverlay(null);
+    setBackup(true);
+    setLocked(true);
+  };
+
+  /** Settings sign-out: the device forgets the keys, per its own copy. A
+   *  failed wipe must not drop the session state: the vault is re-verified
+   *  gone before the app returns to onboarding, and the error surfaces. */
+  const signOut = () => {
+    void (async () => {
+      let gone = false;
+      try {
+        await Promise.all([walletVault.wipe(), pinStore.wipe()]);
+        gone = !(await walletVault.exists());
+      } catch {
+        gone = false;
+      }
+      if (!gone) {
+        Alert.alert(t('settings.signout.wipeErrorTitle'), t('settings.signout.wipeErrorBody'));
+        return;
+      }
+      setSession(null);
+      setLocked(false);
+      setBackup(false);
+      setChangePin(false);
+      setOverlay(null);
+    })();
+  };
+
+  /** Backup re-entry invalidated card: the erase destroys the sealed phrase
+   *  and the PIN verifier, so it must not run on a single tap. Same
+   *  cancel-or-destructive confirm as the Settings sign-out. */
+  const confirmSignOut = () =>
+    Alert.alert(t('settings.signout.title'), t('settings.signout.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.signout.cta'), style: 'destructive', onPress: () => signOut() },
+    ]);
 
   const Active = SCREENS[tab];
   const Sheet = overlay ? OVERLAYS[overlay] : null;
@@ -109,7 +342,7 @@ function Shell() {
             onOpenSettings={() => setOverlay('settings')}
             onGoto={(t: string) => setTab(t as TabId)}
             deferred={session.deferred}
-            onBackUp={() => setBackup(true)}
+            onBackUp={revealBackup}
             onLock={() => setLocked(true)}
           />
 
@@ -118,9 +351,10 @@ function Shell() {
               <Sheet
                 onClose={() => setOverlay(null)}
                 bio={session.bio}
+                wordCount={session.vault?.meta.wordCount}
                 onBackup={() => {
                   setOverlay(null);
-                  setBackup(true);
+                  revealBackup();
                 }}
                 onChangePin={() => {
                   setOverlay(null);
@@ -129,6 +363,10 @@ function Shell() {
                 onLock={() => {
                   setOverlay(null);
                   setLocked(true);
+                }}
+                onSignOut={() => {
+                  setOverlay(null);
+                  signOut();
                 }}
               />
             </Layer>
@@ -139,20 +377,24 @@ function Shell() {
       )}
 
       {/* First run: the onboarding flow owns the whole screen. */}
-      {!session && splashDone && (
+      {ready && !session && splashDone && (
         <Layer z={Z.onboarding}>
-          <Onboarding onDone={setSession} />
+          <Onboarding onDone={finishOnboarding} />
         </Layer>
       )}
 
-      {/* Deferred backup: re-enter at the seed step only. */}
+      {/* Deferred backup: re-enter at the seed step only; it reveals the
+          stored phrase and must not re-seal a fresh one. */}
       {session && backup && (
         <Layer z={Z.backup}>
           <Onboarding
             initial="seed"
+            backup
             bio={session.bio}
+            locked={locked}
+            onEraseWallet={confirmSignOut}
             onDone={(r) => {
-              setSession({ ...session, deferred: r.deferred });
+              setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
               setBackup(false);
             }}
           />
@@ -164,18 +406,17 @@ function Shell() {
           <Onboarding
             initial="pin-set"
             pinOnly
+            backup
             bio={session.bio}
-            onDone={(r) => {
-              setSession({ ...session, pin: r.pin });
-              setChangePin(false);
-            }}
+            locked={locked}
+            onDone={() => setChangePin(false)}
           />
         </Layer>
       )}
 
       {session && locked && (
         <Layer z={Z.lock}>
-          <UnlockScreen bio={session.bio} pin={session.pin} onUnlock={() => setLocked(false)} />
+          <UnlockScreen bio={session.bio} biometrics={session.settings.biometrics} onUnlock={unlock} />
         </Layer>
       )}
 

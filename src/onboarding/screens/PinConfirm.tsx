@@ -1,5 +1,6 @@
 import React from 'react';
 import { t } from '../../i18n';
+import { pinStore } from '../../storage/pinStore';
 import type { Ctx } from '../context';
 import { PinPad } from './PinPad';
 import { usePinEntry } from '../ui';
@@ -7,7 +8,14 @@ import { usePinEntry } from '../ui';
 export function PinConfirm({ ctx }: { ctx: Ctx }) {
   const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
     target: ctx.pin,
-    onMatch: () => (ctx.pinOnly ? ctx.finish(false) : ctx.push(ctx.flow === 'create' ? 'seed' : 'import')),
+    onMatch: () => {
+      // The PIN becomes the persisted unlock credential here; the seed is
+      // sealed later, at finish.
+      void pinStore.setPin(ctx.pin).then(() => {
+        if (ctx.pinOnly) ctx.finish(false);
+        else ctx.push(ctx.flow === 'create' ? 'seed' : 'import');
+      });
+    },
   });
 
   return (

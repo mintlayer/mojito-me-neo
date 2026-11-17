@@ -27,7 +27,10 @@ export function PinPad({
 }) {
   return (
     <Column>
-      <StepHeader onBack={ctx.pop} step={2} />
+      {/* pinOnly (Change PIN) is a Settings action, not an onboarding step:
+          no stepper, and the stack has no back to go to (pop is a no-op at
+          stack length 1, so the chevron would be a dead control). */}
+      {!ctx.pinOnly && <StepHeader onBack={ctx.pop} step={2} />}
       <View className="px-6 mt-7 items-center">
         <Txt className="text-[24px] font-bold tracking-tightest">{title}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 text-center">{subtitle}</Txt>

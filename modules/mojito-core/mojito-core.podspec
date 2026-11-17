@@ -14,5 +14,10 @@ Pod::Spec.new do |s|
   s.swift_version  = '5.6'
   s.source         = { :path => __dir__ }
   s.dependency 'ExpoModulesCore'
-  s.source_files   = 'ios/**/*'
+  s.source_files   = 'ios/**/*', '../../../vendor/mintlayer/MintlayerWalletBindings.swift'
+  # Vendored Mintlayer wallet bindings (UniFFI static library), release
+  # wallet-bindings-v0.1.0; checksums in vendor/mintlayer/CHECKSUMS.txt.
+  # The generated Swift API source ships beside the binary and is compiled
+  # into this pod so Swift can drive the FFI.
+  s.vendored_frameworks = '../../../vendor/mintlayer/MintlayerWalletBindings.xcframework'
 end

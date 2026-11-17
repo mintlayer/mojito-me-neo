@@ -11,7 +11,7 @@ async function main() {
 
   const plaintext = new TextEncoder().encode('hello mojito');
   const seedKey = STORAGE_KEYS.seed;
-  const blob = await store.seal(seedKey, plaintext);
+  const blob = await store.seal(seedKey, plaintext, false);
 
   assert.equal(blob.v, 1);
   assert.equal(blob.iv.length, 24); // 12 bytes hex
@@ -29,12 +29,14 @@ async function main() {
   await assert.rejects(() => store.open(seedKey, tampered), /open failed/);
 
   assert.equal(await store.keyExists(seedKey), true);
+  // The memory double never gates.
+  assert.equal(await store.keyGated(seedKey), false);
   await store.wipe(seedKey);
   assert.equal(await store.keyExists(seedKey), false);
   await assert.rejects(() => store.open(seedKey, blob), /open failed/);
 
   // Empty payloads roundtrip too.
-  const empty = await store.seal(STORAGE_KEYS.pinMeta, new Uint8Array(0));
+  const empty = await store.seal(STORAGE_KEYS.pinMeta, new Uint8Array(0), false);
   assert.deepEqual(await store.open(STORAGE_KEYS.pinMeta, empty), new Uint8Array(0));
 
   console.log('secureStore: ok');

@@ -19,10 +19,18 @@ jobs:
 
       - run: npm ci
 
-      # theme, i18n, storage and provider tests + tsc --noEmit + eslint + the
-      # dash scan: the same command contributors are asked to run locally, so
-      # CI can't disagree with the README.
+      # theme, i18n, storage, keys and provider tests + tsc --noEmit + eslint
+      # + the dash scan: the same command contributors are asked to run
+      # locally, so CI can't disagree with the README.
       - run: npm run check
+
+      # Vendored bindings provenance: re-hash the artifacts on disk against
+      # vendor/mintlayer/CHECKSUMS.txt (records the upstream SHA256SUMS
+      # values; a PR swapping an AAR or static lib fails here).
+      - name: Verify vendored bindings checksums
+        run: |
+          cd vendor/mintlayer
+          sha256sum -c CHECKSUMS.txt
 
       # Catches anything that typechecks but won't bundle (native module
       # resolution, Metro config drift).

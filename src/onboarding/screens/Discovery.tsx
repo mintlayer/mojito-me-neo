@@ -1,43 +1,136 @@
 import React, { useState, useEffect } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { t } from '../../i18n';
-import { ACCOUNTS } from '../data';
+import { deriveMlAccount, mlReceiveAddresses, type MlAccount } from '../../keys/mlAccounts';
+import { deriveBtcAccount, btcReceiveAddresses, type BtcAccount } from '../../keys/BtcKeyring';
+import { CustomPathError, deriveCustomScan, validateCustomPath } from '../../keys/customPath';
+import { createFixtureAddressProbe, type AddressProbe } from '../AddressProbe';
 import { C, alpha, black, white } from '../../theme';
-import { Btn, Sheet, Ticker, Txt } from '../../ui';
-import { BigBadge, Body, Checkbox, Column, LinkBtn, StepHeader } from '../ui';
+import { Btn, Callout, Sheet, Ticker, Txt } from '../../ui';
+import { BigBadge, Body, Column, LinkBtn, StepHeader } from '../ui';
 import type { Ctx } from '../context';
 
+/** Receiving addresses shown per chain during discovery. */
+const ADDRESS_COUNT = 5;
+
+// Network probing is mocked until M2 (AddressProbe contract); the derivation
+// itself is real.
+const probe: AddressProbe = createFixtureAddressProbe();
+
+type Derived = {
+  mlAddresses: string[];
+  btcAddresses: string[];
+  funded: Set<string>;
+};
+
+/**
+ * Real account discovery: derive Mintlayer account 0 and the BTC account
+ * from the phrase held in onboarding state, list five receiving addresses
+ * per chain, and let the AddressProbe seam decide found versus none.
+ * Balances and history arrive in M2 behind the same interface.
+ */
 export function Discovery({ ctx }: { ctx: Ctx }) {
-  const [phase, setPhase] = useState<'scan' | 'done'>('scan');
-  const [checked, setChecked] = useState<Record<number, boolean>>({ 0: true, 1: true, 2: false });
+  const [phase, setPhase] = useState<'deriving' | 'done' | 'error'>('deriving');
+  const [derived, setDerived] = useState<Derived | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [path, setPath] = useState("m/84'/0'/3'");
+  /** The entered path starts empty; the placeholder shows the shape. */
+  const [path, setPath] = useState('');
+  /** null = the default accounts; otherwise the entered account path. */
+  const [scanPath, setScanPath] = useState<string | null>(null);
+  /** Whether the error phase came from a rejected custom path: those get an
+   *  Edit-path action that reopens the sheet with the path retained. */
+  const [pathError, setPathError] = useState(false);
 
   useEffect(() => {
-    if (phase !== 'scan') return;
-    const t = setTimeout(() => setPhase('done'), 2000);
-    return () => clearTimeout(t);
-  }, [phase]);
+    if (phase !== 'deriving') return;
+    const words = ctx.seedWords;
+    // No phrase in memory (deep re-entry after state loss): a dedicated
+    // error phase with real copy instead of the progress label wedging.
+    if (!words) {
+      setError(t('onboarding.discovery.missingPhrase'));
+      setPhase('error');
+      return;
+    }
+    let alive = true;
+    void (async () => {
+      let mlAddresses: string[];
+      let btcAddresses: string[];
+      if (scanPath === null) {
+        const ml = await deriveMlAccount(words, 'testnet');
+        mlAddresses = await mlReceiveAddresses(ml.xpub, 'testnet', ADDRESS_COUNT);
+        const btc = await deriveBtcAccount(words, 'testnet');
+        btcAddresses = await btcReceiveAddresses(btc, ADDRESS_COUNT);
+      } else {
+        // The custom scan derives the chain the path names (purpose 44 ML,
+        // purpose 84 BTC) and lists its first receiving addresses.
+        const scan = await deriveCustomScan(words, scanPath);
+        if (scan.chain === 'ml') {
+          mlAddresses = await mlReceiveAddresses((scan.account as MlAccount).xpub, scan.network, ADDRESS_COUNT);
+          btcAddresses = [];
+        } else {
+          mlAddresses = [];
+          btcAddresses = await btcReceiveAddresses(scan.account as BtcAccount, ADDRESS_COUNT);
+        }
+      }
+      const { funded } = await probe.probe([...mlAddresses, ...btcAddresses]);
+      if (!alive) return;
+      setDerived({ mlAddresses, btcAddresses, funded: new Set(funded) });
+      setPhase('done');
+    })().catch((e) => {
+      if (!alive) return;
+      setPathError(e instanceof CustomPathError);
+      setError(
+        e instanceof CustomPathError
+          ? t('onboarding.discovery.pathInvalid')
+          : t('common.error.generic'),
+      );
+      setPhase('error');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [phase, ctx, scanPath]);
 
-  const selected = Object.values(checked).filter(Boolean).length;
-  const found = ctx.discovery === 'found';
+  const found = (derived?.funded.size ?? 0) > 0;
 
   return (
     <Column>
       <StepHeader onBack={ctx.pop} step={4} />
 
-      {phase === 'scan' ? (
+      {phase === 'error' ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <BigBadge icon="history" size={72} square />
+          <View className="w-full max-w-[320px] mt-5">
+            <Callout tone={C.red}>{error}</Callout>
+          </View>
+          {pathError && (
+            <LinkBtn
+              className="mt-4"
+              onPress={() => {
+                // The entered path survives the failure: fixing one typo
+                // must not cost full re-navigation and retyping.
+                setSheet(true);
+              }}>
+              {t('onboarding.discovery.editPath')}
+            </LinkBtn>
+          )}
+        </View>
+      ) : phase === 'deriving' ? (
         <View className="flex-1 items-center justify-center px-6">
           <BigBadge icon="scan" pulsing />
-          <Txt className="text-[20px] font-bold tracking-tightest mt-6">{t('onboarding.discovery.scanning')}</Txt>
+          <Txt className="text-[20px] font-bold tracking-tightest mt-6">{t('onboarding.discovery.deriving')}</Txt>
           <Txt className="text-[13px] text-text2 mt-2 text-center leading-[19px]">
             {t('onboarding.discovery.scanningSub')}
           </Txt>
           <Ticker>
+            {/* Locale-neutral technical literal (deliberate): derivation
+                paths are identical in every locale, so it stays outside t(). */}
             <Txt mono className="text-[11px] text-text3 mt-[18px]">
-              m/84'/0'/…
+              m/44'/1'/0'/0/…
             </Txt>
           </Ticker>
+          {error && <Txt className="text-[12px] mt-3" style={{ color: C.red }}>{error}</Txt>}
         </View>
       ) : found ? (
         <Body className="px-[22px] pt-4 pb-7">
@@ -45,44 +138,64 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
           <Txt className="text-[13px] text-text2 mt-1.5">{t('onboarding.discovery.sub')}</Txt>
 
           <View className="gap-2.5 mt-[18px]">
-            {ACCOUNTS.map((a, i) => (
-              <Pressable
-                key={a.name}
-                onPress={() => setChecked((c) => ({ ...c, [i]: !c[i] }))}
+            {derived!.mlAddresses.map((address, i) => (
+              <View
+                key={address}
                 className="flex-row items-center gap-3 px-3.5 py-3 rounded-[14px]"
                 style={{
-                  backgroundColor: checked[i] ? alpha(C.amber, 0.07) : white(0.03),
+                  backgroundColor: derived!.funded.has(address) ? alpha(C.amber, 0.07) : white(0.03),
                   borderWidth: 1,
-                  borderColor: checked[i] ? alpha(C.amber, 0.4) : C.lineSoft,
+                  borderColor: derived!.funded.has(address) ? alpha(C.amber, 0.4) : C.lineSoft,
                 }}>
-                <Checkbox checked={!!checked[i]} onToggle={() => setChecked((c) => ({ ...c, [i]: !c[i] }))} size={21}>
-                  <View />
-                </Checkbox>
                 <View className="flex-1">
-                  <View className="flex-row items-baseline gap-2">
-                    <Txt className="text-[14px] font-semibold">{a.name}</Txt>
-                    <Txt mono className="text-[10px] text-text3">
-                      {a.path}
-                    </Txt>
-                  </View>
-                  <View className="flex-row gap-3 mt-1">
-                    <Txt mono className="text-[11.5px] text-text1">
-                      {a.btc} BTC
-                    </Txt>
-                    <Txt mono className="text-[11.5px] text-text1">
-                      {a.ml} ML
-                    </Txt>
-                  </View>
+                  <Txt mono className="text-[10px] text-text3">
+                    {t('onboarding.discovery.addressN', { n: i + 1 })}
+                  </Txt>
+                  <Txt mono className="text-[11.5px] text-text1 mt-1" numberOfLines={1} ellipsizeMode="middle">
+                    {address}
+                  </Txt>
                 </View>
-                <Txt mono className="text-[11px] text-text2">
-                  {a.usd}
-                </Txt>
-              </Pressable>
+                {derived!.funded.has(address) && (
+                  <Txt mono className="text-[10px]" style={{ color: C.amber }}>
+                    {t('onboarding.discovery.funded')}
+                  </Txt>
+                )}
+              </View>
+            ))}
+            {derived!.btcAddresses.map((address, i) => (
+              <View
+                key={address}
+                className="flex-row items-center gap-3 px-3.5 py-3 rounded-[14px]"
+                style={{
+                  backgroundColor: derived!.funded.has(address) ? alpha(C.amber, 0.07) : white(0.03),
+                  borderWidth: 1,
+                  borderColor: derived!.funded.has(address) ? alpha(C.amber, 0.4) : C.lineSoft,
+                }}>
+                <View className="flex-1">
+                  {/* Locale-neutral chain prefix (deliberate): BTC is the same
+                      ticker in every locale, so it stays outside t(). */}
+                  <Txt mono className="text-[10px] text-text3">
+                    BTC · {t('onboarding.discovery.addressN', { n: i + 1 })}
+                  </Txt>
+                  <Txt mono className="text-[11.5px] text-text1 mt-1" numberOfLines={1} ellipsizeMode="middle">
+                    {address}
+                  </Txt>
+                </View>
+                {derived!.funded.has(address) && (
+                  <Txt mono className="text-[10px]" style={{ color: C.amber }}>
+                    {t('onboarding.discovery.funded')}
+                  </Txt>
+                )}
+              </View>
             ))}
           </View>
 
-          <Btn tone="primary" className="mt-5" disabled={selected === 0} onPress={() => ctx.finish(false)}>
-            {t('onboarding.discovery.restore', { count: selected, plural: selected === 1 ? '' : 's' })}
+          <Callout tone={C.teal} className="mt-4">
+            {t('onboarding.discovery.fixtureNote')}
+          </Callout>
+
+          <Btn tone="primary" className="mt-5" onPress={() => ctx.finish(false)}>
+            {t('common.continue')}
           </Btn>
           <LinkBtn className="mt-3.5" onPress={() => setSheet(true)}>
             {t('onboarding.discovery.custom')}
@@ -94,7 +207,7 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
             <BigBadge icon="history" size={72} square />
             <Txt className="text-[20px] font-bold tracking-tightest mt-5">{t('onboarding.discovery.none')}</Txt>
             <Txt className="text-[13px] text-text2 mt-2 text-center leading-[20px] max-w-[270px]">
-              {t('onboarding.discovery.noneSub')}
+              {scanPath === null ? t('onboarding.discovery.noneSub') : t('onboarding.discovery.customNone')}
             </Txt>
           </View>
           <Btn tone="primary" onPress={() => ctx.finish(false)}>
@@ -119,13 +232,32 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
           autoCorrect={false}
           className="font-mono text-[13px] text-text0 h-[46px] rounded-xl px-3.5 mt-4"
           style={{ backgroundColor: black(0.3), borderWidth: 1, borderColor: C.line }}
+          // Locale-neutral technical literal (deliberate): derivation paths
+          // are identical in every locale, so the placeholder stays outside
+          // t().
+          placeholder="m/84'/0'/0'"
+          placeholderTextColor={C.text3}
         />
+        {path.trim().length > 0 && validateCustomPath(path.trim()) && (
+          <Txt className="text-[11.5px] mt-2" style={{ color: C.red }}>
+            {t('onboarding.discovery.pathInvalid')}
+          </Txt>
+        )}
         <Btn
           tone="primary"
           className="mt-3.5"
+          disabled={path.trim().length === 0 || !!validateCustomPath(path.trim())}
           onPress={() => {
+            // The entered path really drives the derivation: the scan effect
+            // re-runs against it, and an unsupported path lands in the error
+            // phase with dedicated copy instead of a silent default scan.
+            const entered = path.trim();
             setSheet(false);
-            setPhase('scan');
+            setDerived(null);
+            setError(null);
+            setPathError(false);
+            setScanPath(entered);
+            setPhase('deriving');
           }}>
           {t('onboarding.discovery.scanCta')}
         </Btn>
@@ -133,7 +265,3 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
     </Column>
   );
 }
-
-/* ══ Own entropy (the design marks this WIP) ════════════════ */
-
-/** 24 words needs 256 bits of seed material. */

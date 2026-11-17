@@ -1,25 +1,33 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../../i18n';
-import { BIP39, SEED } from '../data';
+import { BIP39_WORDS } from '../../keys/bip39Words';
 import { C, alpha, white } from '../../theme';
 import { Btn, Icon, Txt } from '../../ui';
 import { Body, Column, StepHeader, WordChip, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
+/**
+ * Backup quiz over the real generated or imported phrase, with distractors
+ * drawn from the full 2048-word list. The answer key and chips are mount-
+ * stable by design (lazy useState): a wrong pick only flashes the wrong
+ * chip, nothing reshuffles mid-quiz.
+ */
 export function Verify({ ctx }: { ctx: Ctx }) {
-  // The chips and filled slots expose 3 of the 24 words, so protect it too.
+  // The chips and filled slots expose 3 of the words, so protect it too.
   useSeedProtection();
+  const words = ctx.seedWords ?? [];
+
   // Lazy useState, not useMemo: React treats useMemo as a performance hint it
   // may discard, which would reshuffle the answer key mid-quiz. useState's
   // initialiser is guaranteed to run exactly once.
   const [quiz] = useState(() => {
     const shuffle = <T,>(xs: T[]) => [...xs].sort(() => Math.random() - 0.5);
-    const idx = shuffle([...Array(SEED.length).keys()])
+    const idx = shuffle([...Array(words.length).keys()])
       .slice(0, 3)
       .sort((a, b) => a - b);
-    const distractors = shuffle(BIP39.filter((w) => !SEED.includes(w))).slice(0, 6);
-    return { idx, chips: shuffle([...idx.map((i) => SEED[i]), ...distractors]) };
+    const distractors = shuffle(BIP39_WORDS.filter((w) => !words.includes(w))).slice(0, 6);
+    return { idx, chips: shuffle([...idx.map((i) => words[i]), ...distractors]) };
   });
 
   const [fills, setFills] = useState<Record<number, string>>({});
@@ -27,11 +35,11 @@ export function Verify({ ctx }: { ctx: Ctx }) {
   const [wrongChip, setWrongChip] = useState<string | null>(null);
 
   const active = quiz.idx.find((i) => fills[i] === undefined);
-  const done = active === undefined;
+  const done = active === undefined && words.length > 0;
 
   const pick = (w: string) => {
-    if (done || Object.values(fills).includes(w)) return;
-    if (w === SEED[active]) {
+    if (done || active === undefined || Object.values(fills).includes(w)) return;
+    if (w === words[active]) {
       setFills((f) => ({ ...f, [active]: w }));
       setErr(null);
       return;
@@ -56,6 +64,7 @@ export function Verify({ ctx }: { ctx: Ctx }) {
               <View
                 key={i}
                 className="flex-row items-center gap-2.5 px-3.5 py-3 rounded-xl"
+                accessibilityLabel={t('onboarding.verify.pickN', { n: i + 1 })}
                 style={{
                   backgroundColor: white(0.03),
                   borderWidth: 1,

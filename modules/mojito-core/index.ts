@@ -1,9 +1,18 @@
 // Expo module registration and the MojitoCore type surface. The native module
 // ships the crypto facade for real (secure random, AES-256-GCM seal and open
-// over Keychain or Keystore resident keys). The MintlayerBindings call-throughs
-// are stubbed on the native side until M1 ships the AAR and xcframework; every
-// stub rejects with BindingsError { kind: 'unknown', detail: 'bindings arrive
-// in M1' } so the interface is exercised but nothing pretends to derive keys.
+// over Keychain or Keystore resident keys, with the vault key gated on user
+// authentication only when the wallet chose biometrics on the Secure screen;
+// the TS facade maps the native rejections to VaultAuthRequiredError and
+// VaultKeyInvalidatedError).
+//
+// Bindings implementation status (M1): the artifacts are vendored
+// (vendor/mintlayer, release wallet-bindings-v0.1.0) and linked from the
+// Android and iOS build files, but the Kotlin and Swift facades still reject
+// with BindingsError { kind: 'unknown', detail: 'bindings facade: native
+// call-through pending native-build verification' }. The M1 derivation and
+// address paths run in TypeScript (src/keys) pinned to the bindings parity
+// vectors; the native call-through lands with the first dev-build run on a
+// build machine (see vendor/mintlayer/CHECKSUMS.txt).
 import { requireNativeModule } from 'expo-modules-core';
 
 import {
@@ -26,6 +35,43 @@ export type {
 
 /** Hex-string fields of an encrypted blob, versioned for future migrations. */
 export type SealedBlob = { v: 1; iv: string; ct: string; tag: string };
+
+/** The sealed-key surface requires user authentication (the native biometric
+ *  gate on Keychain/Keystore) and the OS prompt did not complete: the user
+ *  cancelled it, recognition failed, or a temporary lockout is active. The
+ *  next attempt re-runs the native prompt; there is no separate JS step-up
+ *  that could authorize a crypto-bound key. */
+export class VaultAuthRequiredError extends Error {}
+
+/** Terminal key state: the key cannot be authorized again on this device
+ *  (biometric re-enrolment invalidated it, or the gate can no longer be
+ *  satisfied at all). The sealed phrase recovers only via phrase restore. */
+export class VaultKeyInvalidatedError extends Error {}
+
+/** Expo promise rejections carry their native code; the message is matched as
+ *  a fallback so a bridge that drops the code still maps to the typed error. */
+function isAuthRequiredRejection(e: unknown): boolean {
+  const err = e as { code?: string; message?: string } | null;
+  if (err?.code === 'MOJITO_AUTH_REQUIRED') return true;
+  return /user authentication required/.test(err?.message ?? '');
+}
+
+function isKeyInvalidatedRejection(e: unknown): boolean {
+  const err = e as { code?: string } | null;
+  return err?.code === 'MOJITO_KEY_INVALIDATED';
+}
+
+/** Map a native seal/open rejection to the typed vault errors; null means
+ *  the rejection is not one of ours and passes through unchanged. */
+function mapVaultRejection(e: unknown, op: 'seal' | 'open', keyId: string): Error | null {
+  if (isAuthRequiredRejection(e)) {
+    return new VaultAuthRequiredError(`user authentication required to ${op} ${keyId}`);
+  }
+  if (isKeyInvalidatedRejection(e)) {
+    return new VaultKeyInvalidatedError(`vault key for ${keyId} is invalidated; restore from the recovery phrase`);
+  }
+  return null;
+}
 
 type NativeCore = Record<string, (...args: unknown[]) => Promise<unknown>>;
 
@@ -77,7 +123,7 @@ async function stub(name: string, args: unknown[]): Promise<never> {
       // fall through to the structured error
     }
   }
-  throw bindingsError('bindings arrive in M1');
+  throw bindingsError('bindings facade: native call-through pending native-build verification');
 }
 
 /** True when the native MojitoCore module is present (dev builds, not Expo Go). */
@@ -88,10 +134,14 @@ export async function hasNativeCore(): Promise<boolean> {
 export interface MojitoCore extends MintlayerBindings {
   secureRandom(length: number): Promise<Uint8Array>;
   // storage: key is generated and stored inside Keychain/Keystore, never returned
-  seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob>;
+  seal(keyId: string, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob>;
   open(keyId: string, blob: SealedBlob): Promise<Uint8Array>;
   wipe(keyId: string): Promise<void>;
   keyExists(keyId: string): Promise<boolean>;
+  /** Whether the resident key actually carries the native user-auth gate.
+   *  Android reads the Keystore key characteristics; iOS reads the module's
+   *  own creation-time marker. Never triggers a biometric prompt. */
+  keyGated(keyId: string): Promise<boolean>;
 }
 
 /** Bridge-side guard: a negative count crashes iOS unrecoverably; keep the
@@ -119,10 +169,17 @@ export const MojitoCore: MojitoCore = {
     return toBytes(await native['secureRandom'](length));
   },
 
-  async seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob> {
+  async seal(keyId: string, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob> {
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
-    const blob = (await native['seal'](keyId, plaintext)) as { iv: string; ct: string; tag: string };
+    let blob: { iv: string; ct: string; tag: string };
+    try {
+      blob = (await native['seal'](keyId, plaintext, gated)) as { iv: string; ct: string; tag: string };
+    } catch (e) {
+      const mapped = mapVaultRejection(e, 'seal', keyId);
+      if (mapped) throw mapped;
+      throw e;
+    }
     return { v: 1, iv: blob.iv, ct: blob.ct, tag: blob.tag };
   },
 
@@ -130,7 +187,13 @@ export const MojitoCore: MojitoCore = {
     requireIv(blob.iv);
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
-    return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
+    try {
+      return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
+    } catch (e) {
+      const mapped = mapVaultRejection(e, 'open', keyId);
+      if (mapped) throw mapped;
+      throw e;
+    }
   },
 
   async wipe(keyId: string): Promise<void> {
@@ -143,6 +206,12 @@ export const MojitoCore: MojitoCore = {
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
     return (await native['keyExists'](keyId)) === true;
+  },
+
+  async keyGated(keyId: string): Promise<boolean> {
+    const native = await loadNative();
+    if (!native) throw bindingsError('native module unavailable');
+    return (await native['keyGated'](keyId)) === true;
   },
 
   // keys and addresses

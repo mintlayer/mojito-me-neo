@@ -90,6 +90,15 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
   const pct = Math.min(100, (bits / BITS_NEEDED) * 100);
   const done = bits >= BITS_NEEDED;
 
+  // The pool now feeds the next phrase generation: Seed clears its words,
+  // so its generation effect mixes this entropy with fresh secure random
+  // instead of discarding the drawing (the M0 behavior lost it).
+  const use = () => {
+    ctx.setSeedEntropy(new Uint8Array(pool.current));
+    ctx.setSeedWords(null);
+    ctx.pop();
+  };
+
   return (
     <Column>
       <StepHeader onBack={ctx.pop} />
@@ -137,7 +146,7 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
             <Btn onPress={reset}>{t('onboarding.entropy.clear')}</Btn>
           </View>
           <View className="flex-1">
-            <Btn tone="primary" disabled={!done} onPress={ctx.pop}>
+            <Btn tone="primary" disabled={!done} onPress={use}>
               {t('onboarding.entropy.cta')}
             </Btn>
           </View>
