@@ -7,6 +7,7 @@
 import type { SealedBlob } from '../../modules/mojito-core';
 
 import { loadAsyncStorage } from './asyncStorage';
+import { devFallbackAllowed } from '../config/runtime';
 
 export type BlobStoreKind = 'native' | 'memory';
 
@@ -14,12 +15,6 @@ export interface BlobStore {
   get(keyId: string): Promise<SealedBlob | null>;
   set(keyId: string, blob: SealedBlob): Promise<void>;
   remove(keyId: string): Promise<void>;
-}
-
-declare const __DEV__: boolean | undefined;
-
-function memoryFallbackAllowed(): boolean {
-  return typeof __DEV__ === 'undefined' || __DEV__ === true;
 }
 
 function decodeBlob(json: string): SealedBlob | null {
@@ -76,7 +71,7 @@ let sharedMemory: BlobStore | null = null;
  */
 export async function getBlobStore(): Promise<{ kind: BlobStoreKind; store: BlobStore }> {
   if (await loadAsyncStorage()) return { kind: 'native', store: nativeBlobStore };
-  if (!memoryFallbackAllowed()) throw new Error('async storage unavailable');
+  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   if (!sharedMemory) sharedMemory = createMemoryBlobStore();
   return { kind: 'memory', store: sharedMemory };
 }

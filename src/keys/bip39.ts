@@ -10,6 +10,7 @@ import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 import { BIP39_WORDS } from './bip39Words';
+import { devFallbackAllowed } from '../config/runtime';
 
 export type WordCount = 12 | 15 | 18 | 21 | 24;
 
@@ -24,14 +25,6 @@ const SUPPORTED_COUNTS: readonly WordCount[] = [12, 15, 18, 21, 24];
 const PBKDF2_ROUNDS = 2048;
 
 const SEED_BYTES = 64;
-
-declare const __DEV__: boolean | undefined;
-
-/** Same gate as the secureStore memory fallback: Node tooling (no __DEV__)
- *  and dev builds may use WebCrypto; release builds must not. */
-function webCryptoAllowed(): boolean {
-  return typeof __DEV__ === 'undefined' || __DEV__ === true;
-}
 
 export class Bip39Error extends Error {
   readonly kind: 'length' | 'word' | 'checksum' | 'entropy';
@@ -54,7 +47,7 @@ async function secureEntropy(bytes: number): Promise<Uint8Array> {
     // fall through to WebCrypto where allowed
   }
   const webCrypto = (globalThis as { crypto?: Crypto }).crypto;
-  if (webCrypto?.getRandomValues && webCryptoAllowed()) {
+  if (webCrypto?.getRandomValues && devFallbackAllowed()) {
     return webCrypto.getRandomValues(new Uint8Array(bytes));
   }
   throw new Bip39Error('entropy', 'no secure random source available');

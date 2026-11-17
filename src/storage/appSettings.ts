@@ -5,6 +5,7 @@
 // PIN verifier which cross the sealed-store seam.
 import { STORAGE_KEYS } from './keys';
 import { loadAsyncStorage } from './asyncStorage';
+import { devFallbackAllowed } from '../config/runtime';
 
 export type AppSettings = {
   /** Unlock leads with biometrics; null means never chosen (default to the
@@ -16,17 +17,11 @@ export type AppSettings = {
 
 const SETTINGS_KEY = STORAGE_KEYS.settings;
 
-declare const __DEV__: boolean | undefined;
-
-function memoryFallbackAllowed(): boolean {
-  return typeof __DEV__ === 'undefined' || __DEV__ === true;
-}
-
 // Process-lifetime copy for the Node gate and other tooling runtimes.
 let memory: Partial<AppSettings> | null = null;
 
 async function loadRaw(): Promise<Partial<AppSettings> | null> {
-  if (!memoryFallbackAllowed()) throw new Error('async storage unavailable');
+  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   const api = await loadAsyncStorage();
   if (api) {
     const json = await api.getItem(SETTINGS_KEY);
@@ -37,7 +32,7 @@ async function loadRaw(): Promise<Partial<AppSettings> | null> {
 }
 
 async function writeRaw(state: AppSettings): Promise<void> {
-  if (!memoryFallbackAllowed()) throw new Error('async storage unavailable');
+  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   const json = JSON.stringify(state);
   const api = await loadAsyncStorage();
   if (api) {

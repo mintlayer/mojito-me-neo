@@ -8,18 +8,10 @@
 import type { SealedBlob } from '../../modules/mojito-core';
 import { bytesToHex, hexToBytes } from './hex';
 import { type StorageKeyId } from './keys';
+import { devFallbackAllowed } from '../config/runtime';
 
 /** Which implementation getSecureStore() handed out. */
 export type SecureStoreKind = 'native' | 'memory';
-
-declare const __DEV__: boolean | undefined;
-
-/** Memory fallback is allowed only in dev/test runtimes: React Native dev
- *  builds (__DEV__), Expo Go, and non-RN tooling (Node tests, tsx). A release
- *  build must never silently fall back. */
-function memoryFallbackAllowed(): boolean {
-  return typeof __DEV__ === 'undefined' || __DEV__ === true;
-}
 
 export interface SecureStore {
   seal(keyId: StorageKeyId, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob>;
@@ -56,14 +48,14 @@ let sharedMemory: SecureStore | null = null;
 /**
  * The app-level store plus the kind it resolved to. Native-backed on dev
  * builds; memory fallback (unit tests, Expo Go, tooling) only where
- * memoryFallbackAllowed() holds. Release builds without the native core throw
+ * devFallbackAllowed() holds. Release builds without the native core throw
  * so persistence can never degrade to the test double.
  */
 export async function getSecureStore(): Promise<{ kind: SecureStoreKind; store: SecureStore }> {
   if (await getCore()) {
     return { kind: 'native', store: nativeStore };
   }
-  if (!memoryFallbackAllowed()) throw new Error('native core unavailable');
+  if (!devFallbackAllowed()) throw new Error('native core unavailable');
   if (!sharedMemory) sharedMemory = createMemorySecureStore();
   return { kind: 'memory', store: sharedMemory };
 }
