@@ -18,6 +18,8 @@ export function SwapScreen() {
   /** Which panel the picker is editing, or null when closed. */
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  /** Approx-USD conversion reads provider fixture prices, not screen constants. */
+  const priceMap = Object.fromEntries((assets ?? []).map((a) => [a.sym, a.price] as const));
 
   const flip = () => {
     setFrom(to);
@@ -59,9 +61,9 @@ export function SwapScreen() {
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label={t('common.youSend')} data={from} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
+        <SwapPanel label={t('common.youSend')} data={from} price={priceMap[from.sym]} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
         <View className="h-2" />
-        <SwapPanel label={t('common.youReceive')} data={to} onPickToken={() => setPicking('to')} />
+        <SwapPanel label={t('common.youReceive')} data={to} price={priceMap[to.sym]} onPickToken={() => setPicking('to')} />
 
         <Pressable
           onPress={flip}
@@ -103,15 +105,17 @@ export function SwapScreen() {
 function SwapPanel({
   label,
   data,
+  price = 0,
   onChange,
   onPickToken,
 }: {
   label: string;
   data: { sym: string; chain: string; amt: string; bal: string };
+  price?: number;
   onChange?: (v: string) => void;
   onPickToken?: () => void;
 }) {
-  const usd = (parseFloat(data.amt || '0') * (data.sym === 'BTC' ? 96420 : 0.3438)).toFixed(2);
+  const usd = (parseFloat(data.amt || '0') * price).toFixed(2);
   return (
     <Card className="p-[18px]">
       <View className="flex-row justify-between items-center">

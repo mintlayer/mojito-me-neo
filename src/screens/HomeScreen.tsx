@@ -13,6 +13,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const activity = useData((d) => d.getActivity(20));
   const networks = useData((d) => d.getNetworks());
   const ranges = useData((d) => d.getRanges());
+  const profile = useData((d) => d.getProfile());
   const [hidden, setHidden] = useState(false);
   const [range, setRange] = useState('1D');
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
@@ -30,16 +31,16 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
     { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
   ];
 
-  if (!balance || !assets || !activity || !networks || !ranges) return <Screen />;
+  if (!balance || !assets || !activity || !networks || !ranges || !profile) return <Screen />;
 
   return (
     <Screen>
       <View className="px-5 flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
-          <Avatar letter="S" size={32} />
+          <Avatar letter={profile.initial} size={32} />
           <View>
             <Label>{t('home.wallet.label')}</Label>
-            <Txt className="text-[13px] font-semibold">satoshi.ml ▾</Txt>
+            <Txt className="text-[13px] font-semibold">{profile.name} ▾</Txt>
           </View>
         </View>
         <View className="flex-row gap-2">
@@ -194,7 +195,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
                   <Txt mono className="text-[11px] text-text2">
                     {r.time}
                   </Txt>
-                  <Txt className="text-[10px] mt-0.5" style={{ color: r.state.includes('Confirming') ? C.amber : C.text2 }}>
+                  <Txt className="text-[10px] mt-0.5" style={{ color: r.live ? C.amber : C.text2 }}>
                     {r.state}
                   </Txt>
                 </View>

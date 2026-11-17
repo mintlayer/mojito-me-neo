@@ -139,7 +139,7 @@ export function BridgeScreen() {
           <View className="flex-row justify-between items-center mb-3">
             <Label>{t('common.amount')}</Label>
             <Txt mono className="text-[11px] text-text2">
-              {t('bridge.available', { amount: '1,240.00', token })}
+              {t('bridge.available', { amount: (assetBalances[token] ?? '').replace(/ [^ ]+$/, '') || '0', token })}
             </Txt>
           </View>
           <AmountRow symbol={token} value={amount} onChangeText={setAmount} onPickToken={() => setTokenPicker(true)} />
