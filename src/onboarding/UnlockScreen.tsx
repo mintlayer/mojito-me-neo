@@ -12,7 +12,8 @@ import { bioName } from './context';
  * expo-local-authentication prompt, shown when the session enabled them);
  * the PIN is the always-working path, verified against the persisted
  * verifier with the same lockout counter the rest of the app uses. The
- * lockout survives app restarts: the deadline lives in pinStore.
+ * lockout survives app restarts: the deadline lives in pinStore, and both
+ * paths (PIN and bio) are blocked while it is armed.
  */
 export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometrics: boolean; onUnlock: () => void }) {
   const [mode, setMode] = useState<'bio' | 'pin'>(biometrics ? 'bio' : 'pin');
@@ -22,12 +23,37 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
     onUnlockRef.current = onUnlock;
   });
 
+  // Bio attempts consult the same armed lockout as the PIN path: a lockout
+  // armed by wrong PINs must not leave the default biometric path fully
+  // live. The countdown polls pinStore while the bio mode is up.
+  const [bioLockLeft, setBioLockLeft] = useState(0);
+  useEffect(() => {
+    if (mode !== 'bio') return;
+    let alive = true;
+    const tick = () => {
+      void pinStore.lockSecondsLeft().then((seconds) => {
+        if (alive) setBioLockLeft(seconds);
+      });
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => {
+      alive = false;
+      clearInterval(interval);
+    };
+  }, [mode]);
+
   // A lock armed in a previous run resumes its countdown immediately.
   useEffect(() => {
     if (mode !== 'pin') return;
     void pinStore.lockSecondsLeft().then((seconds) => pinLock.armLock(seconds));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  const startBio = () => {
+    if (bioLockLeft > 0) return;
+    scan.start();
+  };
 
   const pinLock = usePinEntry({
     target: null,
@@ -52,17 +78,19 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
       {mode === 'bio' ? (
         <>
           <View className="flex-1 items-center justify-center gap-3.5">
-            <BioCircle bio={bio} phase={scan.phase} onPress={scan.start} />
+            <BioCircle bio={bio} phase={scan.phase} onPress={startBio} />
             <Txt className="text-[12px] text-text2">
-              {scan.phase === 'scan'
-                ? t('onboarding.bio.scanning')
-                : scan.phase === 'ok'
-                  ? t('onboarding.unlock.unlocked')
-                  : scan.failures >= 2
-                    ? t('onboarding.unlock.pinFallback')
-                    : scan.unavailable
-                      ? t('onboarding.secure.unavailable')
-                      : t('onboarding.unlock.tapToUnlock', { bio: bioName(bio) })}
+              {bioLockLeft > 0
+                ? t('onboarding.pin.locked', { seconds: bioLockLeft })
+                : scan.phase === 'scan'
+                  ? t('onboarding.bio.scanning')
+                  : scan.phase === 'ok'
+                    ? t('onboarding.unlock.unlocked')
+                    : scan.failures >= 2
+                      ? t('onboarding.unlock.pinFallback')
+                      : scan.unavailable
+                        ? t('onboarding.secure.unavailable')
+                        : t('onboarding.unlock.tapToUnlock', { bio: bioName(bio) })}
             </Txt>
           </View>
           <View className="px-6">
