@@ -2,5 +2,6 @@
 export const points = (data: number[], w: number, h: number) => {
   const min = Math.min(...data);
   const range = Math.max(...data) - min || 1;
-  return data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(' ');
+  const step = data.length - 1 || 1; // a single point maps to x = 0, not NaN
+  return data.map((v, i) => `${(i / step) * w},${h - ((v - min) / range) * h}`).join(' ');
 };

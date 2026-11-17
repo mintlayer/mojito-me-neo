@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { ACCOUNTS } from '.././data';
+import { ACCOUNTS } from '../data';
 import { C, alpha, black, white } from '../../theme';
 import { Btn, Sheet, Ticker, Txt } from '../../ui';
-import { BigBadge, Body, Checkbox, Column, LinkBtn, StepHeader } from '.././ui';
+import { BigBadge, Body, Checkbox, Column, LinkBtn, StepHeader } from '../ui';
 import type { Ctx } from '../context';
 
 export function Discovery({ ctx }: { ctx: Ctx }) {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Btn, MojitoLogo, Txt } from '../../ui';
-import { Column } from '.././ui';
+import { Column } from '../ui';
 import type { Ctx } from '../context';
 
 export function Welcome({ ctx }: { ctx: Ctx }) {

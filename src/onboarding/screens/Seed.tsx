@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { SEED } from '.././data';
+import { SEED } from '../data';
 import { C, alpha } from '../../theme';
-import { Btn, Card, Chip, Enter, Icon, ListRow, Sheet, Txt } from '../../ui';
-import { Body, Column, LinkBtn, SCREENSHOT_BLOCKING, SeedGrid, StepHeader, useSeedProtection } from '.././ui';
+import { Btn, Card, Chip, Enter, Icon, ListRow, Sheet, Txt, tint } from '../../ui';
+import { Body, Column, LinkBtn, SCREENSHOT_BLOCKING, SeedGrid, StepHeader, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
 export function Seed({ ctx }: { ctx: Ctx }) {
@@ -40,7 +40,7 @@ export function Seed({ ctx }: { ctx: Ctx }) {
               <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: alpha(C.bg1, 0.72) }} />
               <View
                 className="w-12 h-12 rounded-full items-center justify-center"
-                style={{ backgroundColor: alpha(C.amber, 0.14), borderWidth: 1, borderColor: alpha(C.amber, 0.4) }}>
+                style={tint(C.amber, 0.14, 0.4)}>
                 <Icon name="eye" size={19} color={C.amber} />
               </View>
               <Txt className="text-[13px] font-semibold mt-2.5">Tap to reveal</Txt>

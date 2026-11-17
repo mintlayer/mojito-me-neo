@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { CARD_FEATURES, CARD_TIERS, WAITLIST } from '../data';
 import { C, G, alpha, black } from '../theme';
-import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconName, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
+import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
 
 export function CardScreen() {
   const [email, setEmail] = useState('');
@@ -102,7 +102,7 @@ export function CardScreen() {
           {CARD_FEATURES.map((f, i) => (
             <Enter key={f.title} delay={i * 70} style={{ width: '50%' }}>
               <Card className="m-1 p-3.5 rounded-[14px]">
-                <IconTile name={f.icon as IconName} color={toneColor(f.tone)} size={30} />
+                <IconTile name={f.icon} color={toneColor(f.tone)} size={30} />
                 <Txt className="text-[13px] font-semibold mt-2.5">{f.title}</Txt>
                 <Txt className="text-[11px] text-text2 mt-0.5">{f.detail}</Txt>
               </Card>

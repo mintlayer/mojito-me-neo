@@ -16,7 +16,7 @@ mobile app, rebuilt in React Native.
 **This repository is a UI implementation. It is not a working wallet.**
 
 There is no backend, no chain connectivity, and no key management. Every balance, address,
-transaction and account in the app is a fixture from `src/data.js` or `src/onboarding/data.js`.
+transaction and account in the app is a fixture from `src/data.ts` or `src/onboarding/data.ts`.
 Specifically, and deliberately:
 
 - The recovery phrase is a **fixed demo constant**, not generated entropy.
@@ -44,7 +44,7 @@ corresponding logic is implemented and audited.
 
 ## Tech stack
 
-- **Expo SDK 53** / React Native 0.79 / React 19
+- **Expo SDK 57** / React Native 0.86 / React 19
 - **NativeWind v4** (Tailwind for React Native)
 - **react-native-svg** for icons, charts and the entropy canvas
 - **TypeScript**, strict mode
@@ -54,15 +54,15 @@ corresponding logic is implemented and audited.
 
 ```
 App.tsx                     root shell: tabs, overlays, onboarding/lock layering
-src/theme.js                design tokens; oklch→sRGB (feeds tailwind.config.js too)
-src/data.js                 wallet fixtures
+src/theme.ts                design tokens; oklch→sRGB (feeds tailwind.config.ts too)
+src/data.ts                 wallet fixtures
 
 src/ui/                     shared component library — one file per component
   index.tsx                 barrel: re-exports only
   Btn.tsx  Card.tsx  ListRow.tsx  Sheet.tsx  TokenPicker.tsx  …
   icons.tsx                 line-icon set
   motion.tsx                animation primitives (one useLoop backs them all)
-  style.ts                  gradColors · toneColor · hairlineTop
+  style.ts                  gradColors · toneColor · hairlineTop · tile · tint
   chart.ts                  polyline maths shared by Sparkline and AreaChart
 
 src/screens/                one screen per file
@@ -77,7 +77,7 @@ src/onboarding/
   UnlockScreen.tsx
   screens/                  one screen per file (Welcome, Secure, PinSet, …)
   ui/                       onboarding-only components, one file each
-  data.js                   BIP39 list, demo phrase, discovery fixtures
+  data.ts                   BIP39 list, demo phrase, discovery fixtures
 ```
 
 ---
@@ -145,12 +145,12 @@ phrase is on screen, and released on unmount.
 ```bash
 npm run check        # everything CI should run: unit test + types + lint
 npm run lint         # eslint only
-node src/theme.test.js
+npx tsx src/theme.test.ts
 ```
 
 `npm run check` runs three things:
 
-1. **`src/theme.test.js`** — asserts the oklch→sRGB conversion against the known sRGB primaries.
+1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
    runnable check. Plain `node:assert`, no framework.
 2. **`tsc --noEmit`** — strict TypeScript.
@@ -189,8 +189,8 @@ seed material or transaction construction is high. By participating you agree to
 - **Reuse before you write.** `src/ui/` is one file per component so you can see everything at a
   glance. Check it before adding one; if you need a variant, add a prop rather than a near-copy.
   New components go in their own file and get re-exported from `src/ui/index.tsx`.
-- **No hardcoded colours or spacing.** Everything comes from `src/theme.js` (`C`, `G`) or Tailwind
-  tokens. `tailwind.config.js` imports the same palette, so there is one source of truth.
+- **No hardcoded colours or spacing.** Everything comes from `src/theme.ts` (`C`, `G`) or Tailwind
+  tokens. `tailwind.config.ts` imports the same palette, so there is one source of truth.
 - **Text goes through `<Txt>`.** React Native `Text` doesn't inherit colour; the wrapper applies
   the palette default.
 - **Mark deliberate shortcuts.** A `ponytail:` comment naming the ceiling and the upgrade path

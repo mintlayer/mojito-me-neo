@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import type { Sheet } from './types';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { PROFILE } from '../data';
-import { C, G, alpha, white } from '../theme';
-import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt } from '../ui';
+import { C, G } from '../theme';
+import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
 type SettingsNav = Sheet & {
   /** Re-enters the seed/verify flow. */
@@ -46,7 +46,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
               {PROFILE.address} · {PROFILE.chains} chains
             </Txt>
           </View>
-          <Pressable className="px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: white(0.05), borderWidth: 1, borderColor: C.line }}>
+          <Pressable className="px-2.5 py-1.5 rounded-lg" style={tile(0.05, C.line)}>
             <Txt className="text-[11px] font-medium text-text1">Edit</Txt>
           </Pressable>
         </Card>
@@ -93,7 +93,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
         <Pressable
           onPress={confirmSignOut}
           className="py-3.5 rounded-[14px] items-center"
-          style={{ backgroundColor: alpha(C.red, 0.08), borderWidth: 1, borderColor: alpha(C.red, 0.25) }}>
+          style={tint(C.red, 0.08)}>
           <Txt className="text-[14px] font-semibold" style={{ color: C.red }}>
             Sign out
           </Txt>

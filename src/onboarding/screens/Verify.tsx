@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { BIP39, SEED } from '.././data';
+import { BIP39, SEED } from '../data';
 import { C, alpha, white } from '../../theme';
 import { Btn, Icon, Txt } from '../../ui';
-import { Body, Column, StepHeader, WordChip, useSeedProtection } from '.././ui';
+import { Body, Column, StepHeader, WordChip, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
 export function Verify({ ctx }: { ctx: Ctx }) {

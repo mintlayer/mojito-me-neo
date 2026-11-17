@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import type { Sheet } from './types';
 import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, CONTACTS, FEES } from '../data';
-import { C, G, alpha, white } from '../theme';
-import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, hairlineTop } from '../ui';
+import { C, G } from '../theme';
+import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop } from '../ui';
 
 export function SendScreen({ onClose }: Sheet) {
   const [step, setStep] = useState<0 | 1 | 2>(0);
@@ -172,7 +172,7 @@ export function SendScreen({ onClose }: Sheet) {
               key={c.name}
               onPress={() => setAddress(c.address)}
               className="flex-row items-center gap-2 px-3 py-2 rounded-full"
-              style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+              style={tile()}>
               <Avatar letter={c.name[0]} size={22} radius={11} colors={G.avatar} />
               <Txt className="text-[12px] font-medium">{c.name}</Txt>
             </Pressable>
@@ -191,11 +191,7 @@ export function SendScreen({ onClose }: Sheet) {
                 key={k}
                 onPress={() => setFeeTier(k)}
                 className="flex-1 p-3 rounded-xl"
-                style={{
-                  backgroundColor: on ? alpha(C.amber, 0.08) : white(0.03),
-                  borderWidth: 1,
-                  borderColor: on ? alpha(C.amber, 0.4) : C.lineSoft,
-                }}>
+                style={on ? tint(C.amber, 0.08, 0.4) : tile(0.03)}>
                 <Txt className="text-[12px] font-semibold capitalize" style={{ color: on ? C.amber : C.text0 }}>
                   {k}
                 </Txt>

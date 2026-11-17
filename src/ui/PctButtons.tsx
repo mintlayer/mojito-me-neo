@@ -1,6 +1,6 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { C, white } from '../theme';
+import { tile } from './style';
 import { Txt } from './Txt';
 
 export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => void; compact?: boolean }) {
@@ -22,7 +22,7 @@ export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => 
           key={l}
           onPress={() => onPick(f)}
           className={`${compact ? 'px-2 py-0.5 rounded' : 'flex-1 py-1.5 rounded-lg'} items-center`}
-          style={{ backgroundColor: white(0.04), borderWidth: compact ? 0 : 1, borderColor: C.lineSoft }}>
+          style={[tile(), compact && { borderWidth: 0 }]}>
           <Txt className="text-[11px] font-medium text-text1">{l}</Txt>
         </Pressable>
       ))}

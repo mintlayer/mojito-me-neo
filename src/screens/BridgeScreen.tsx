@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { ASSET_BALANCES, ASSET_SYMBOLS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE } from '../data';
-import { C, CHAINS, G, alpha, white } from '../theme';
-import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, IconName, KV, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop } from '../ui';
+import { C, CHAINS, G, alpha } from '../theme';
+import type { ChainName } from '../theme';
+import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, KV, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop, tile } from '../ui';
 
 export function BridgeScreen() {
-  const [src, setSrc] = useState('Mintlayer');
-  const [dst, setDst] = useState('Arbitrum');
+  const [src, setSrc] = useState<ChainName>('Mintlayer');
+  const [dst, setDst] = useState<ChainName>('Arbitrum');
   const [amount, setAmount] = useState('500.00');
   const [token, setToken] = useState('USDT');
   const [chainPicker, setChainPicker] = useState(false);
@@ -15,7 +16,7 @@ export function BridgeScreen() {
   const [submitted, setSubmitted] = useState(false);
 
   // The picked chain always lands on whichever side isn't Mintlayer.
-  const pickChain = (name: string) => (src === HOME_CHAIN ? setDst(name) : setSrc(name));
+  const pickChain = (name: ChainName) => (src === HOME_CHAIN ? setDst(name) : setSrc(name));
 
   if (submitted) {
     return (
@@ -143,7 +144,7 @@ export function BridgeScreen() {
           {BRIDGE_ROUTE.map((r, i) => (
             <ListRow
               key={r.label}
-              icon={r.icon as IconName}
+              icon={r.icon}
               iconColor={C.violet}
               label={<Txt className="text-[12px] font-medium">{r.label}</Txt>}
               sub={
@@ -183,12 +184,12 @@ const HOME_CHAIN = 'Mintlayer';
 
 const COUNTERPARTY_CHAINS = BRIDGE_CHAINS.map((c) => c.name).filter((n) => n !== HOME_CHAIN);
 
-function ChainCard({ name, side, onPress }: { name: string; side: string; onPress?: () => void }) {
+function ChainCard({ name, side, onPress }: { name: ChainName; side: string; onPress?: () => void }) {
   const chain = BRIDGE_CHAINS.find((c) => c.name === name);
-  const c = CHAINS[name as keyof typeof CHAINS] ?? C.text2;
+  const c = CHAINS[name];
   if (!chain) return <View className="flex-1" />;
   return (
-    <Pressable onPress={onPress} className="flex-1 p-3 rounded-[14px]" style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: alpha(c, 0.25) }}>
+    <Pressable onPress={onPress} className="flex-1 p-3 rounded-[14px]" style={tile(0.04, alpha(c, 0.25))}>
       <Txt className="text-[9px] text-text3 tracking-label">{side.toUpperCase()}</Txt>
       <View className="flex-row items-center gap-2 mt-1.5">
         <ChainGlyph chain={chain.name} />

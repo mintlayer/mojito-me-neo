@@ -3,7 +3,7 @@ import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { ACTIVITY, ASSETS, BALANCE, NETWORKS, RANGES } from '../data';
 import { C, CHAINS, G, alpha, white } from '../theme';
-import { AreaChart, Avatar, Callout, Card, ChainBadge, Divider, Enter, Float, Icon, IconBtn, IconName, IconTile, Label, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor } from '../ui';
+import { AreaChart, Avatar, Callout, Card, ChainBadge, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
   const [hidden, setHidden] = useState(false);
@@ -116,7 +116,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <Pressable
               onPress={a.press}
               className="py-3.5 rounded-2xl items-center gap-1.5"
-              style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft, opacity: a.locked ? 0.45 : 1 }}>
+              style={[tile(), { opacity: a.locked ? 0.45 : 1 }]}>
               <Icon name={a.icon} size={20} color={a.color} />
               <Txt className="text-[11px] font-medium">{a.label}</Txt>
             </Pressable>
@@ -138,7 +138,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
               <View
                 className="flex-row items-center gap-2 px-3 py-2 rounded-xl"
                 style={{ backgroundColor: white(0.03), borderWidth: 1, borderColor: C.lineSoft }}>
-                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAINS[n as keyof typeof CHAINS] }} />
+                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAINS[n] }} />
                 <Txt className="text-[12px] font-medium">{n}</Txt>
               </View>
             </Enter>
@@ -168,24 +168,24 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
         </View>
         <Card variant="glass" className="p-1">
           {ACTIVITY.map((r, i) => (
-            <View key={r.title} className="flex-row items-center gap-3 px-3.5 py-3">
-              {i > 0 && <Divider className="absolute left-3.5 right-0 top-0" />}
-              <IconTile name={r.icon as IconName} color={toneColor(r.tone)} size={34} radius={10} />
-              <View className="flex-1">
-                <Txt className="text-[13px] font-medium">{r.title}</Txt>
-                <Txt mono className="text-[11px] text-text2 mt-0.5">
-                  {r.sub}
-                </Txt>
-              </View>
-              <View className="items-end">
-                <Txt mono className="text-[11px] text-text2">
-                  {r.time}
-                </Txt>
-                <Txt className="text-[10px] mt-0.5" style={{ color: r.state.includes('Confirming') ? C.amber : C.text2 }}>
-                  {r.state}
-                </Txt>
-              </View>
-            </View>
+            <ListRow
+              key={r.title}
+              icon={r.icon}
+              iconColor={toneColor(r.tone)}
+              label={r.title}
+              sub={<Txt mono className="text-[11px] text-text2 mt-0.5">{r.sub}</Txt>}
+              divider={i > 0}
+              trailing={
+                <View className="items-end">
+                  <Txt mono className="text-[11px] text-text2">
+                    {r.time}
+                  </Txt>
+                  <Txt className="text-[10px] mt-0.5" style={{ color: r.state.includes('Confirming') ? C.amber : C.text2 }}>
+                    {r.state}
+                  </Txt>
+                </View>
+              }
+            />
           ))}
         </Card>
       </View>

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Animated, Pressable } from 'react-native';
-import { C, white } from '../../theme';
-import { Txt, useShake } from '../../ui';
+import { C } from '../../theme';
+import { Txt, tile, useShake } from '../../ui';
 
 export function WordChip({ word, onPress, used, wrong }: { word: string; onPress?: () => void; used?: boolean; wrong?: boolean }) {
   const shake = useShake(wrong);
@@ -11,7 +11,7 @@ export function WordChip({ word, onPress, used, wrong }: { word: string; onPress
         disabled={used}
         onPress={onPress}
         className="px-3 py-2 rounded-[9px]"
-        style={{ backgroundColor: white(0.05), borderWidth: 1, borderColor: wrong ? C.red : C.lineSoft, opacity: used ? 0.35 : 1 }}>
+        style={[tile(0.05), { borderColor: wrong ? C.red : C.lineSoft, opacity: used ? 0.35 : 1 }]}>
         <Txt
           mono
           className="text-[12px] font-medium"

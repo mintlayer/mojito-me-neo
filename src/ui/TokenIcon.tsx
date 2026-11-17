@@ -4,7 +4,7 @@ import { C, TOKENS } from '../theme';
 import { Txt } from './Txt';
 
 export function TokenIcon({ symbol, size = 36 }: { symbol: string; size?: number }) {
-  const t = TOKENS[symbol as keyof typeof TOKENS] ?? { from: C.text2, to: C.text3, glyph: symbol[0] };
+  const t = TOKENS[symbol] ?? { from: C.text2, to: C.text3, glyph: symbol[0] };
   return (
     <LinearGradient
       colors={[t.from, t.to]}

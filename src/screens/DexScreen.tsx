@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { ASKS, BIDS, MARKET, TIMEFRAMES } from '../data';
-import { C, G, alpha, black, white } from '../theme';
-import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt } from '../ui';
+import { C, G, alpha, black } from '../theme';
+import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile } from '../ui';
 
 export function DexScreen() {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
@@ -91,7 +91,7 @@ export function DexScreen() {
 
         <View
           className="mx-4 my-2 px-3 py-2 rounded-[10px] flex-row justify-between items-center"
-          style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+          style={tile()}>
           <Txt mono className="text-[12px] text-text2">
             Spread
           </Txt>

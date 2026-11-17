@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, HTLC_STEPS, SWAP_STATS } from '../data';
 import { C, G } from '../theme';
-import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, StepState, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
+import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
 
 export function SwapScreen() {
   const [from, setFrom] = useState({ sym: 'BTC', chain: 'Bitcoin', amt: '0.025', bal: '0.4821' });
@@ -79,7 +79,7 @@ export function SwapScreen() {
         <Label className="mb-3">Swap protocol · HTLC</Label>
         <Card grad={G.raisedAmber} className="p-4">
           <HtlcRail />
-          <Steps steps={HTLC_STEPS as { label: string; detail: string; state: StepState; note?: string }[]} />
+          <Steps steps={HTLC_STEPS} />
         </Card>
       </View>
 

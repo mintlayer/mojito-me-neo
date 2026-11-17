@@ -4,6 +4,7 @@ import { C } from '../theme';
 import { Icon } from './icons';
 import { Sheet } from './Sheet';
 import { Txt } from './Txt';
+import { hairlineTop } from './style';
 
 export function PickerSheet<T extends string>({
   open,
@@ -35,7 +36,7 @@ export function PickerSheet<T extends string>({
               onClose();
             }}
             className="flex-row items-center gap-3 py-3"
-            style={i > 0 ? { borderTopWidth: 1, borderTopColor: C.lineSoft } : undefined}>
+            style={i > 0 ? hairlineTop : undefined}>
             {renderLeading?.(o)}
             <View className="flex-1">
               <Txt className="text-[14px] font-medium">{o}</Txt>

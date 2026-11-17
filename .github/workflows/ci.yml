@@ -19,7 +19,7 @@ jobs:
 
       - run: npm ci
 
-      # theme.test.js + tsc --noEmit + eslint . — the same command contributors
+      # theme.test.ts + tsc --noEmit + eslint .: the same command contributors
       # are asked to run locally, so CI can't disagree with the README.
       - run: npm run check
 

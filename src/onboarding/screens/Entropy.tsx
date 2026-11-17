@@ -3,7 +3,7 @@ import { PanResponder, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { C, alpha, black } from '../../theme';
 import { Btn, Callout, Icon, ProgressBar, Txt } from '../../ui';
-import { Body, Column, StepHeader } from '.././ui';
+import { Body, Column, StepHeader } from '../ui';
 import type { Ctx } from '../context';
 
 const BITS_NEEDED = 256;

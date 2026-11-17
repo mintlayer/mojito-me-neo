@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Btn, Txt } from '../../ui';
-import { BioCircle, Column, LinkBtn, StepHeader, useBioScan } from '.././ui';
+import { BioCircle, Column, LinkBtn, StepHeader, useBioScan } from '../ui';
 import { bioName } from '../context';
 import type { Ctx } from '../context';
 

@@ -10,7 +10,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
   const [chain, setChain] = useState<(typeof CHAIN_KEYS)[number]>('Mintlayer');
   const [copied, setCopied] = useState(false);
   const addr = ADDRESSES[chain];
-  const accent = CHAINS[chain as keyof typeof CHAINS];
+  const accent = CHAINS[chain];
 
   // Write first, confirm second: the label must never claim a copy that failed.
   const copy = async () => {
@@ -39,7 +39,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
           value={chain}
           onChange={setChain}
           variant="pill"
-          accents={Object.fromEntries(CHAIN_KEYS.map((k) => [k, CHAINS[k as keyof typeof CHAINS]]))}
+          accents={Object.fromEntries(CHAIN_KEYS.map((k) => [k, CHAINS[k]]))}
         />
       </ScrollView>
 
@@ -51,7 +51,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
             className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
             style={{ backgroundColor: accent }}>
             <Txt className="text-[18px] font-extrabold" style={{ color: C.ink }}>
-              {CHAIN_GLYPH[chain as keyof typeof CHAIN_GLYPH]}
+              {CHAIN_GLYPH[chain]}
             </Txt>
           </View>
         </View>

@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { C } from '../theme';
 import { Enter } from './motion';
 import { Btn } from './Btn';
+import type { BtnTone } from './Btn';
 import { Screen } from './Screen';
 import { SuccessMark } from './SuccessMark';
 import { Txt } from './Txt';
@@ -23,7 +24,7 @@ export function SuccessScreen({
   summary?: React.ReactNode;
   description?: string;
   tone?: string;
-  btnTone?: string;
+  btnTone?: BtnTone;
   doneLabel?: string;
   onDone?: () => void;
   /** Rendered above the mark, outside the centred column (e.g. a SheetHeader). */

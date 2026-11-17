@@ -1,14 +1,16 @@
 import React from 'react';
 import { View } from 'react-native';
-import { C, CHAINS, alpha } from '../theme';
+import { CHAINS } from '../theme';
+import type { ChainName } from '../theme';
 import { Txt } from './Txt';
+import { tint } from './style';
 
-export function ChainBadge({ chain }: { chain: string }) {
-  const c = CHAINS[chain as keyof typeof CHAINS] ?? C.text2;
+export function ChainBadge({ chain }: { chain: ChainName }) {
+  const c = CHAINS[chain];
   return (
     <View
       className="flex-row items-center gap-1.5 px-1.5 py-0.5 rounded-md"
-      style={{ backgroundColor: alpha(c, 0.14), borderWidth: 1, borderColor: alpha(c, 0.25) }}>
+      style={tint(c)}>
       <View className="w-[5px] h-[5px] rounded-full" style={{ backgroundColor: c }} />
       <Txt className="text-[10px] font-semibold tracking-wider" style={{ color: c }}>
         {chain.toUpperCase()}
