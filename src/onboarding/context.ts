@@ -24,15 +24,22 @@ export type Ctx = {
   setPin: (p: string) => void;
   flow: 'create' | 'import';
   setFlow: (f: 'create' | 'import') => void;
-  /** Whether account discovery turns anything up (import path). */
-  discovery: 'found' | 'none';
-  /** Change-PIN reuse: stop after confirming instead of continuing into setup. */
+  /** Whether biometric enrolment succeeded on the Secure screen. */
+  biometrics: boolean;
+  setBiometrics: (b: boolean) => void;
+  /** The real generated or imported phrase; null until it exists. This is
+   *  onboarding-time state only: finish() seals it into the vault and the
+   *  app session never sees the words. */
+  seedWords: string[] | null;
+  setSeedWords: (words: string[] | null) => void;
+  /** Externally drawn entropy (Entropy screen) mixed into the next generation. */
+  seedEntropy: Uint8Array | null;
+  setSeedEntropy: (bytes: Uint8Array | null) => void;
+  /** Change-PIN reuse: verify the old PIN, stop after confirming the new. */
   pinOnly: boolean;
 };
 
-export const LOCK_ATTEMPTS = 5;
-
-export const LOCK_SECONDS = 30;
+export { LOCK_ATTEMPTS, LOCK_SECONDS } from '../storage/pinStore';
 
 /** The biometric noun as copy, so locales control the wording. */
 export const bioName = (bio: Bio) => t(bio === 'face' ? 'onboarding.bio.face' : 'onboarding.bio.touch');

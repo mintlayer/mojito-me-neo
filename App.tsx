@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Constants from 'expo-constants';
@@ -9,9 +9,13 @@ import './global.css';
 
 import { t } from './src/i18n';
 import { ProvidersProvider } from './src/data/providers/context';
+import { walletVault, type WalletVaultHandle } from './src/storage/walletVault';
+import { pinStore } from './src/storage/pinStore';
+import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
-import { Onboarding, OnboardingResult, UnlockScreen } from './src/onboarding';
+import { Onboarding, type OnboardingResult, UnlockScreen } from './src/onboarding';
+import type { Bio } from './src/onboarding/ui';
 import { Splash } from './src/screens/intro';
 import type { Nav, Sheet } from './src/screens/types';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -82,10 +86,22 @@ function Layer({ children, z }: { children: React.ReactNode; z: number }) {
   );
 }
 
+/** The app-level session: key handles and flags, never seed bytes. The
+ *  vault handle carries vault metadata only; phrase decryption happens
+ *  exclusively inside KeySession closures after PIN or biometrics. */
+type AppSession = {
+  vault: WalletVaultHandle | null;
+  deferred: boolean;
+  bio: Bio;
+  settings: { biometrics: boolean; testnet: boolean };
+};
+
 function Shell() {
   const [splashDone, setSplashDone] = useState(false);
-  /** null until onboarding completes; there is no wallet before that. */
-  const [session, setSession] = useState<OnboardingResult | null>(null);
+  /** Whether the vault-existence check finished; drives onboarding vs lock. */
+  const [ready, setReady] = useState(false);
+  /** null until onboarding completes (or a stored wallet is found). */
+  const [session, setSession] = useState<AppSession | null>(null);
   const [locked, setLocked] = useState(false);
   /** Re-entering just the backup flow from the deferred-backup banner. */
   const [backup, setBackup] = useState(false);
@@ -93,6 +109,59 @@ function Shell() {
   const [changePin, setChangePin] = useState(false);
   const [tab, setTab] = useState<TabId>('home');
   const [overlay, setOverlay] = useState<Overlay>(null);
+
+  // Cold start: does this device already hold a sealed wallet? Existence is
+  // checked without decrypting; unlock happens only after PIN or biometrics.
+  useEffect(() => {
+    void (async () => {
+      if (await walletVault.exists()) {
+        const detected = await detectBio();
+        setSession({
+          vault: null,
+          deferred: false,
+          bio: detected ?? 'face',
+          settings: { biometrics: detected !== null, testnet: false },
+        });
+        setLocked(true);
+      }
+      setReady(true);
+    })();
+  }, []);
+
+  const unlock = () => {
+    void walletVault
+      .meta()
+      .then((meta) => {
+        setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
+        setLocked(false);
+      })
+      .catch(() => setLocked(true));
+  };
+
+  const finishOnboarding = (r: OnboardingResult) => {
+    void walletVault
+      .meta()
+      .then((meta) => {
+        setSession({
+          vault: meta ? { meta } : null,
+          deferred: r.deferred,
+          bio: r.bio,
+          settings: { biometrics: r.biometrics, testnet: false },
+        });
+      })
+      .catch(() => undefined);
+  };
+
+  /** Settings sign-out: the device forgets the keys, per its own copy. */
+  const signOut = () => {
+    void Promise.all([walletVault.wipe(), pinStore.wipe()]).then(() => {
+      setSession(null);
+      setLocked(false);
+      setBackup(false);
+      setChangePin(false);
+      setOverlay(null);
+    });
+  };
 
   const Active = SCREENS[tab];
   const Sheet = overlay ? OVERLAYS[overlay] : null;
@@ -130,6 +199,10 @@ function Shell() {
                   setOverlay(null);
                   setLocked(true);
                 }}
+                onSignOut={() => {
+                  setOverlay(null);
+                  signOut();
+                }}
               />
             </Layer>
           )}
@@ -139,20 +212,22 @@ function Shell() {
       )}
 
       {/* First run: the onboarding flow owns the whole screen. */}
-      {!session && splashDone && (
+      {ready && !session && splashDone && (
         <Layer z={Z.onboarding}>
-          <Onboarding onDone={setSession} />
+          <Onboarding onDone={finishOnboarding} />
         </Layer>
       )}
 
-      {/* Deferred backup: re-enter at the seed step only. */}
+      {/* Deferred backup: re-enter at the seed step only; it reveals the
+          stored phrase and must not re-seal a fresh one. */}
       {session && backup && (
         <Layer z={Z.backup}>
           <Onboarding
             initial="seed"
+            backup
             bio={session.bio}
             onDone={(r) => {
-              setSession({ ...session, deferred: r.deferred });
+              setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
               setBackup(false);
             }}
           />
@@ -164,18 +239,16 @@ function Shell() {
           <Onboarding
             initial="pin-set"
             pinOnly
+            backup
             bio={session.bio}
-            onDone={(r) => {
-              setSession({ ...session, pin: r.pin });
-              setChangePin(false);
-            }}
+            onDone={() => setChangePin(false)}
           />
         </Layer>
       )}
 
       {session && locked && (
         <Layer z={Z.lock}>
-          <UnlockScreen bio={session.bio} pin={session.pin} onUnlock={() => setLocked(false)} />
+          <UnlockScreen bio={session.bio} biometrics={session.settings.biometrics} onUnlock={unlock} />
         </Layer>
       )}
 

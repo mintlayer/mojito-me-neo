@@ -144,6 +144,12 @@ class PinStore {
     return state ? lockSecondsLeft(state, Date.now()) : 0;
   }
 
+  /** Failed attempts since the last reset; drives the attempts-left copy. */
+  async attempts(): Promise<number> {
+    const state = await this.open();
+    return state?.failedAttempts ?? 0;
+  }
+
   /** Whether a PIN is configured (without touching the verifier). */
   async exists(): Promise<boolean> {
     return (await this.open()) !== null;

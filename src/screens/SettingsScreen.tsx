@@ -7,7 +7,7 @@ import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
 import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
-export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Sheet) {
+export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
   const dapps = useData((d) => d.getDapps());
@@ -26,7 +26,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Sheet
       t('settings.signout.body'),
       [
         { text: t('common.cancel'), style: 'cancel' },
-        { text: t('settings.signout.cta'), style: 'destructive', onPress: () => onLock?.() },
+        { text: t('settings.signout.cta'), style: 'destructive', onPress: () => onSignOut?.() },
       ],
     );
 

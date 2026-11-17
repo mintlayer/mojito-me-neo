@@ -16,8 +16,11 @@ export function usePinEntry({
   reset = 650,
   maxAttempts = LOCK_ATTEMPTS,
   lockSeconds = LOCK_SECONDS,
+  check,
+  resetKey,
 }: {
-  /** Expected PIN. null collects six digits and always matches (PIN set). */
+  /** Expected PIN. null collects six digits and always matches (PIN set).
+   *  Ignored when `check` is given: the verdict comes back asynchronously. */
   target: string | null;
   onMatch: (pin: string) => void;
   /** Message shown on a mismatch; the default covers simple re-entry. */
@@ -28,6 +31,15 @@ export function usePinEntry({
   reset?: number;
   maxAttempts?: number;
   lockSeconds?: number;
+  /** Store-backed verdict (UnlockScreen, change-PIN old-PIN check). */
+  check?: (pin: string) => Promise<{
+    verdict: 'ok' | 'wrong' | 'locked';
+    message?: string;
+    lockSeconds?: number;
+  }>;
+  /** Changing this value clears the entry: used when one screen runs two
+   *  entry phases back to back (change-PIN old verify, then new collect). */
+  resetKey?: string;
 }) {
   const [val, setValRaw] = useState('');
   const [err, setErr] = useState(false);
@@ -39,9 +51,9 @@ export function usePinEntry({
   // The callbacks close over the caller's current state, so their identity
   // changes every render. Keeping them in a ref lets the effects below depend
   // on values only, same reason PinSet used a ctxRef.
-  const cbs = useRef({ onMatch, onMismatch });
+  const cbs = useRef({ onMatch, onMismatch, check });
   useEffect(() => {
-    cbs.current = { onMatch, onMismatch };
+    cbs.current = { onMatch, onMismatch, check };
   });
 
   // Lockout countdown; hitting zero also restores the attempt budget.
@@ -72,6 +84,36 @@ export function usePinEntry({
 
   useEffect(() => {
     if (err || locked || val.length !== 6) return;
+    // Store-backed mode: the verdict arrives asynchronously and carries its
+    // own message and lock duration; attempts still decrement locally.
+    if (cbs.current.check) {
+      let cancelled = false;
+      void cbs.current
+        .check(val)
+        .then((result) => {
+          if (cancelled) return;
+          if (result.verdict === 'ok') {
+            setTimeout(() => cbs.current.onMatch(val), settle);
+            return;
+          }
+          const left = attempts - 1;
+          setErr(true);
+          setMsg(result.message ?? t('onboarding.pin.mismatch'));
+          setAttempts(left);
+          if (result.verdict === 'locked' || left <= 0) {
+            setLockLeft(result.lockSeconds ?? lockSeconds);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setErr(true);
+            setMsg(t('onboarding.unlock.failed'));
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
     if (target === null || val === target) {
       const t = setTimeout(() => cbs.current.onMatch(val), settle);
       return () => clearTimeout(t);
@@ -97,5 +139,19 @@ export function usePinEntry({
     return () => clearTimeout(t);
   }, [err, reset]);
 
-  return { val, setValue, err, msg, lockLeft, locked };
+  // Re-arm from persisted state (a lock armed in a previous app run): the
+  // countdown resumes exactly where pinStore left it.
+  const armLock = useCallback((seconds: number) => {
+    if (seconds > 0) setLockLeft(seconds);
+  }, []);
+
+  // Phase switches clear the dots; the deferred-clear effect must not fight
+  // this, so the clear is unconditional on the key change.
+  useEffect(() => {
+    setValRaw('');
+    setErr(false);
+    setMsg('');
+  }, [resetKey]);
+
+  return { val, setValue, err, msg, lockLeft, locked, armLock };
 }

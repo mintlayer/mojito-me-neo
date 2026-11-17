@@ -1,25 +1,69 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../i18n';
+import { pinStore, LOCK_ATTEMPTS } from '../storage/pinStore';
 import { C } from '../theme';
 import { Btn, MojitoLogo, Txt } from '../ui';
 import { Bio, BioCircle, BioGlyph, Column, Keypad, LinkBtn, PinDots, useBioScan, usePinEntry } from './ui';
 import { bioName } from './context';
 
-export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; onUnlock: () => void }) {
-  const [mode, setMode] = useState<'bio' | 'pin'>('bio');
+/**
+ * The app lock. Biometrics are the convenience path (a real
+ * expo-local-authentication prompt, shown when the session enabled them);
+ * the PIN is the always-working path, verified against the persisted
+ * verifier with the same lockout counter the rest of the app uses. The
+ * lockout survives app restarts: the deadline lives in pinStore.
+ */
+export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometrics: boolean; onUnlock: () => void }) {
+  const [mode, setMode] = useState<'bio' | 'pin'>(biometrics ? 'bio' : 'pin');
   const scan = useBioScan(onUnlock);
   const onUnlockRef = useRef(onUnlock);
   useEffect(() => {
     onUnlockRef.current = onUnlock;
   });
 
-  const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
-    target: pin,
+  // A lock armed in a previous run resumes its countdown immediately.
+  useEffect(() => {
+    if (mode !== 'pin') return;
+    void pinStore.lockSecondsLeft().then((seconds) => pinLock.armLock(seconds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  const pinLock = usePinEntry({
+    target: null,
     settle: 200,
-    onMatch: () => onUnlockRef.current(),
-    onMismatch: (left) => (left <= 0 ? '' : t('onboarding.unlock.wrongPin', { attempts: left, plural: left === 1 ? '' : 's' })),
+    onMatch: () => {
+      void pinStore.resetAttempts();
+      onUnlockRef.current();
+    },
+    check: async (pin) => {
+      const verdict = await pinStore.verify(pin);
+      if (verdict === 'ok') return { verdict: 'ok' };
+      if (verdict === 'locked') {
+        const seconds = await pinStore.lockSecondsLeft();
+        return {
+          verdict: 'locked',
+          message: t('onboarding.pin.locked', { seconds }),
+          lockSeconds: seconds,
+        };
+      }
+      await pinStore.registerFailure();
+      const seconds = await pinStore.lockSecondsLeft();
+      if (seconds > 0) {
+        return {
+          verdict: 'locked',
+          message: t('onboarding.pin.locked', { seconds }),
+          lockSeconds: seconds,
+        };
+      }
+      const left = LOCK_ATTEMPTS - ((await pinStore.attempts()) % LOCK_ATTEMPTS);
+      return {
+        verdict: 'wrong',
+        message: t('onboarding.unlock.wrongPin', { attempts: left, plural: left === 1 ? '' : 's' }),
+      };
+    },
   });
+  const { val, setValue, err, msg, lockLeft, locked } = pinLock;
 
   return (
     <Column>
@@ -33,7 +77,15 @@ export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; on
           <View className="flex-1 items-center justify-center gap-3.5">
             <BioCircle bio={bio} phase={scan.phase} onPress={scan.start} />
             <Txt className="text-[12px] text-text2">
-              {scan.phase === 'scan' ? t('onboarding.bio.scanning') : scan.phase === 'ok' ? t('onboarding.unlock.unlocked') : t('onboarding.unlock.tapToUnlock', { bio: bioName(bio) })}
+              {scan.phase === 'scan'
+                ? t('onboarding.bio.scanning')
+                : scan.phase === 'ok'
+                  ? t('onboarding.unlock.unlocked')
+                  : scan.failures >= 2
+                    ? t('onboarding.unlock.pinFallback')
+                    : scan.unavailable
+                      ? t('onboarding.secure.unavailable')
+                      : t('onboarding.unlock.tapToUnlock', { bio: bioName(bio) })}
             </Txt>
           </View>
           <View className="px-6">

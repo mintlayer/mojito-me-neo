@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Enter } from '../ui';
 import type { Bio } from './ui';
 import type { Ctx, ScreenId } from './context';
+import { walletVault, type VaultMeta } from '../storage/walletVault';
 import { Welcome } from './screens/Welcome';
 import { Secure } from './screens/Secure';
 import { PinSet } from './screens/PinSet';
@@ -15,7 +16,9 @@ import { Entropy } from './screens/Entropy';
 export type { Bio } from './ui';
 export type { ScreenId } from './context';
 export { UnlockScreen } from './UnlockScreen';
-export type OnboardingResult = { deferred: boolean; bio: Bio; pin: string };
+
+/** What onboarding hands back: handles and flags, never seed bytes. */
+export type OnboardingResult = { deferred: boolean; bio: Bio; biometrics: boolean };
 
 const SCREENS: Record<ScreenId, React.ComponentType<{ ctx: Ctx }>> = {
   welcome: Welcome,
@@ -34,33 +37,68 @@ const SCREENS: Record<ScreenId, React.ComponentType<{ ctx: Ctx }>> = {
 export function Onboarding({
   initial = 'welcome',
   bio = 'face',
-  discovery = 'found',
   pinOnly = false,
+  /** Backup re-entry: screens read the vault phrase instead of generating. */
+  backup = false,
   onDone,
 }: {
   /** 'seed' re-enters just the backup flow from the deferred-backup banner. */
   initial?: ScreenId;
   bio?: Bio;
-  discovery?: 'found' | 'none';
   /** Run only the PIN set/confirm pair, used by Settings > Change PIN. */
   pinOnly?: boolean;
+  /** Settings > Recovery phrase: reveal the stored phrase, never re-seal. */
+  backup?: boolean;
   onDone: (r: OnboardingResult) => void;
 }) {
   const [stack, setStack] = useState<ScreenId[]>([initial]);
   const [pin, setPin] = useState('');
   const [flow, setFlow] = useState<'create' | 'import'>('create');
+  const [biometrics, setBiometrics] = useState(false);
+  const [seedWords, setSeedWords] = useState<string[] | null>(null);
+  const [seedEntropy, setSeedEntropy] = useState<Uint8Array | null>(null);
+
+  const finish = useCallback(
+    (deferred: boolean) => {
+      void (async () => {
+        // Fresh flows seal the phrase before the session exists; the backup
+        // and change-PIN re-entries must not touch the stored wallet. A
+        // failed seal must fail loudly: the wallet would otherwise not
+        // survive a relaunch.
+        if (!backup && !pinOnly) {
+          const words = seedWords ?? [];
+          if (words.length === 0) throw new Error('finish without a seed phrase');
+          const meta: VaultMeta = {
+            v: 1,
+            createdAt: Date.now(),
+            network: 'mainnet',
+            wordCount: words.length === 12 ? 12 : 24,
+            hasPassphrase: false,
+          };
+          await walletVault.save(words, meta);
+        }
+        onDone({ deferred, bio, biometrics });
+      })();
+    },
+    [backup, pinOnly, seedWords, bio, biometrics, onDone],
+  );
 
   const screen = stack[stack.length - 1];
   const ctx: Ctx = {
     push: (s) => setStack((st) => [...st, s]),
     pop: () => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st)),
-    finish: (deferred) => onDone({ deferred, bio, pin }),
+    finish,
     bio,
     pin,
     setPin,
     flow,
     setFlow,
-    discovery,
+    biometrics,
+    setBiometrics,
+    seedWords,
+    setSeedWords,
+    seedEntropy,
+    setSeedEntropy,
     pinOnly,
   };
 
@@ -68,9 +106,7 @@ export function Onboarding({
   // Keyed so each screen replays its entrance on navigation.
   return (
     <Enter key={screen} duration={240} offset={0} style={{ flex: 1 }}>
-      <Current ctx={ctx} />
+      {screen === 'seed' ? <Seed ctx={ctx} backup={backup} /> : <Current ctx={ctx} />}
     </Enter>
   );
 }
-
-/* ══ 0 · Welcome ════════════════════════════════════════════ */

@@ -9,7 +9,7 @@ import { pbkdf2 } from '@noble/hashes/pbkdf2.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
-import { BIP39_WORDS, BIP39_WORDLIST_SHA256 } from './bip39Words';
+import { BIP39_WORDS } from './bip39Words';
 
 export type WordCount = 12 | 15 | 18 | 21 | 24;
 
