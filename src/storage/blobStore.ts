@@ -6,7 +6,7 @@
 // module refuses to persist (it must never silently lose a wallet).
 import type { SealedBlob } from '../../modules/mojito-core';
 
-import { bytesToHex, hexToBytes } from './hex';
+import { loadAsyncStorage } from './asyncStorage';
 
 export type BlobStoreKind = 'native' | 'memory';
 
@@ -20,42 +20,6 @@ declare const __DEV__: boolean | undefined;
 
 function memoryFallbackAllowed(): boolean {
   return typeof __DEV__ === 'undefined' || __DEV__ === true;
-}
-
-type AsyncStorageApi = {
-  getItem(key: string): Promise<string | null>;
-  setItem(key: string, value: string): Promise<void>;
-  removeItem(key: string): Promise<void>;
-};
-
-let asyncStorage: AsyncStorageApi | null | undefined;
-
-async function loadAsyncStorage(): Promise<AsyncStorageApi | null> {
-  if (asyncStorage === undefined) {
-    try {
-      const mod = await import('@react-native-async-storage/async-storage');
-      const api = mod.default as unknown;
-      asyncStorage =
-        api && typeof (api as AsyncStorageApi).getItem === 'function'
-          ? await probeStorage(api as AsyncStorageApi)
-          : null;
-    } catch {
-      asyncStorage = null;
-    }
-  }
-  return asyncStorage;
-}
-
-/** The package exports a shim outside React Native (for example under Node
- *  tooling) whose calls reject on use; one silenced probe call tells the
- *  difference between a working native store and a dead shim. */
-async function probeStorage(api: AsyncStorageApi): Promise<AsyncStorageApi | null> {
-  try {
-    await api.getItem('__mojito_probe__');
-    return api;
-  } catch {
-    return null;
-  }
 }
 
 function decodeBlob(json: string): SealedBlob | null {
@@ -116,6 +80,3 @@ export async function getBlobStore(): Promise<{ kind: BlobStoreKind; store: Blob
   if (!sharedMemory) sharedMemory = createMemoryBlobStore();
   return { kind: 'memory', store: sharedMemory };
 }
-
-// Hex codecs re-exported so storage modules share one spelling.
-export { bytesToHex, hexToBytes };
