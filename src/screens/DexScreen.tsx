@@ -1,35 +1,60 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { ASKS, BIDS, MARKET, TIMEFRAMES } from '../data';
-import { C, G, alpha, black, white } from '../theme';
-import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt } from '../ui';
+import { t } from '../i18n';
+import { useData, useProviders } from '../data/providers/context';
+import type { Candle, CandleInterval } from '../data/providers';
+import { C, G, alpha, black } from '../theme';
+import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile, usd } from '../ui';
 
 export function DexScreen() {
+  const market = useData((d) => d.getMarket('ML/USDT'));
+  const orderBook = useData((d) => d.getOrderBook('ML/USDT'));
+  const timeframes = useData((d) => d.getTimeframes());
+  const fees = useData((d) => d.getFees());
+  const assets = useData((d) => d.getAssets());
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [book, setBook] = useState<'book' | 'trades' | 'depth'>('book');
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
-  const [tf, setTf] = useState('1h');
+  const [tf, setTf] = useState<CandleInterval>('1h');
   const [amount, setAmount] = useState('250');
+  const { price } = useProviders();
+  const [candles, setCandles] = useState<Candle[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    price.getCandles('ML/USDT', tf).then((rows) => {
+      if (live) setCandles(rows);
+    });
+    return () => {
+      live = false;
+    };
+  }, [price, tf]);
 
-  const maxAsk = Math.max(...ASKS.map((r) => r.t));
-  const maxBid = Math.max(...BIDS.map((r) => r.t));
-  const total = (parseFloat(amount || '0') * MARKET.price).toFixed(4);
+  if (!market || !orderBook || !timeframes || !fees || !candles || !assets) return <Screen />;
+  const maxAsk = Math.max(...orderBook.asks.map((r) => r.t));
+  const maxBid = Math.max(...orderBook.bids.map((r) => r.t));
+  const total = usd(amount, market.price);
+  /** Spread between the best ask and best bid, percent relative to the ask. */
+  const bestAsk = orderBook.asks[0]?.p ?? market.price;
+  const bestBid = orderBook.bids[0]?.p ?? market.price;
+  const spread = Math.abs(bestAsk - bestBid);
+  const spreadPct = (spread / bestAsk) * 100;
+  const mlBalance = assets.find((a) => a.sym === 'ML')?.amt ?? 0;
 
   return (
     <Screen>
       <View className="px-5 flex-row items-center justify-between">
         <View>
           <View className="flex-row items-center gap-2">
-            <Txt className="text-[18px] font-bold">{MARKET.pair}</Txt>
+            <Txt className="text-[18px] font-bold">{market.pair}</Txt>
             <Chip tone={C.teal} dot={false}>
-              MINTLAYER DEX
+              {t('dex.badge')}
             </Chip>
           </View>
           <Txt mono className="text-[11px] text-text2 mt-0.5">
-            {MARKET.volume}
+            {market.volume}
           </Txt>
         </View>
-        <IconBtn name="chart" label="Full chart" />
+        <IconBtn name="chart" label={t('dex.fullChart')} />
       </View>
 
       {/* Price + candles */}
@@ -37,33 +62,33 @@ export function DexScreen() {
         <Card grad={G.raisedTeal} className="p-4">
           <View className="flex-row justify-between items-end">
             <View>
-              <Label>Last price</Label>
+              <Label>{t('dex.lastPrice')}</Label>
               <View className="flex-row items-baseline gap-2 mt-0.5">
                 <Txt mono className="text-[28px] font-bold">
-                  ${MARKET.last}
+                  ${market.last}
                 </Txt>
-                <LivePill value={MARKET.change} />
+                <LivePill value={market.change} />
               </View>
               <Txt mono className="text-[11px] text-text2 mt-0.5">
-                {MARKET.btc}
+                {market.btc}
               </Txt>
             </View>
             <View className="items-end">
-              <Txt className="text-[10px] text-text3">24H HIGH</Txt>
+              <Txt className="text-[10px] text-text3">{t('dex.high24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.green }}>
-                {MARKET.high}
+                {market.high}
               </Txt>
-              <Txt className="text-[10px] text-text3 mt-1">24H LOW</Txt>
+              <Txt className="text-[10px] text-text3 mt-1">{t('dex.low24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.red }}>
-                {MARKET.low}
+                {market.low}
               </Txt>
             </View>
           </View>
 
           <View className="mt-3">
-            <Candles />
+            <Candles candles={candles} />
           </View>
-          <Segmented options={TIMEFRAMES} value={tf} onChange={setTf} variant="ghost" accent={C.teal} className="mt-2" />
+          <Segmented options={timeframes} value={tf} onChange={setTf} variant="ghost" accent={C.teal} className="mt-2" />
         </Card>
       </View>
 
@@ -73,37 +98,37 @@ export function DexScreen() {
           value={book}
           onChange={setBook}
           variant="tabs"
-          labels={{ book: 'Order book', trades: 'Trades', depth: 'Depth' }}
+          labels={{ book: t('dex.book'), trades: t('dex.trades'), depth: t('dex.depth') }}
         />
       </View>
 
       {/* Order book */}
       <View className="pt-3">
         <View className="flex-row px-4 py-1">
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label">PRICE (USDT)</Txt>
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-center">SIZE (ML)</Txt>
-          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-right">TOTAL</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label">{t('dex.col.price')}</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-center">{t('dex.col.size')}</Txt>
+          <Txt className="flex-1 text-[10px] text-text3 tracking-label text-right">{t('dex.col.total')}</Txt>
         </View>
 
-        {ASKS.map((r, i) => (
+        {orderBook.asks.map((r, i) => (
           <BookRow key={`a${i}`} row={r} max={maxAsk} tone={C.red} delay={i * 30} />
         ))}
 
         <View
           className="mx-4 my-2 px-3 py-2 rounded-[10px] flex-row justify-between items-center"
-          style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+          style={tile()}>
           <Txt mono className="text-[12px] text-text2">
-            Spread
+            {t('dex.spread')}
           </Txt>
           <Txt mono className="text-[12px] font-semibold">
-            0.0006 · 0.17%
+            {`${spread.toFixed(4)} · ${spreadPct.toFixed(2)}%`}
           </Txt>
           <Txt mono className="text-[12px]" style={{ color: C.teal }}>
             ↕
           </Txt>
         </View>
 
-        {BIDS.map((r, i) => (
+        {orderBook.bids.map((r, i) => (
           <BookRow key={`b${i}`} row={r} max={maxBid} tone={C.green} delay={200 + i * 30} />
         ))}
       </View>
@@ -126,29 +151,36 @@ export function DexScreen() {
                     borderColor: on ? alpha(c, 0.4) : 'transparent',
                   }}>
                   <Txt className="text-[13px] font-semibold capitalize" style={{ color: on ? c : C.text2 }}>
-                    {s}
+                    {t(s === 'buy' ? 'dex.buy' : 'dex.sell')}
                   </Txt>
                 </Pressable>
               );
             })}
           </View>
 
-          <Segmented options={['Limit', 'Market', 'Stop'] as const} value={orderType} onChange={setOrderType} variant="tabs" className="mb-3.5" />
+          <Segmented
+            options={['Limit', 'Market', 'Stop'] as const}
+            value={orderType}
+            onChange={setOrderType}
+            variant="tabs"
+            className="mb-3.5"
+            labels={{ Limit: t('dex.order.limit'), Market: t('dex.order.market'), Stop: t('dex.order.stop') }}
+          />
 
           <View className="gap-2">
-            <Field label="Price" value={MARKET.price.toFixed(4)} unit="USDT" />
-            <Field label="Amount" value={amount} unit="ML" onChangeText={setAmount} />
-            <PctButtons onPick={(f) => setAmount(String(Math.round(12480.5 * f)))} />
-            <Field label="Total" value={total} unit="USDT" tone={C.text1} />
+            <Field label={t('dex.price')} value={market.price.toFixed(4)} unit="USDT" />
+            <Field label={t('common.amount')} value={amount} unit="ML" onChangeText={setAmount} />
+            <PctButtons onPick={(f) => setAmount(String(Math.round(mlBalance * f)))} />
+            <Field label={t('common.total')} value={total} unit="USDT" tone={C.text1} />
           </View>
 
           <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-3.5">
-            {side === 'buy' ? 'Place buy order' : 'Place sell order'} · {amount} ML
+            {side === 'buy' ? t('dex.placeBuy', { amount }) : t('dex.placeSell', { amount })}
           </Btn>
 
           <View className="mt-3 gap-1">
-            <KVRow k="Network fee" v="0.00012 ML · ~$0.00" />
-            <KVRow k="Onchain settlement" v="~12s" tone={C.teal} />
+            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue', { fee: String(fees.standard.cost), usd: `$${usd(fees.standard.cost, market.price)}` })} />
+            <KVRow k={t('dex.onchainSettlement')} v={t('dex.settlementEta')} tone={C.teal} />
           </View>
         </Card>
       </View>

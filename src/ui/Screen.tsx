@@ -2,7 +2,7 @@ import React from 'react';
 import { ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export function Screen({ children, className = '' }: { children: React.ReactNode; className?: string }) {
+export function Screen({ children = null, className = '' }: { children?: React.ReactNode; className?: string }) {
   const insets = useSafeAreaInsets();
   return (
     <ScrollView

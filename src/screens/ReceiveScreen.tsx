@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
-import { ADDRESSES, CHAIN_GLYPH } from '../data';
-import { C, CHAINS } from '../theme';
+import { t } from '../i18n';
+import { useData } from '../data/providers/context';
+import { C, CHAINS, type ChainName } from '../theme';
 import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
 export function ReceiveScreen({ onClose }: Sheet) {
-  const [chain, setChain] = useState<(typeof CHAIN_KEYS)[number]>('Mintlayer');
+  const addresses = useData((d) => d.getAddresses());
+  const chainGlyphs = useData((d) => d.getChainGlyphs());
+  const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
-  const addr = ADDRESSES[chain];
-  const accent = CHAINS[chain as keyof typeof CHAINS];
+  const addr = addresses?.[chain] ?? '';
+  const accent = CHAINS[chain];
 
   // Write first, confirm second: the label must never claim a copy that failed.
   const copy = async () => {
@@ -19,7 +22,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      Alert.alert('Could not copy', 'Copy the address manually — it is shown in full above.');
+      Alert.alert(t('receive.copyError.title'), t('receive.copyError.body'));
     }
   };
 
@@ -29,17 +32,20 @@ export function ReceiveScreen({ onClose }: Sheet) {
     });
   };
 
+  if (!addresses || !chainGlyphs || !addr) return <Screen />;
+  const chainKeys = Object.keys(addresses) as ChainName[];
+
   return (
     <Screen>
-      <SheetHeader title="Receive" onClose={onClose} />
+      <SheetHeader title={t('receive.title')} onClose={onClose} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8 }}>
         <Segmented
-          options={CHAIN_KEYS}
+          options={chainKeys}
           value={chain}
           onChange={setChain}
           variant="pill"
-          accents={Object.fromEntries(CHAIN_KEYS.map((k) => [k, CHAINS[k as keyof typeof CHAINS]]))}
+          accents={Object.fromEntries(chainKeys.map((k) => [k, CHAINS[k]]))}
         />
       </ScrollView>
 
@@ -51,7 +57,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
             className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
             style={{ backgroundColor: accent }}>
             <Txt className="text-[18px] font-extrabold" style={{ color: C.ink }}>
-              {CHAIN_GLYPH[chain as keyof typeof CHAIN_GLYPH]}
+              {chainGlyphs[chain]}
             </Txt>
           </View>
         </View>
@@ -59,7 +65,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
 
       {/* Address */}
       <View className="px-6 pt-6">
-        <Label className="mb-2 text-center">{`${chain} address`}</Label>
+        <Label className="mb-2 text-center">{t('receive.address.label', { chain })}</Label>
         <Card className="px-4 py-3.5 rounded-[14px]">
           <Txt mono className="text-[12px]">
             {addr}
@@ -68,11 +74,11 @@ export function ReceiveScreen({ onClose }: Sheet) {
         <View className="flex-row gap-2 mt-2.5">
           <View className="flex-1">
             <Btn tone={copied ? 'green' : 'default'} onPress={copy}>
-              {copied ? '✓ Copied' : 'Copy'}
+              {copied ? t('common.copied') : t('common.copy')}
             </Btn>
           </View>
           <View className="flex-1">
-            <Btn onPress={share}>Share</Btn>
+            <Btn onPress={share}>{t('common.share')}</Btn>
           </View>
         </View>
       </View>
@@ -83,8 +89,8 @@ export function ReceiveScreen({ onClose }: Sheet) {
           <ListRow
             icon="plus"
             iconColor={C.amber}
-            label="Request specific amount"
-            sub="Encode the amount in your QR code"
+            label={t('receive.request')}
+            sub={t('receive.requestSub')}
             trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
           />
         </Card>
@@ -94,11 +100,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
       <View className="px-6 pt-5">
         <Callout tone={accent} glyph="ⓘ">
           <Txt className="text-[11px] text-text1 leading-[17px]">
-            Send only{' '}
-            <Txt className="text-[11px] font-semibold" style={{ color: accent }}>
-              {chain}
-            </Txt>{' '}
-            assets to this address. Sending other assets may result in permanent loss.
+            {t('receive.warning', { chain })}
           </Txt>
         </Callout>
       </View>
@@ -106,6 +108,4 @@ export function ReceiveScreen({ onClose }: Sheet) {
   );
 }
 
-/* ══ Settings ═══════════════════════════════════════════════ */
-
-const CHAIN_KEYS = Object.keys(ADDRESSES) as (keyof typeof ADDRESSES)[];
+/** Chain picker segment keys. */

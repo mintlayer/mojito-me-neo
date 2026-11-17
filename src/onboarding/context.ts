@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Bio } from './ui';
 
 export type ScreenId =
@@ -33,4 +34,8 @@ export const LOCK_ATTEMPTS = 5;
 
 export const LOCK_SECONDS = 30;
 
-export const bioName = (bio: Bio) => (bio === 'face' ? 'Face ID' : 'fingerprint');
+/** The biometric noun as copy, so locales control the wording. */
+export const bioName = (bio: Bio) => t(bio === 'face' ? 'onboarding.bio.face' : 'onboarding.bio.touch');
+
+/** The guarding variant used inside sentences, e.g. Your fingerprint. */
+export const bioGuard = (bio: Bio) => (bio === 'face' ? bioName(bio) : t('onboarding.bio.touchGuard'));

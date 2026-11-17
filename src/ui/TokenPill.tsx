@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { C, white } from '../theme';
+import { C } from '../theme';
 import { Icon } from './icons';
+import { tile } from './style';
 import { TokenIcon } from './TokenIcon';
 import { Txt } from './Txt';
 
@@ -10,7 +11,7 @@ export function TokenPill({ symbol, chain, onPress }: { symbol: string; chain?: 
     <Pressable
       onPress={onPress}
       className="flex-row items-center gap-2 pl-2 pr-3 py-2 rounded-full"
-      style={{ backgroundColor: white(0.05), borderWidth: 1, borderColor: C.lineSoft }}>
+      style={tile(0.05)}>
       <TokenIcon symbol={symbol} size={28} />
       <View>
         <Txt className="text-[13px] font-semibold">{symbol}</Txt>

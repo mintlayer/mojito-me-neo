@@ -45,6 +45,8 @@ export function Segmented<T extends string>({
           <Pressable
             key={o}
             onPress={() => onChange?.(o)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
             className={`items-center justify-center ${shape}`}
             style={{
               backgroundColor: bg,
@@ -62,4 +64,4 @@ export function Segmented<T extends string>({
   );
 }
 
-/** 25 / 50 / 75 / Max — dex ticket, send amount, swap panel. */
+/** 25 / 50 / 75 / Max: dex ticket, send amount, swap panel. */

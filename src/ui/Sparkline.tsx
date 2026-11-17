@@ -28,4 +28,4 @@ export function Sparkline({
   );
 }
 
-/** Filled sparkline — the balance card chart on Home. */
+/** Filled sparkline: the balance card chart on Home. */

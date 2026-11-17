@@ -26,4 +26,4 @@ export function SuccessMark({ size = 96, color = C.green, glyph = '✓' }: { siz
   );
 }
 
-/** Decorative QR — deterministic from the address, not a real encoder. */
+/** Decorative QR: deterministic from the address, not a real encoder. */

@@ -1,42 +1,69 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
-import { ACTIVITY, ASSETS, BALANCE, NETWORKS, RANGES } from '../data';
+import { t, type I18nKey } from '../i18n';
+import { useData, useProviders } from '../data/providers/context';
+import type { AssetRow, PriceRange } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
-import { AreaChart, Avatar, Callout, Card, ChainBadge, Divider, Enter, Float, Icon, IconBtn, IconName, IconTile, Label, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor } from '../ui';
+import { AreaChart, Avatar, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
+  const { mode, price } = useProviders();
+  const balance = useData((d) => d.getPortfolio());
+  const assets = useData((d) => d.getAssets());
+  const activity = useData((d) => d.getActivity(20));
+  const networks = useData((d) => d.getNetworks());
+  const ranges = useData((d) => d.getRanges());
+  const profile = useData((d) => d.getProfile());
   const [hidden, setHidden] = useState(false);
-  const [range, setRange] = useState('1D');
+  const [range, setRange] = useState<PriceRange>('1D');
+  const [series, setSeries] = useState<number[] | null>(null);
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
 
-  const actions: { icon: IconName; label: string; color: string; press?: () => void; locked?: boolean }[] = [
-    { icon: 'arrow_up', label: 'Send', color: C.text0, press: onOpenSend },
+  useEffect(() => {
+    let live = true;
+    price.getHistory('PORTFOLIO', range).then((points) => {
+      if (live) setSeries(points.map((p) => p.p));
+    });
+    return () => {
+      live = false;
+    };
+  }, [price, range]);
+
+  const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean }[] = [
+    { icon: 'arrow_up', labelKey: 'home.actions.send', color: C.text0, press: onOpenSend },
     {
       icon: deferred ? 'lock' : 'arrow_dn',
-      label: 'Receive',
+      labelKey: 'home.actions.receive',
       color: deferred ? C.text3 : C.text0,
       press: deferred ? undefined : onOpenReceive,
       locked: deferred,
     },
-    { icon: 'swap', label: 'Swap', color: C.amber, press: () => onGoto?.('swap') },
-    { icon: 'bridge', label: 'Bridge', color: C.violet, press: () => onGoto?.('bridge') },
+    { icon: 'swap', labelKey: 'home.actions.swap', color: C.amber, press: () => onGoto?.('swap') },
+    { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
   ];
+
+  if (!balance || !assets || !activity || !networks || !ranges || !profile) return <Screen />;
 
   return (
     <Screen>
       <View className="px-5 flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
-          <Avatar letter="S" size={32} />
+          <Avatar letter={profile.initial} size={32} />
           <View>
-            <Label>Wallet</Label>
-            <Txt className="text-[13px] font-semibold">satoshi.ml ▾</Txt>
+            <Label>{t('home.wallet.label')}</Label>
+            <Txt className="text-[13px] font-semibold">{profile.name} ▾</Txt>
           </View>
         </View>
+        {mode === 'mock' && (
+          <View className="flex-1 items-start pl-2">
+            <Chip dot={false}>{t('home.demoData')}</Chip>
+          </View>
+        )}
         <View className="flex-row gap-2">
-          {onLock && <IconBtn name="lock" label="Lock wallet" onPress={onLock} />}
-          <IconBtn name="settings" label="Settings" onPress={onOpenSettings} />
-          <IconBtn name="bell" label="Notifications" badge={C.amber} />
+          {onLock && <IconBtn name="lock" label={t('home.lock')} onPress={onLock} />}
+          <IconBtn name="settings" label={t('settings.title')} onPress={onOpenSettings} />
+          <IconBtn name="bell" label={t('settings.notifications')} badge={C.amber} />
         </View>
       </View>
 
@@ -47,15 +74,15 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             action={
               <Pressable onPress={onBackUp} className="px-3 py-1.5 rounded-[9px]" style={{ backgroundColor: C.amber }}>
                 <Txt className="text-[11px] font-bold" style={{ color: '#1a1208' }}>
-                  Back up
+                  {t('home.backup.cta')}
                 </Txt>
               </Pressable>
             }>
             <Txt className="text-[12px] text-text1 leading-[17px]">
               <Txt className="text-[12px] font-bold" style={{ color: C.amber }}>
-                Backup required.
+                {t('home.backup.bannerBold')}
               </Txt>{' '}
-              Receive is locked until your recovery phrase is verified.
+              {t('home.backup.banner')}
             </Txt>
           </Callout>
         </View>
@@ -69,39 +96,46 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           </Float>
 
           <View className="flex-row items-center gap-2">
-            <Label>Total balance</Label>
-            <Pressable onPress={() => setHidden((h) => !h)}>
+            <Label>{t('home.balance.total')}</Label>
+            <Pressable
+              onPress={() => setHidden((h) => !h)}
+              accessibilityRole="button"
+              accessibilityLabel={t(hidden ? 'home.balance.show' : 'home.balance.hide')}
+              accessibilityState={{ selected: hidden }}>
               <Icon name={hidden ? 'eye_off' : 'eye'} size={14} color={C.text2} />
             </Pressable>
           </View>
 
           <View className="flex-row items-baseline gap-2 mt-1.5">
             {hidden ? (
+              // Balance mask is decoration, kept in code rather than en.ts.
               <Txt className="text-[38px] font-bold tracking-tightest">••••••</Txt>
             ) : (
               <Txt className="text-[38px] font-bold tracking-tightest">
                 <Txt className="text-[38px] font-medium text-text2">$</Txt>
-                {BALANCE.total}
+                {balance.total}
               </Txt>
             )}
           </View>
 
           <View className="flex-row items-center gap-2 mt-2">
-            <LivePill value={BALANCE.change} />
+            <LivePill value={balance.change} />
             <Txt mono className="text-[12px] text-text2">
-              {BALANCE.delta}
+              {balance.delta}
             </Txt>
           </View>
 
           <View className="mt-3.5">
-            <AreaChart data={BALANCE.spark} />
+            {/* Provider history for the picked range; the fixture spark is
+                only the fallback while it resolves. */}
+            <AreaChart data={series ?? balance.spark} />
           </View>
 
           <View className="flex-row justify-between mt-1">
-            {RANGES.map((r) => (
+            {ranges.map((r) => (
               <Pressable key={r} onPress={() => setRange(r)}>
                 <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
-                  {r}
+                  {t(`home.ranges.${r}` as I18nKey)}
                 </Txt>
               </Pressable>
             ))}
@@ -112,13 +146,13 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Quick actions */}
       <View className="px-5 pt-4 flex-row gap-2">
         {actions.map((a, i) => (
-          <Enter key={a.label} delay={i * 80} style={{ flex: 1 }}>
+          <Enter key={a.labelKey} delay={i * 80} style={{ flex: 1 }}>
             <Pressable
               onPress={a.press}
               className="py-3.5 rounded-2xl items-center gap-1.5"
-              style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft, opacity: a.locked ? 0.45 : 1 }}>
+              style={[tile(), { opacity: a.locked ? 0.45 : 1 }]}>
               <Icon name={a.icon} size={20} color={a.color} />
-              <Txt className="text-[11px] font-medium">{a.label}</Txt>
+              <Txt className="text-[11px] font-medium">{t(a.labelKey)}</Txt>
             </Pressable>
           </Enter>
         ))}
@@ -127,18 +161,18 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Networks */}
       <View className="pt-5">
         <View className="px-5 flex-row items-center justify-between mb-2.5">
-          <Label>Connected networks</Label>
+          <Label>{t('home.networks.title')}</Label>
           <Txt mono className="text-[11px] text-text2">
-            {NETWORKS.length} active
+            {t('home.networks.active', { count: networks.length })}
           </Txt>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
-          {NETWORKS.map((n, i) => (
+          {networks.map((n, i) => (
             <Enter key={n} delay={300 + i * 60}>
               <View
                 className="flex-row items-center gap-2 px-3 py-2 rounded-xl"
                 style={{ backgroundColor: white(0.03), borderWidth: 1, borderColor: C.lineSoft }}>
-                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAINS[n as keyof typeof CHAINS] }} />
+                <View className="w-2 h-2 rounded-full" style={{ backgroundColor: CHAINS[n] }} />
                 <Txt className="text-[12px] font-medium">{n}</Txt>
               </View>
             </Enter>
@@ -149,11 +183,16 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Assets */}
       <View className="px-5 pt-6">
         <View className="flex-row items-center justify-between mb-3">
-          <Txt className="text-[14px] font-semibold">Assets</Txt>
-          <Segmented options={['Tokens', 'NFTs', 'DeFi'] as const} value={tab} onChange={setTab} />
+          <Txt className="text-[14px] font-semibold">{t('home.assets.title')}</Txt>
+          <Segmented
+            options={['Tokens', 'NFTs', 'DeFi'] as const}
+            value={tab}
+            onChange={setTab}
+            labels={{ Tokens: t('home.tabs.tokens'), NFTs: t('home.tabs.nfts'), DeFi: t('home.tabs.defi') }}
+          />
         </View>
 
-        {ASSETS.map((a, i) => (
+        {assets.map((a, i) => (
           <Enter key={a.sym} delay={400 + i * 70}>
             <TokenRow asset={a} />
           </Enter>
@@ -163,29 +202,29 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       {/* Activity */}
       <View className="px-5 pt-6">
         <View className="flex-row items-center justify-between mb-3">
-          <Txt className="text-[14px] font-semibold">Recent activity</Txt>
-          <Txt className="text-[11px] text-text2">See all →</Txt>
+          <Txt className="text-[14px] font-semibold">{t('home.activity.title')}</Txt>
+          <Txt className="text-[11px] text-text2">{t('common.seeAll')}</Txt>
         </View>
         <Card variant="glass" className="p-1">
-          {ACTIVITY.map((r, i) => (
-            <View key={r.title} className="flex-row items-center gap-3 px-3.5 py-3">
-              {i > 0 && <Divider className="absolute left-3.5 right-0 top-0" />}
-              <IconTile name={r.icon as IconName} color={toneColor(r.tone)} size={34} radius={10} />
-              <View className="flex-1">
-                <Txt className="text-[13px] font-medium">{r.title}</Txt>
-                <Txt mono className="text-[11px] text-text2 mt-0.5">
-                  {r.sub}
-                </Txt>
-              </View>
-              <View className="items-end">
-                <Txt mono className="text-[11px] text-text2">
-                  {r.time}
-                </Txt>
-                <Txt className="text-[10px] mt-0.5" style={{ color: r.state.includes('Confirming') ? C.amber : C.text2 }}>
-                  {r.state}
-                </Txt>
-              </View>
-            </View>
+          {activity.map((r, i) => (
+            <ListRow
+              key={r.title}
+              icon={r.icon}
+              iconColor={toneColor(r.tone)}
+              label={r.title}
+              sub={<Txt mono className="text-[11px] text-text2 mt-0.5">{r.sub}</Txt>}
+              divider={i > 0}
+              trailing={
+                <View className="items-end">
+                  <Txt mono className="text-[11px] text-text2">
+                    {r.time}
+                  </Txt>
+                  <Txt className="text-[10px] mt-0.5" style={{ color: r.live ? C.amber : C.text2 }}>
+                    {r.state}
+                  </Txt>
+                </View>
+              }
+            />
           ))}
         </Card>
       </View>
@@ -193,11 +232,10 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   );
 }
 
-/** Asset list line — token icon, symbol + chain, sparkline, value + change. */
-
 /* ══ Home ═══════════════════════════════════════════════════ */
 
-function TokenRow({ asset }: { asset: (typeof ASSETS)[number] }) {
+/** Asset list line: token icon, symbol + chain, sparkline, value + change. */
+function TokenRow({ asset }: { asset: AssetRow }) {
   return (
     <View className="flex-row items-center gap-3 py-3">
       <TokenIcon symbol={asset.sym} size={38} />

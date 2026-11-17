@@ -1,6 +1,7 @@
 import React, { forwardRef } from 'react';
 import { C, alpha, white } from '../../theme';
 import { TextInput, View } from 'react-native';
+import { t } from '../../i18n';
 import { Txt } from '../../ui';
 
 export const WordSlot = forwardRef<
@@ -13,8 +14,10 @@ export const WordSlot = forwardRef<
     onChangeText: (v: string) => void;
     onFocus: () => void;
     onSubmit: () => void;
+    /** secureTextEntry: committed words show as dots until the slot is focused. */
+    masked?: boolean;
   }
->(function WordSlot({ index, value, active, bad, onChangeText, onFocus, onSubmit }, ref) {
+>(function WordSlot({ index, value, active, bad, masked, onChangeText, onFocus, onSubmit }, ref) {
   return (
     <View
       className="flex-row items-center gap-1 px-2 h-[38px] rounded-[9px]"
@@ -28,21 +31,28 @@ export const WordSlot = forwardRef<
       </Txt>
       <TextInput
         ref={ref}
+        // Remount on the masked switch: Android misrenders live secureTextEntry
+        // toggles, so the key change forces a fresh input instead.
+        key={masked ? 'm' : 'v'}
         value={value}
         // Raw text goes up: RN has no onPaste, so the parent detects a
         // multi-word paste before the single-word sanitiser runs.
         onChangeText={onChangeText}
         onFocus={onFocus}
         onSubmitEditing={onSubmit}
-        accessibilityLabel={`Word ${index + 1}`}
+        accessibilityLabel={t('onboarding.verify.word', { n: index + 1 })}
         blurOnSubmit={false}
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
+        autoComplete="off"
+        textContentType="none"
+        importantForAutofill="no"
+        secureTextEntry={masked}
         className="flex-1 font-mono text-[11.5px] font-medium text-text0 p-0"
       />
     </View>
   );
 });
 
-/** Large icon badge — the discovery scanner and its empty state. */
+/** Large icon badge: the discovery scanner and its empty state. */

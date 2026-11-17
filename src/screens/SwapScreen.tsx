@@ -2,36 +2,59 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as SvgText } from 'react-native-svg';
-import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, HTLC_STEPS, SWAP_STATS } from '../data';
+import { t } from '../i18n';
+import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
-import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, StepState, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
+import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, quantizeAmount, usd } from '../ui';
+
+/** One side of a swap: token, chain, typed amount and provider balance. */
+type SwapPanelData = { sym: string; chain: string; amt: string; bal: number };
 
 export function SwapScreen() {
-  const [from, setFrom] = useState({ sym: 'BTC', chain: 'Bitcoin', amt: '0.025', bal: '0.4821' });
-  const [to, setTo] = useState({ sym: 'ML', chain: 'Mintlayer', amt: '7012.45', bal: '12,480.50' });
+  const assets = useData((d) => d.getAssets());
+  const assetBalances = useData((d) => d.getAssetBalances());
+  const assetSymbols = useData((d) => d.getAssetSymbols());
+  const htlcSteps = useData((d) => d.getHtlcSteps());
+  const swapStats = useData((d) => d.getSwapStats());
+  /** Panels start null and resolve from provider assets, the same source the picker uses. */
+  const [from, setFrom] = useState<SwapPanelData | null>(null);
+  const [to, setTo] = useState<SwapPanelData | null>(null);
   /** Which panel the picker is editing, or null when closed. */
   const [picking, setPicking] = useState<'from' | 'to' | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  /** Approx-USD conversion reads provider fixture prices, not screen constants. */
+  const priceMap = Object.fromEntries((assets ?? []).map((a) => [a.sym, a.price] as const));
+
+  /** Build a panel from the provider asset row; a fresh pick starts at amount zero. */
+  const sideDefaults = (sym: string): SwapPanelData => {
+    const asset = assets?.find((a) => a.sym === sym);
+    return { sym, chain: asset?.chain ?? '', amt: '0', bal: asset ? asset.amt : 0 };
+  };
+  const fromPanel = from ?? sideDefaults('BTC');
+  const toPanel = to ?? sideDefaults('ML');
 
   const flip = () => {
-    setFrom(to);
-    setTo(from);
+    setFrom(toPanel);
+    // The receive side has no quote yet, so it never carries a typed amount.
+    setTo({ ...fromPanel, amt: '0' });
   };
 
   const pick = (sym: string) => {
-    const asset = ASSETS.find((a) => a.sym === sym);
+    const asset = assets?.find((a) => a.sym === sym);
     if (!asset) return;
-    const next = { sym: asset.sym, chain: asset.chain, amt: '0', bal: asset.amt.toLocaleString() };
+    const next = sideDefaults(asset.sym);
     if (picking === 'from') setFrom(next);
     else setTo(next);
   };
 
+  if (!assets || !assetBalances || !assetSymbols || !htlcSteps || !swapStats) return <Screen />;
+
   if (submitted) {
     return (
       <SuccessScreen
-        title="Swap initiated"
-        summary={`${from.amt} ${from.sym} → ${to.amt} ${to.sym}`}
-        description={`The HTLC is locked on ${from.chain}. Settlement completes once the counterparty reveals the preimage.`}
+        title={t('swap.success.title')}
+        summary={t('swap.success.pending', { from: fromPanel.amt, fromSym: fromPanel.sym, toSym: toPanel.sym })}
+        description={t('swap.success.desc', { chain: fromPanel.chain })}
         onDone={() => setSubmitted(false)}
       />
     );
@@ -39,24 +62,26 @@ export function SwapScreen() {
 
   return (
     <Screen>
-      <ScreenIntro title="Atomic Swap" chip="HTLC" tone={C.amber} blurb="Trustless cross-chain swap. No bridge, no custodian." />
+      <ScreenIntro title={t('swap.title')} chip={t('swap.chip')} tone={C.amber} blurb={t('swap.blurb')} />
 
       <TokenPicker
         open={picking !== null}
         onClose={() => setPicking(null)}
-        symbols={ASSET_SYMBOLS}
-        value={picking === 'from' ? from.sym : to.sym}
-        balances={ASSET_BALANCES}
+        symbols={assetSymbols}
+        value={picking === 'from' ? fromPanel.sym : toPanel.sym}
+        balances={assetBalances}
         onSelect={pick}
       />
 
       <View className="px-5 pt-5">
-        <SwapPanel label="You send" data={from} onChange={(amt) => setFrom({ ...from, amt })} onPickToken={() => setPicking('from')} />
+        <SwapPanel label={t('common.youSend')} data={fromPanel} price={priceMap[fromPanel.sym]} onChange={(amt) => setFrom({ ...fromPanel, amt })} onPickToken={() => setPicking('from')} />
         <View className="h-2" />
-        <SwapPanel label="You receive" data={to} onPickToken={() => setPicking('to')} />
+        <SwapPanel label={t('common.youReceive')} data={toPanel} price={priceMap[toPanel.sym]} onPickToken={() => setPicking('to')} />
 
         <Pressable
           onPress={flip}
+          accessibilityRole="button"
+          accessibilityLabel={t('swap.flip')}
           className="absolute w-11 h-11 rounded-[14px] items-center justify-center z-10 overflow-hidden"
           style={{ top: '44%', left: '50%', marginLeft: -22, borderWidth: 1, borderColor: C.line }}>
           <LinearGradient colors={gradColors(G.flip)} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={StyleSheet.absoluteFill} />
@@ -65,27 +90,23 @@ export function SwapScreen() {
       </View>
 
       <View className="px-5 pt-3">
-        <Card className="px-3.5 py-2.5 flex-row flex-wrap">
-          {SWAP_STATS.map(([k, v], i) => (
-            <View key={k} className="w-1/2 py-1">
-              <KV k={k} v={v} right={i % 2 === 1} tone={i === 1 ? C.green : i === 3 ? C.amber : C.text0} />
-            </View>
-          ))}
+        <Card className="px-3.5 py-2.5">
+          <KVGrid rows={swapStats} tone={(i) => (i === 1 ? C.green : i === 3 ? C.amber : C.text0)} />
         </Card>
       </View>
 
       {/* HTLC protocol */}
       <View className="px-5 pt-5">
-        <Label className="mb-3">Swap protocol · HTLC</Label>
+        <Label className="mb-3">{t('swap.protocol')}</Label>
         <Card grad={G.raisedAmber} className="p-4">
           <HtlcRail />
-          <Steps steps={HTLC_STEPS as { label: string; detail: string; state: StepState; note?: string }[]} />
+          <Steps steps={htlcSteps} />
         </Card>
       </View>
 
       <View className="px-5 pt-4">
         <Btn tone="primary" onPress={() => setSubmitted(true)}>
-          Initiate atomic swap
+          {t('swap.cta')}
         </Btn>
       </View>
     </Screen>
@@ -95,32 +116,43 @@ export function SwapScreen() {
 function SwapPanel({
   label,
   data,
+  price = 0,
   onChange,
   onPickToken,
+  amountLabel,
 }: {
   label: string;
-  data: { sym: string; chain: string; amt: string; bal: string };
+  data: SwapPanelData;
+  price?: number;
   onChange?: (v: string) => void;
   onPickToken?: () => void;
+  /** Readable name for the panel's amount input. */
+  amountLabel?: string;
 }) {
-  const usd = (parseFloat(data.amt || '0') * (data.sym === 'BTC' ? 96420 : 0.3438)).toFixed(2);
+  const usdValue = usd(data.amt, price);
   return (
     <Card className="p-[18px]">
       <View className="flex-row justify-between items-center">
         <Label>{label}</Label>
         <Txt mono className="text-[11px] text-text2">
-          Bal {data.bal} {data.sym}
+          {t('common.bal', { bal: data.bal.toLocaleString(), sym: data.sym })}
         </Txt>
       </View>
       <View className="mt-3">
-        <AmountRow symbol={data.sym} chain={data.chain} value={data.amt} onChangeText={onChange} onPickToken={onPickToken} />
+        {/* The receive side has no quote until M2 wires rates: show a dash
+            instead of mirroring the sent amount. */}
+        <AmountRow symbol={data.sym} chain={data.chain} value={onChange ? data.amt : '-'} onChangeText={onChange} onPickToken={onPickToken} accessibilityLabel={amountLabel ?? label} />
       </View>
-      <View className="flex-row justify-between items-center mt-2">
-        <Txt mono className="text-[11px] text-text2">
-          ≈ ${usd}
-        </Txt>
-        {onChange && <PctButtons compact onPick={(f) => onChange(String(parseFloat(data.amt || '0') * (f === 1 ? 2 : f)))} />}
-      </View>
+      {/* The receive side has no quote until M2 wires rates: show a dash
+          instead of mirroring the sent amount, and no approx row under it. */}
+      {onChange && (
+        <View className="flex-row justify-between items-center mt-2">
+          <Txt mono className="text-[11px] text-text2">
+            {t('common.approxUsd', { usd: `$${usdValue}` })}
+          </Txt>
+          <PctButtons compact onPick={(f) => onChange(quantizeAmount(data.bal * f))} />
+        </View>
+      )}
     </Card>
   );
 }
@@ -167,6 +199,6 @@ function HtlcRail() {
 /**
  * Mojito bridges Mintlayer <-> everything else, so one endpoint is always
  * Mintlayer. Only the counterparty is selectable and the arrow decides which
- * direction Mintlayer sits on — an unroutable pair like Ethereum -> Arbitrum
+ * direction Mintlayer sits on, so an unroutable pair like Ethereum -> Arbitrum
  * is therefore unrepresentable rather than merely rejected.
  */

@@ -29,7 +29,7 @@ const SCREENS: Record<ScreenId, React.ComponentType<{ ctx: Ctx }>> = {
   entropy: Entropy,
 };
 
-/* ══ Unlock — the app lock, reached after onboarding ════════ */
+/* Unlock: the app lock, reached after onboarding */
 
 export function Onboarding({
   initial = 'welcome',
@@ -42,7 +42,7 @@ export function Onboarding({
   initial?: ScreenId;
   bio?: Bio;
   discovery?: 'found' | 'none';
-  /** Run only the PIN set/confirm pair — used by Settings > Change PIN. */
+  /** Run only the PIN set/confirm pair, used by Settings > Change PIN. */
   pinOnly?: boolean;
   onDone: (r: OnboardingResult) => void;
 }) {

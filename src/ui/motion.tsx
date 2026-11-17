@@ -47,7 +47,7 @@ export function Enter({
 }
 
 /**
- * `shake` — replays whenever `trigger` flips truthy. Returns a style to spread
+ * `shake`: replays whenever `trigger` flips truthy. Returns a style to spread
  * onto an Animated.View. Used by wrong PIN entry and wrong word chips.
  */
 export function useShake(trigger: unknown) {
@@ -71,7 +71,7 @@ export function Spin({ children, duration = 18000, style }: { children: React.Re
   return <Animated.View style={[style, { transform: [{ rotate }] }]}>{children}</Animated.View>;
 }
 
-/** `float-y` — 0 -> -amount -> 0 */
+/** `float-y`: 0 -> -amount -> 0 */
 export function Float({
   children,
   duration = 4000,
@@ -88,7 +88,7 @@ export function Float({
   return <Animated.View style={[style, { transform: [{ translateY }] }]}>{children}</Animated.View>;
 }
 
-/** `ticker` — gentle opacity breathing. */
+/** `ticker`: gentle opacity breathing. */
 export function Ticker({ children, duration = 1200, style }: { children: React.ReactNode; duration?: number; style?: ViewStyle }) {
   const v = useLoop(duration);
   const opacity = v.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0.6, 1, 0.6] });
@@ -96,7 +96,7 @@ export function Ticker({ children, duration = 1200, style }: { children: React.R
 }
 
 /**
- * `flow-x` — a highlight sweeping left to right across its parent. The parent
+ * `flow-x`: a highlight sweeping left to right across its parent. The parent
  * must clip overflow and pass its width as `track`.
  */
 export function FlowX({
@@ -126,7 +126,7 @@ export function FlowX({
   );
 }
 
-/** `pulse-ring` — concentric rings expanding out of a circular badge. */
+/** `pulse-ring`: concentric rings expanding out of a circular badge. */
 export function PulseRings({
   size,
   color,

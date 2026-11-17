@@ -4,12 +4,18 @@ import { BioGlyph } from './BioGlyph';
 import { C, alpha } from '../../theme';
 import { Icon, PulseRings } from '../../ui';
 import { Pressable, View } from 'react-native';
+import { t } from '../../i18n';
+import { bioName } from '../context';
 
 export function BioCircle({ bio, phase, onPress }: { bio: Bio; phase: ScanPhase; onPress: () => void }) {
   const ok = phase === 'ok';
   const tone = ok ? C.green : C.amber;
   return (
-    <Pressable onPress={onPress} className="w-[110px] h-[110px] items-center justify-center self-center">
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={t('onboarding.bio.scanCircle', { bio: bioName(bio) })}
+      className="w-[110px] h-[110px] items-center justify-center self-center">
       {phase === 'scan' && <PulseRings size={110} color={alpha(C.amber, 0.5)} count={3} duration={1400} />}
       <View
         className="w-[110px] h-[110px] rounded-full items-center justify-center"
@@ -20,6 +26,6 @@ export function BioCircle({ bio, phase, onPress }: { bio: Bio; phase: ScanPhase;
   );
 }
 
-// Sheet now lives in src/ui — the wallet pickers use it too.
+// Sheet now lives in src/ui; the wallet pickers use it too.
 
 /* ── Checkbox ───────────────────────────────────────────────── */

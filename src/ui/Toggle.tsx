@@ -6,6 +6,8 @@ export function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) =
   return (
     <Pressable
       onPress={() => onChange(!on)}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: on }}
       className="w-[42px] h-[26px] rounded-full justify-center"
       style={{ backgroundColor: on ? C.amber : white(0.08), borderWidth: on ? 0 : 1, borderColor: C.line }}>
       <View

@@ -6,14 +6,21 @@
     "start": "expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
-    "check": "node src/theme.test.js && tsc --noEmit && eslint .",
+    "ios:dev": "expo run:ios",
+    "android:dev": "expo run:android",
+    "prebuild": "expo prebuild",
+    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/storage/secureStore.test.ts && tsx src/data/providers/providers.test.ts && tsc --noEmit && eslint . && tsx scripts/no-em-dash.ts",
     "lint": "eslint ."
   },
   "dependencies": {
     "expo": "^57.0.15",
     "expo-blur": "~57.0.2",
+    "expo-build-properties": "~57.0.23",
     "expo-clipboard": "~57.0.1",
+    "expo-constants": "~57.0.24",
+    "expo-dev-client": "~57.0.21",
     "expo-linear-gradient": "~57.0.1",
+    "expo-local-authentication": "~57.0.3",
     "expo-screen-capture": "~57.0.2",
     "expo-status-bar": "~57.0.1",
     "nativewind": "^4.2.6",
@@ -26,10 +33,12 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/node": "^26.6.6",
     "@types/react": "~19.2.0",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~57.0.1",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.15",
     "typescript": "~6.0.3"
   },
   "private": true

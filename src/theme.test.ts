@@ -1,8 +1,8 @@
 // Self-check for the only non-trivial logic in the project: the oklch -> sRGB
 // conversion every colour in the UI passes through.
-//   node src/theme.test.js
-const assert = require('node:assert/strict');
-const { oklch, alpha, C } = require('./theme');
+//   npx tsx src/theme.test.ts
+import { strict as assert } from 'node:assert/strict';
+import { oklch, alpha, C } from './theme';
 
 // Anchors: oklch coordinates of the sRGB primaries.
 assert.equal(oklch(1, 0, 0), 'rgb(255, 255, 255)');

@@ -1,6 +1,6 @@
 import React from 'react';
-import { C, white } from '../../theme';
-import { Txt } from '../../ui';
+import { C } from '../../theme';
+import { Txt, tile } from '../../ui';
 import { View } from 'react-native';
 
 const MASK = '••••••';
@@ -12,7 +12,7 @@ export function SeedGrid({ words, columns = 3, hidden }: { words: string[]; colu
         <View key={i} style={{ width: `${100 / columns}%`, padding: 3 }}>
           <View
             className="flex-row items-baseline gap-1.5 px-[7px] py-2 rounded-lg"
-            style={{ backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+            style={tile()}>
             <Txt mono className="text-[9px] text-text3 min-w-[12px]">
               {i + 1}
             </Txt>

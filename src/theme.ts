@@ -4,7 +4,7 @@
 // opaque hex.
 
 /** oklch -> 'rgb(...)' / 'rgba(...)' */
-function oklch(L, c, h, a = 1) {
+export function oklch(L: number, c: number, h: number, a = 1): string {
   const hr = (h * Math.PI) / 180;
   const A = c * Math.cos(hr);
   const B = c * Math.sin(hr);
@@ -24,14 +24,14 @@ function oklch(L, c, h, a = 1) {
   return a === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/** Re-tint an existing token at a new alpha — the RN stand-in for `oklch(from X l c h / a)`. */
-const alpha = (rgb, a) =>
+/** Re-tint an existing token at a new alpha, the RN stand-in for `oklch(from X l c h / a)`. */
+export const alpha = (rgb: string, a: number): string =>
   rgb.replace(/^rgba?\(\s*([\d.]+,\s*[\d.]+,\s*[\d.]+)(?:,\s*[\d.]+)?\s*\)$/, (_, ch) => `rgba(${ch}, ${a})`);
 
-const white = (a) => `rgba(255, 255, 255, ${a})`;
-const black = (a) => `rgba(0, 0, 0, ${a})`;
+export const white = (a: number): string => `rgba(255, 255, 255, ${a})`;
+export const black = (a: number): string => `rgba(0, 0, 0, ${a})`;
 
-const C = {
+export const C = {
   bg0: oklch(0.14, 0.012, 60),
   bg1: oklch(0.18, 0.014, 60),
   bg2: oklch(0.22, 0.014, 60),
@@ -54,8 +54,11 @@ const C = {
   ink: '#0b0a09',
 };
 
+/** A palette key: the `tone`/colour name strings fixtures pass around. */
+export type Tone = keyof typeof C;
+
 // Gradient stop lists, mirroring the linear-gradient recipes in styles.css.
-const G = {
+export const G = {
   amber: [oklch(0.86, 0.16, 70), oklch(0.74, 0.17, 65)],
   amberDeep: [C.amber, oklch(0.7, 0.17, 60)],
   teal: [oklch(0.86, 0.12, 195), oklch(0.74, 0.13, 200)],
@@ -73,15 +76,15 @@ const G = {
   cardBlack: ['#1a1208', '#2a1a08', '#0e0a06'],
   tunnel: [C.teal, oklch(0.95, 0.08, 240), C.violet],
   avatar: [C.amber, C.violet],
-  chip: ['linear'],
   chipGold: [C.amber, oklch(0.6, 0.17, 60)],
   chipSteel: [oklch(0.6, 0.01, 70), oklch(0.4, 0.01, 70)],
   emvChip: [oklch(0.85, 0.08, 80), oklch(0.6, 0.08, 70)],
   splash: [oklch(0.2, 0.014, 60), oklch(0.1, 0.012, 60)],
 };
 
-// Per-token identity used by TokenIcon.
-const TOKENS = {
+// Per-token identity used by TokenIcon. Indexed by arbitrary symbol strings
+// (pickers feed it anything), so unknown symbols fall back at the call site.
+export const TOKENS: Record<string, { from: string; to: string; glyph: string }> = {
   BTC: { from: C.amber, to: oklch(0.7, 0.17, 50), glyph: '₿' },
   ML: { from: C.teal, to: oklch(0.7, 0.14, 210), glyph: 'Ⓜ' },
   ETH: { from: oklch(0.74, 0.06, 280), to: oklch(0.55, 0.08, 280), glyph: 'Ξ' },
@@ -94,7 +97,7 @@ const TOKENS = {
 };
 
 // Per-chain accent, shared by ChainBadge / Receive / Bridge / Home.
-const CHAINS = {
+export const CHAINS = {
   Mintlayer: C.teal,
   Bitcoin: C.amber,
   Ethereum: C.violet,
@@ -103,4 +106,6 @@ const CHAINS = {
   BNB: C.bnb,
 };
 
-module.exports = { oklch, alpha, white, black, C, G, TOKENS, CHAINS };
+/** Chains the UI knows an accent for. Unknown chain strings fall back
+ *  visibly at the (few) places that index freely. */
+export type ChainName = keyof typeof CHAINS;

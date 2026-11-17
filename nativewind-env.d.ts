@@ -1,5 +1,5 @@
 // NativeWind 4.2 ships its `className` augmentation in <pkg>/types.d.ts, but
-// points package.json#types at dist/index.d.ts — so the documented
+// points package.json#types at dist/index.d.ts, so the documented
 // `/// <reference types="nativewind/types" />` silently resolves to the wrong
 // file and className stays untyped. Declare the props we actually use instead
 // of depending on that broken chain (and on npm hoisting layout).

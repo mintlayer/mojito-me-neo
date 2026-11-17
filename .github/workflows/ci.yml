@@ -19,11 +19,12 @@ jobs:
 
       - run: npm ci
 
-      # theme.test.js + tsc --noEmit + eslint . — the same command contributors
-      # are asked to run locally, so CI can't disagree with the README.
+      # theme, i18n, storage and provider tests + tsc --noEmit + eslint + the
+      # dash scan: the same command contributors are asked to run locally, so
+      # CI can't disagree with the README.
       - run: npm run check
 
       # Catches anything that typechecks but won't bundle (native module
       # resolution, Metro config drift).
       - name: Bundle
-        run: npx expo export --platform android --output-dir .ci-export
+        run: npx expo export --platform android --output-dir .expo-export

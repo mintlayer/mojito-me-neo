@@ -3,7 +3,9 @@ node_modules/
 .expo-export/
 .expo-export-web/
 dist/
-ios/
-android/
+/ios/
+/android/
+.env*
+!.env.example
 *.log
 .DS_Store

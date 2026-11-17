@@ -1,9 +1,10 @@
 import React from 'react';
 import { View } from 'react-native';
-import { C, alpha, white } from '../theme';
+import { C, white } from '../theme';
 import { Icon } from './icons';
 import type { IconName } from './icons';
 import { Txt } from './Txt';
+import { tint } from './style';
 
 export function Chip({
   children,
@@ -21,11 +22,11 @@ export function Chip({
   return (
     <View
       className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-full"
-      style={{
-        backgroundColor: tone ? alpha(c, 0.14) : white(0.03),
-        borderWidth: 1,
-        borderColor: tone ? alpha(c, 0.35) : C.line,
-      }}>
+      style={
+        tone
+          ? tint(c, 0.14, 0.35)
+          : { backgroundColor: white(0.03), borderWidth: 1, borderColor: C.line }
+      }>
       {icon ? (
         <Icon name={icon} size={12} color={c} />
       ) : (

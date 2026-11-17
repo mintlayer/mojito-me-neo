@@ -1,8 +1,10 @@
 import React from 'react';
 import { View } from 'react-native';
 import { C } from '../theme';
+import { t } from '../i18n';
 import { Enter } from './motion';
 import { Btn } from './Btn';
+import type { BtnTone } from './Btn';
 import { Screen } from './Screen';
 import { SuccessMark } from './SuccessMark';
 import { Txt } from './Txt';
@@ -13,7 +15,7 @@ export function SuccessScreen({
   description,
   tone = C.green,
   btnTone = 'primary',
-  doneLabel = 'Done',
+  doneLabel = t('common.done'),
   onDone,
   header,
   children,
@@ -23,7 +25,7 @@ export function SuccessScreen({
   summary?: React.ReactNode;
   description?: string;
   tone?: string;
-  btnTone?: string;
+  btnTone?: BtnTone;
   doneLabel?: string;
   onDone?: () => void;
   /** Rendered above the mark, outside the centred column (e.g. a SheetHeader). */

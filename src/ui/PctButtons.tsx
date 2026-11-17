@@ -1,19 +1,21 @@
 import React from 'react';
 import { Pressable, View } from 'react-native';
-import { C, white } from '../theme';
+import { t } from '../i18n';
+import { tile } from './style';
 import { Txt } from './Txt';
 
 export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => void; compact?: boolean }) {
+  const max = t('common.max');
   const opts: [string, number][] = compact
     ? [
         ['½', 0.5],
-        ['Max', 1],
+        [max, 1],
       ]
     : [
         ['25%', 0.25],
         ['50%', 0.5],
         ['75%', 0.75],
-        ['Max', 1],
+        [max, 1],
       ];
   return (
     <View className="flex-row gap-1.5">
@@ -22,7 +24,7 @@ export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => 
           key={l}
           onPress={() => onPick(f)}
           className={`${compact ? 'px-2 py-0.5 rounded' : 'flex-1 py-1.5 rounded-lg'} items-center`}
-          style={{ backgroundColor: white(0.04), borderWidth: compact ? 0 : 1, borderColor: C.lineSoft }}>
+          style={[tile(), compact && { borderWidth: 0 }]}>
           <Txt className="text-[11px] font-medium text-text1">{l}</Txt>
         </Pressable>
       ))}
@@ -30,4 +32,4 @@ export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => 
   );
 }
 
-/** Inset `LABEL [value] UNIT` row — the dex order ticket fields. */
+/** Inset `LABEL [value] UNIT` row: the dex order ticket fields. */

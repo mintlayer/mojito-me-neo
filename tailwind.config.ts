@@ -1,16 +1,17 @@
-const { C } = require('./src/theme');
+import type { Config } from 'tailwindcss';
+import nativewindPreset from 'nativewind/preset';
+import { C } from './src/theme';
 
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: ['./App.tsx', './src/**/*.{js,jsx,ts,tsx}'],
-  presets: [require('nativewind/preset')],
+// One source of truth: src/theme.ts. Never re-declare a colour here.
+export default {
+  content: ['./App.tsx', './src/**/*.{ts,tsx}'],
+  presets: [nativewindPreset],
   theme: {
     extend: {
-      // One source of truth: src/theme.js. Never re-declare a colour here.
       colors: C,
       borderColor: { DEFAULT: C.lineSoft },
       fontFamily: {
-        // ponytail: system font instead of bundling Inter — SF Pro / Roboto are
+        // ponytail: system font instead of bundling Inter. SF Pro / Roboto are
         // near-identical here and cost 0 KB. Swap in expo-font if brand-exact.
         sans: ['System'],
         mono: ['Menlo', 'monospace'],
@@ -24,4 +25,4 @@ module.exports = {
     },
   },
   plugins: [],
-};
+} satisfies Config;

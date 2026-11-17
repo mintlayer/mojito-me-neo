@@ -1,4 +1,5 @@
 import React from 'react';
+import { t } from '../i18n';
 import { PickerSheet } from './PickerSheet';
 import { TokenIcon } from './TokenIcon';
 
@@ -21,7 +22,7 @@ export function TokenPicker({
     <PickerSheet
       open={open}
       onClose={onClose}
-      title="Select asset"
+      title={t('common.selectAsset')}
       options={symbols}
       value={value}
       onSelect={onSelect}
@@ -33,4 +34,4 @@ export function TokenPicker({
 
 /* ── Chrome ─────────────────────────────────────────────────── */
 
-/** Radial wash behind the whole app — the `.app` background in styles.css. */
+/** Radial wash behind the whole app, the `.app` background in styles.css. */

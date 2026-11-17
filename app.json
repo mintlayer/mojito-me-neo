@@ -5,6 +5,7 @@
     "version": "2.4.1",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "scheme": "mojito-me",
     "backgroundColor": "#0b0a09",
     "ios": {
       "supportsTablet": false
@@ -17,6 +18,10 @@
     "platforms": [
       "ios",
       "android"
+    ],
+    "plugins": [
+      "expo-build-properties",
+      "./modules/mojito-core/app.plugin.js"
     ]
   }
 }

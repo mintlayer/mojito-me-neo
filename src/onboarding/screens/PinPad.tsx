@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { C } from '../../theme';
 import { Txt } from '../../ui';
-import { Column, Keypad, PinDots, StepHeader } from '.././ui';
+import { Column, Keypad, PinDots, StepHeader } from '../ui';
 import type { Ctx } from '../context';
 
 export function PinPad({
@@ -13,6 +13,7 @@ export function PinPad({
   setValue,
   message,
   error,
+  disabled,
 }: {
   ctx: Ctx;
   title: string;
@@ -21,6 +22,8 @@ export function PinPad({
   setValue: (v: string) => void;
   message?: string;
   error?: boolean;
+  /** True while a lockout is armed: freezes the keypad like UnlockScreen. */
+  disabled?: boolean;
 }) {
   return (
     <Column>
@@ -36,7 +39,11 @@ export function PinPad({
         {message ?? ''}
       </Txt>
       <View className="flex-1" />
-      <Keypad onKey={(k) => value.length < 6 && setValue(value + k)} onDelete={() => setValue(value.slice(0, -1))} />
+      <Keypad
+        disabled={disabled}
+        onKey={(k) => value.length < 6 && setValue(value + k)}
+        onDelete={() => setValue(value.slice(0, -1))}
+      />
     </Column>
   );
 }

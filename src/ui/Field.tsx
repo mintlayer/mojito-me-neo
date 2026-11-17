@@ -26,6 +26,7 @@ export function Field({
           value={value}
           onChangeText={onChangeText}
           keyboardType="decimal-pad"
+          accessibilityLabel={label}
           className="flex-1 font-mono text-[16px] text-right p-0"
           style={{ color: tone }}
         />

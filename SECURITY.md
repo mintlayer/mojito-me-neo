@@ -16,7 +16,7 @@ window to ship a fix before disclosing publicly.
 
 ### Encrypting your report
 
-Please encrypt anything sensitive — a vulnerability report in plaintext email is itself a
+Please encrypt anything sensitive: a vulnerability report in plaintext email is itself a
 disclosure.
 
 | | |
@@ -55,7 +55,7 @@ management. Cryptography is deliberately mocked:
 These are documented in the README and are **not** vulnerabilities. Reports against them will be
 closed as out of scope.
 
-**In scope** meanwhile: anything where the UI makes a security claim it doesn't keep — for example
+**In scope** meanwhile: anything where the UI makes a security claim it doesn't keep. For example,
 a control that reports success on an action that didn't happen, secret material reachable through
 the accessibility tree or a screenshot, or a state that locks a user out with no recovery path.
 Those are real defects today, even without a backend.
@@ -66,4 +66,4 @@ Those are real defects today, even without a backend.
 
 It becomes valid when Mojito ME ships to production, at which point this file will be updated with
 the scope, severity bands and reward terms. Until then reports are genuinely welcome and will be
-credited — they are simply not eligible for a payout.
+credited, they are simply not eligible for a payout.

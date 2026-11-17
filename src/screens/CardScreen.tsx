@@ -2,37 +2,51 @@ import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
-import { CARD_FEATURES, CARD_TIERS, WAITLIST } from '../data';
+import { t } from '../i18n';
+import { useData, useProviders } from '../data/providers/context';
+import type { WaitlistResult } from '../data/providers';
 import { C, G, alpha, black } from '../theme';
-import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconName, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
+import { Btn, Callout, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
 
 export function CardScreen() {
+  const providers = useProviders();
+  const waitlist = useData((d) => d.getWaitlist());
+  const cardFeatures = useData((d) => d.getCardFeatures());
+  const cardTiers = useData((d) => d.getCardTiers());
   const [email, setEmail] = useState('');
-  const [registered, setRegistered] = useState(false);
-  const pct = (WAITLIST.taken / WAITLIST.total) * 100;
+  const [result, setResult] = useState<WaitlistResult | null>(null);
+  const [joinError, setJoinError] = useState<'invalid' | 'duplicate' | 'error' | null>(null);
+
+  if (!waitlist || !cardFeatures || !cardTiers) return <Screen />;
+  const pct = (waitlist.taken / waitlist.total) * 100;
+  const blackTier = cardTiers.find((tier) => tier.name === 'Black');
+
+  // Same handler for the primary button and the email field's return key.
+  const join = () => {
+    void providers.waitlist.join(email).then((r) => {
+      if (r.ok) {
+        setResult(r);
+        setJoinError(null);
+      } else if (r.reason === 'invalid' || r.reason === 'duplicate') {
+        setJoinError(r.reason);
+      }
+    }).catch(() => setJoinError('error'));
+  };
 
   return (
     <Screen>
-      <ScreenIntro
-        title="Mojito Card"
-        chip="COMING SOON"
-        tone={C.amber}
-        blurb="Spend Bitcoin, ML and stablecoins anywhere — settled onchain via Mintlayer."
-      />
+      <ScreenIntro title={t('card.title')} chip={t('card.chip')} tone={C.amber} blurb={t('card.blurb')} />
 
       <View className="px-5 pt-8">
-        <CardHero />
+        <CardHero tierName={blackTier?.name ?? ''} />
       </View>
 
       {/* Waitlist */}
       <View className="px-5 pt-2 items-center">
-        <Label>Early access waitlist</Label>
-        <View className="flex-row items-baseline gap-1.5 mt-1">
-          <Txt mono className="text-[28px] font-bold tracking-tightest" style={{ color: C.amber }}>
-            {WAITLIST.taken.toLocaleString()}
-          </Txt>
-          <Txt className="text-[12px] text-text2">/ {WAITLIST.total.toLocaleString()} spots</Txt>
-        </View>
+        <Label>{t('card.waitlist.title')}</Label>
+        <Txt mono className="text-[28px] font-bold tracking-tightest mt-1" style={{ color: C.amber }}>
+          {t('card.waitlist.spots', { taken: waitlist.taken.toLocaleString(), total: waitlist.total.toLocaleString() })}
+        </Txt>
         <View className="w-full mt-2.5">
           <ProgressBar pct={pct} />
         </View>
@@ -40,7 +54,7 @@ export function CardScreen() {
 
       {/* Pre-register */}
       <View className="px-5 pt-6">
-        {registered ? (
+        {result?.ok ? (
           <Enter>
             <Card grad={G.raisedGreen} accent={alpha(C.green, 0.4)} className="p-[18px] items-center rounded-[18px]">
               <View
@@ -48,47 +62,61 @@ export function CardScreen() {
                 style={{ backgroundColor: alpha(C.green, 0.18), borderWidth: 1, borderColor: alpha(C.green, 0.5) }}>
                 <Icon name="check" size={24} color={C.green} stroke={2.4} />
               </View>
-              <Txt className="text-[16px] font-semibold mt-3">You're on the list</Txt>
+              <Txt className="text-[16px] font-semibold mt-3">{t('card.waitlist.successTitle')}</Txt>
               <Txt className="text-[12px] text-text2 mt-1 text-center">
-                You're #{(WAITLIST.taken + 1).toLocaleString()}. We'll email {email} when it's ready.
+                {t('card.waitlist.successBody', { position: (result.position ?? waitlist.taken + 1).toLocaleString(), email })}
               </Txt>
               <View className="mt-3.5">
                 <Chip tone={C.amber} dot={false}>
-                  ⛓ ESTIMATED ARRIVAL · Q2 2026
+                  {t('card.waitlist.eta')}
                 </Chip>
               </View>
             </Card>
           </Enter>
         ) : (
           <Card className="p-4 rounded-[18px]">
-            <Txt className="text-[13px] font-semibold">Reserve your card</Txt>
-            <Txt className="text-[11px] text-text2 mt-1">Lock in your spot. No commitment, no fees.</Txt>
+            <Txt className="text-[13px] font-semibold">{t('card.waitlist.formTitle')}</Txt>
+            <Txt className="text-[11px] text-text2 mt-1">{t('card.waitlist.formSub')}</Txt>
             <View
               className="flex-row items-center gap-2 mt-3 px-3.5 py-3 rounded-xl"
               style={{ backgroundColor: black(0.3), borderWidth: 1, borderColor: C.lineSoft }}>
               <TextInput
                 value={email}
                 onChangeText={setEmail}
-                placeholder="you@email.com"
-                accessibilityLabel="Email address for the card waitlist"
+                placeholder={t('card.waitlist.email.placeholder')}
+                accessibilityLabel={t('card.waitlist.email.a11y')}
                 placeholderTextColor={C.text3}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                onSubmitEditing={join}
                 className="flex-1 text-[14px] text-text0 p-0"
               />
               <Txt mono className="text-[11px] text-text3">
                 ↵
               </Txt>
             </View>
-            <Btn tone="primary" className="mt-3" disabled={!email.trim()} onPress={() => setRegistered(true)}>
-              Pre-register · Get card #{(WAITLIST.taken + 1).toLocaleString()}
+            <Btn
+              tone="primary"
+              className="mt-3"
+              disabled={!email.trim()}
+              onPress={join}>
+              {t('card.waitlist.submit', { position: (waitlist.taken + 1).toLocaleString() })}
             </Btn>
+            {joinError && (
+              <Callout tone={C.red} icon="close" className="mt-3">
+                {joinError === 'invalid'
+                  ? t('card.waitlist.invalid')
+                  : joinError === 'duplicate'
+                    ? t('card.waitlist.duplicate')
+                    : t('card.waitlist.error')}
+              </Callout>
+            )}
             <View className="flex-row justify-between mt-2.5">
               <Txt mono className="text-[10px] text-text3">
-                ✓ Priority issuance
+                {t('card.waitlist.perk1')}
               </Txt>
               <Txt mono className="text-[10px] text-text3">
-                ✓ Founder rate · 0% FX
+                {t('card.waitlist.perk2')}
               </Txt>
             </View>
           </Card>
@@ -97,12 +125,12 @@ export function CardScreen() {
 
       {/* Features */}
       <View className="px-5 pt-5">
-        <Label className="mb-2.5">What's included</Label>
+        <Label className="mb-2.5">{t('card.features.title')}</Label>
         <View className="flex-row flex-wrap -m-1">
-          {CARD_FEATURES.map((f, i) => (
+          {cardFeatures.map((f, i) => (
             <Enter key={f.title} delay={i * 70} style={{ width: '50%' }}>
               <Card className="m-1 p-3.5 rounded-[14px]">
-                <IconTile name={f.icon as IconName} color={toneColor(f.tone)} size={30} />
+                <IconTile name={f.icon} color={toneColor(f.tone)} size={30} />
                 <Txt className="text-[13px] font-semibold mt-2.5">{f.title}</Txt>
                 <Txt className="text-[11px] text-text2 mt-0.5">{f.detail}</Txt>
               </Card>
@@ -113,13 +141,13 @@ export function CardScreen() {
 
       {/* Tiers */}
       <View className="px-5 pt-5">
-        <Label className="mb-2.5">Tiers</Label>
+        <Label className="mb-2.5">{t('card.tiers.title')}</Label>
         <Card className="p-1 rounded-2xl">
-          {CARD_TIERS.map((t, i) => {
-            const tone = t.name === 'Black' ? C.cream : t.name === 'Gold' ? C.amber : C.text1;
-            const swatch = t.name === 'Black' ? G.cardBlack.slice(1) : t.name === 'Gold' ? G.chipGold : G.chipSteel;
+          {cardTiers.map((tier, i) => {
+            const tone = tier.name === 'Black' ? C.cream : tier.name === 'Gold' ? C.amber : C.text1;
+            const swatch = tier.name === 'Black' ? G.cardBlack.slice(1) : tier.name === 'Gold' ? G.chipGold : G.chipSteel;
             return (
-              <View key={t.name} className="flex-row items-center gap-2.5 px-2.5 py-3">
+              <View key={tier.name} className="flex-row items-center gap-2.5 px-2.5 py-3">
                 {i > 0 && <Divider className="absolute left-2.5 right-2.5 top-0" />}
                 <LinearGradient
                   colors={gradColors(swatch)}
@@ -129,18 +157,18 @@ export function CardScreen() {
                 />
                 <View className="flex-1">
                   <Txt className="text-[13px] font-semibold" style={{ color: tone }}>
-                    {t.name}
+                    {tier.name}
                   </Txt>
                   <Txt mono className="text-[10px] text-text3 mt-0.5">
-                    Stake {t.stake}
+                    {t('card.tiers.stake', { stake: tier.stake })}
                   </Txt>
                 </View>
                 <Txt mono className="text-[12px] font-semibold" style={{ color: tone }}>
-                  {t.cashback}
+                  {tier.cashback}
                 </Txt>
-                {t.active ? (
+                {tier.active ? (
                   <Chip tone={C.amber} dot={false}>
-                    YOU
+                    {t('card.tiers.you')}
                   </Chip>
                 ) : (
                   <View className="w-6" />
@@ -154,10 +182,10 @@ export function CardScreen() {
   );
 }
 
-/** The physical card mock. ponytail: floats instead of pointer-tilting — tilt
- *  needs a gesture handler and reads as noise on touch. */
+/** The physical card mock. ponytail: floats instead of pointer-tilting, since
+ *  tilt needs a gesture handler and reads as noise on touch. */
 
-function CardHero() {
+function CardHero({ tierName }: { tierName: string }) {
   return (
     <Float duration={5000} amount={5}>
       <LinearGradient
@@ -192,13 +220,15 @@ function CardHero() {
           ))}
         </Svg>
 
+        {/* Card face print (wordmark, number, expiry, cardholder): deliberately
+            untranslated (i18n exemption), same convention as the Welcome wordmark. */}
         <View className="flex-row justify-between items-start">
           <View>
             <Txt className="text-[10px] font-semibold tracking-widest" style={{ color: C.amber }}>
               MOJITO
             </Txt>
             <Txt className="text-[22px] font-extrabold tracking-tightest mt-0.5" style={{ color: C.cream }}>
-              Black
+              {tierName}
             </Txt>
           </View>
           <LinearGradient

@@ -7,7 +7,9 @@ import type { IconName } from './icons';
 import { Txt } from './Txt';
 import { gradColors } from './style';
 
-const BTN_TONES: Record<string, { grad?: readonly string[]; fg: string; border?: string }> = {
+type BtnTone = 'primary' | 'teal' | 'violet' | 'green' | 'red' | 'default' | 'ghost';
+
+const BTN_TONES: Record<BtnTone, { grad?: readonly string[]; fg: string; border?: string }> = {
   primary: { grad: GR.amber, fg: '#1a1208' },
   teal: { grad: GR.teal, fg: '#06181c' },
   violet: { grad: GR.violet, fg: '#150622' },
@@ -16,6 +18,8 @@ const BTN_TONES: Record<string, { grad?: readonly string[]; fg: string; border?:
   default: { grad: GR.surface, fg: C.text0, border: C.line },
   ghost: { fg: C.text2 },
 };
+
+export type { BtnTone };
 
 export function Btn({
   children,
@@ -27,12 +31,12 @@ export function Btn({
 }: {
   children: React.ReactNode;
   onPress?: () => void;
-  tone?: string;
+  tone?: BtnTone;
   disabled?: boolean;
   className?: string;
   icon?: IconName;
 }) {
-  const t = BTN_TONES[tone] ?? BTN_TONES.default;
+  const t = BTN_TONES[tone];
   const body = (
     <View className="flex-row items-center justify-center gap-2 h-[52px] px-4">
       {icon && <Icon name={icon} size={16} color={t.fg} stroke={2} />}
@@ -44,6 +48,8 @@ export function Btn({
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
       className={`rounded-2xl overflow-hidden ${className}`}
       style={{ opacity: disabled ? 0.4 : 1 }}>
       {t.grad ? (
@@ -61,4 +67,4 @@ export function Btn({
   );
 }
 
-/** 36x36 rounded-square action — header settings/bell, sheet close. */
+/** 36x36 rounded-square action: header settings/bell, sheet close. */

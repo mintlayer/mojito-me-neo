@@ -1,30 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
+import { t } from '../../i18n';
 import type { Ctx } from '../context';
 import { PinPad } from './PinPad';
+import { bioName } from '../context';
+import { usePinEntry } from '../ui';
 
 export function PinSet({ ctx }: { ctx: Ctx }) {
-  const [val, setVal] = useState('');
-  // ctx is rebuilt every render of <Onboarding>, so depending on it would
-  // re-fire this effect constantly. A ref keeps the closure fresh instead.
-  const ctxRef = useRef(ctx);
-  ctxRef.current = ctx;
-
-  useEffect(() => {
-    if (val.length !== 6) return;
-    const t = setTimeout(() => {
-      ctxRef.current.setPin(val);
-      ctxRef.current.push('pin-confirm');
-    }, 250);
-    return () => clearTimeout(t);
-  }, [val]);
+  const { val, setValue } = usePinEntry({
+    target: null,
+    onMatch: (pin) => {
+      ctx.setPin(pin);
+      ctx.push('pin-confirm');
+    },
+  });
 
   return (
     <PinPad
       ctx={ctx}
-      title="Create a PIN"
-      subtitle={`6 digits. Unlocks the app when ${ctx.bio === 'face' ? 'Face ID' : 'your fingerprint'} isn't available.`}
+      title={t('onboarding.pin.set')}
+      subtitle={t('onboarding.pin.setSub', { bio: bioName(ctx.bio) })}
       value={val}
-      setValue={setVal}
+      setValue={setValue}
     />
   );
 }

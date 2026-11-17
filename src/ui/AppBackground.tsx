@@ -30,5 +30,5 @@ export function AppBackground() {
 }
 
 /** Scrollable screen body. Uses the real safe area instead of the mock's fake
- *  9:41 status bar — on device the OS already draws one.
+ *  9:41 status bar; on device the OS already draws one.
  *  ponytail: no fake status bar. */

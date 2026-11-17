@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { PanResponder, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { t } from '../../i18n';
 import { C, alpha, black } from '../../theme';
 import { Btn, Callout, Icon, ProgressBar, Txt } from '../../ui';
-import { Body, Column, StepHeader } from '.././ui';
+import { Body, Column, StepHeader } from '../ui';
 import type { Ctx } from '../context';
 
 const BITS_NEEDED = 256;
@@ -18,7 +19,7 @@ const BITS_NEEDED = 256;
 
 const BITS_PER_SAMPLE = 2;
 
-/** Cheap FNV-1a over the pool — shown so the user sees their input mattered. */
+/** Cheap FNV-1a over the pool, shown so the user sees their input mattered. */
 
 const fingerprint = (xs: number[]) => {
   let h = 0x811c9dc5;
@@ -45,7 +46,7 @@ function useDrawnEntropy() {
   };
 
   // useRef(expr) still evaluates expr on every render and discards the result,
-  // so build the responder lazily — this hook re-renders on every touch sample.
+  // so build the responder lazily: this hook re-renders on every touch sample.
   const responderRef = useRef<ReturnType<typeof PanResponder.create> | null>(null);
   if (!responderRef.current) {
     responderRef.current = PanResponder.create({
@@ -67,7 +68,7 @@ function useDrawnEntropy() {
         if (dx * dx + dy * dy < 9) return;
 
         const t = Date.now();
-        // Low-order position bits plus inter-sample timing — the parts a
+        // Low-order position bits plus inter-sample timing, the parts a
         // human can't reproduce. The high bits are just "where on screen".
         pool.current.push((Math.round(x) & 7) ^ ((Math.round(y) & 7) << 3) ^ ((t - prev.t) & 15));
         last.current = { x, y, t };
@@ -93,10 +94,9 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
     <Column>
       <StepHeader onBack={ctx.pop} />
       <Body className="px-6 pt-5 pb-7">
-        <Txt className="text-[24px] font-bold tracking-tightest">Draw your own entropy</Txt>
+        <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.entropy.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[20px]">
-          Scribble in the box below. The shape of your line and the timing between points seed the phrase — the more irregular
-          and unhurried, the better.
+          {t('onboarding.entropy.sub')}
         </Txt>
 
         <View
@@ -111,14 +111,14 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
           {paths.length === 0 && (
             <View className="absolute inset-0 items-center justify-center" pointerEvents="none">
               <Icon name="plus" size={22} color={C.text3} />
-              <Txt className="text-[12px] text-text3 mt-2">Draw here</Txt>
+              <Txt className="text-[12px] text-text3 mt-2">{t('onboarding.entropy.drawHere')}</Txt>
             </View>
           )}
         </View>
 
         <View className="flex-row justify-between items-center mt-3.5 mb-2">
           <Txt mono className="text-[11px] text-text3">
-            {Math.min(bits, BITS_NEEDED)} / {BITS_NEEDED} bits
+            {t('onboarding.entropy.bits', { bits: Math.min(bits, BITS_NEEDED), total: BITS_NEEDED })}
           </Txt>
           {done && (
             <Txt mono className="text-[11px]" style={{ color: C.green }}>
@@ -129,17 +129,16 @@ export function Entropy({ ctx }: { ctx: Ctx }) {
         <ProgressBar pct={pct} color={done ? C.green : C.amber} />
 
         <Callout tone={C.teal} icon="shield" className="mt-4">
-          Your drawing is mixed with the device's secure random generator — it never replaces it. A drawing alone holds far less
-          randomness than it appears to.
+          {t('onboarding.entropy.callout')}
         </Callout>
 
         <View className="flex-row gap-2.5 mt-4">
           <View className="flex-1">
-            <Btn onPress={reset}>Clear</Btn>
+            <Btn onPress={reset}>{t('onboarding.entropy.clear')}</Btn>
           </View>
           <View className="flex-1">
             <Btn tone="primary" disabled={!done} onPress={ctx.pop}>
-              Use this entropy
+              {t('onboarding.entropy.cta')}
             </Btn>
           </View>
         </View>

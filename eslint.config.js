@@ -18,7 +18,7 @@ module.exports = defineConfig([
       // built on: Animated.Value held in a useRef and read during render,
       // lazily-created pan responders, PIN retry state settled in an effect.
       // ponytail: off wholesale rather than restructuring working animation
-      // code during a dependency bump — revisit per-rule if we adopt the
+      // code during a dependency bump; revisit per-rule if we adopt the
       // React Compiler for real.
       'react-hooks/refs': 'off',
       'react-hooks/purity': 'off',

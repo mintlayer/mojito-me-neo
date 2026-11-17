@@ -1,7 +1,8 @@
 import React from 'react';
-import { C, white } from '../../theme';
-import { Icon, Txt } from '../../ui';
+import { C } from '../../theme';
+import { Icon, Txt, tile } from '../../ui';
 import { Pressable, View } from 'react-native';
+import { t } from '../../i18n';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
@@ -13,9 +14,9 @@ function Key({ label, onPress, children }: { label?: string; onPress: () => void
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label ?? 'Delete'}
+      accessibilityLabel={label ?? t('common.delete')}
       className="h-14 rounded-[14px] items-center justify-center"
-      style={{ width: '31%', backgroundColor: white(0.04), borderWidth: 1, borderColor: C.lineSoft }}>
+      style={[tile(), { width: '31%' }]}>
       {children ?? <Txt className="text-[22px] font-medium">{label}</Txt>}
     </Pressable>
   );
@@ -29,7 +30,7 @@ export function Keypad({
 }: {
   onKey: (k: string) => void;
   onDelete: () => void;
-  /** Bottom-left slot — the biometric shortcut on the unlock screen. */
+  /** Bottom-left slot: the biometric shortcut on the unlock screen. */
   corner?: React.ReactNode;
   disabled?: boolean;
 }) {

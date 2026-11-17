@@ -40,6 +40,10 @@ const PATHS = {
 
 export type IconName = keyof typeof PATHS | 'qr' | 'lock' | 'card';
 
+/** PATHS lacks the three shape-drawn glyphs (qr/lock/card), which Icon draws
+ *  by hand below; the predicate splits the union for the path renderer. */
+const hasPaths = (name: IconName): name is keyof typeof PATHS => name in PATHS;
+
 export function Icon({
   name,
   size = 20,
@@ -79,9 +83,10 @@ export function Icon({
         </>
       )}
       {(name === 'eye' || name === 'settings') && <Circle cx={12} cy={12} r={3} {...s} />}
-      {(PATHS as Record<string, readonly string[]>)[name]?.map((d, i) => (
-        <Path key={i} d={d} {...s} />
-      ))}
+      {hasPaths(name) &&
+        PATHS[name].map((d, i) => (
+          <Path key={i} d={d} {...s} />
+        ))}
     </Svg>
   );
 }
