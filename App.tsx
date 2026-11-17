@@ -89,8 +89,9 @@ function Layer({ children, z }: { children: React.ReactNode; z: number }) {
 }
 
 /** The app-level session: key handles and flags, never seed bytes. The
- *  vault handle carries vault metadata only; phrase decryption happens
- *  exclusively inside KeySession closures after PIN or biometrics. */
+ *  vault handle carries vault metadata only; phrase decryption stays inside
+ *  short-lived flows (walletVault.openWords for the backup reveal and the
+ *  unlock gating upgrade; the KeySession abstraction is deferred to M2). */
 type AppSession = {
   vault: WalletVaultHandle | null;
   deferred: boolean;

@@ -76,7 +76,7 @@ src/keys/                   the M1 key stack, pure TypeScript and vector-tested
   mlAccounts.ts             Mintlayer account derivation and bech32m addresses
   BtcKeyring.ts             BIP84 P2WPKH accounts on scure
   customPath.ts             generic m/… account-path parse for the discovery scan
-  session.ts                KeySession: short-lived vault handle with release()
+  session.ts                KeySession: short-lived vault handle (M2 consumers, see plans/)
 
 src/screens/                one screen per file
   HomeScreen.tsx  DexScreen.tsx  SwapScreen.tsx  BridgeScreen.tsx
@@ -251,6 +251,18 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
    biometrics choice on, re-seals under a fresh gated key at the next unlock.
 5. **Cold start never prompts.** Kill and relaunch the app: the existence probe must not show a
    biometric prompt behind the splash.
+6. **Biometrics toggle on a biometrics-less device must not brick.** In Settings on a device with
+   no biometrics enrolled: the biometrics row shows the unavailable copy with the switch disabled,
+   enabling is impossible, and nothing persists `biometrics: true`. Lock and unlock with the PIN:
+   the wallet keeps opening (no gated-key prompt can appear). A wallet that had the choice
+   persisted before this guard opens too: the cold start downgrades the stored choice.
+7. **Fingerprint devices see fingerprint copy.** Onboard on a fingerprint-only Android device or a
+   Touch ID iPhone: the Secure and PIN screens show the fingerprint noun and glyph, never
+   "Face ID".
+8. **Declined native prompt returns to the lock with correct copy.** At unlock, cancel the OS
+   prompt for the vault key: the label reads "Verifying" while the gate runs, then the screen is
+   back at "Tap to unlock" (never stuck on an unlocked claim), and a retryable unlock failure
+   shows the "Unlock failed" alert.
 
 ---
 

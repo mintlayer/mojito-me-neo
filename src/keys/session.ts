@@ -71,12 +71,13 @@ class OpenKeySession implements KeySession {
 
 /**
  * Unlock-time session: decrypts the vault phrase (after PIN or biometrics)
- * and returns a short-lived handle. There is at most one at a time; callers
- * call release() when done (the zeroize guarantee of withSeed does not
- * extend to the mnemonic string, see the header comment). One sanctioned UI
- * exception lives outside this handle: the backup reveal screen keeps the
- * words in onboarding state for the reveal and verify UI, and clears them
- * when the backup layer closes; the phrase never reaches the app session.
+ * and returns a short-lived handle. Deferred to M2 (decisions.md D10): no M1
+ * flow opens one yet. There is at most one at a time; callers call release()
+ * when done (the zeroize guarantee of withSeed does not extend to the
+ * mnemonic string, see the header comment). One sanctioned UI exception lives
+ * outside this handle: the backup reveal screen keeps the words in onboarding
+ * state for the reveal and verify UI, and clears them when the backup layer
+ * closes; the phrase never reaches the app session.
  */
 export async function openKeySession(): Promise<KeySession> {
   const words = await walletVault.openWords();

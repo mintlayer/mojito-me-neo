@@ -22,8 +22,9 @@
 // The AES-256-GCM key lives in Keychain or Keystore (secureStore seam) and
 // never returns to JS; the sealed blob is persisted by the blobStore seam.
 // Meta rides inside the sealed payload: meta() decrypts metadata only and
-// never hands out phrase bytes; openWords is the single decryption path and
-// exists for the KeySession unlock flow.
+// never hands out phrase bytes; openWords is the single decryption path. Its
+// M1 callers are the backup reveal and the unlock gating upgrade; the
+// KeySession consumer arrives in M2 (decisions.md D10).
 import type { MlNetwork, SealedBlob } from '../../modules/mojito-core';
 import { getSecureStore } from './secureStore';
 import type { SecureStore } from './secureStore';
@@ -185,10 +186,10 @@ export const walletVault = {
     return payload.meta;
   },
 
-  /** The decrypted phrase. Callers: the KeySession unlock flow, and the
+  /** The decrypted phrase. M1 callers: the unlock gating upgrade and the
    *  backup reveal screen, which is the one sanctioned UI exception: it
    *  holds the words in onboarding state for the reveal and verify UI and
-   *  clears them when the backup layer closes. */
+   *  clears them when the backup layer closes (KeySession lands in M2). */
   async openWords(): Promise<string[]> {
     const { store } = await getSecureStore();
     const { store: blobs } = await getBlobStore();
