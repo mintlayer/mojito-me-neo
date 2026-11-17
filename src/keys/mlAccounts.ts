@@ -73,14 +73,6 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function pathLevels(coinType: MlCoinType): Uint8Array[] {
-  return [
-    u32be(BIP44_PURPOSE | HARDENED),
-    u32be(coinType | HARDENED),
-    u32be(ACCOUNT_INDEX | HARDENED),
-  ];
-}
-
 /** Extended-key runtime blob: kind, level count, path levels, chain code,
  *  key material (32-byte private or 33-byte compressed public). */
 function extendedBlob(levels: Uint8Array[], chainCode: Uint8Array, key: Uint8Array): Uint8Array {
@@ -150,17 +142,41 @@ export async function deriveMlAccount(
   passphrase?: string,
 ): Promise<MlAccount> {
   const coinType = COIN_TYPES[network];
+  return deriveMlAccountAtLevels(words, [BIP44_PURPOSE, coinType, ACCOUNT_INDEX], network, passphrase);
+}
+
+/**
+ * Derive a Mintlayer account from an explicit account path (the discovery
+ * custom-path scan). `levels` are plain indices, one per hardened level; the
+ * runtime blob keeps the parsed path as entered instead of the default
+ * m/44'/<coin type>/0'.
+ */
+export async function deriveMlAccountAtPath(
+  words: string[],
+  levels: number[],
+  network: MlDerivationNetwork,
+): Promise<MlAccount> {
+  return deriveMlAccountAtLevels(words, levels, network);
+}
+
+async function deriveMlAccountAtLevels(
+  words: string[],
+  levels: number[],
+  network: MlDerivationNetwork,
+  passphrase?: string,
+): Promise<MlAccount> {
   const seed = await mnemonicToSeed(words, passphrase);
-  const account = HDKey.fromMasterSeed(seed).derive(`m/44'/${coinType}'/${ACCOUNT_INDEX}'`);
+  const path = `m/${levels.map((l) => `${l}'`).join('/')}`;
+  const account = HDKey.fromMasterSeed(seed).derive(path);
   if (!account.privateKey || !account.chainCode || !account.publicKey) {
     throw new Error('account derivation failed');
   }
-  const levels = pathLevels(coinType);
+  const blobLevels = levels.map((l) => u32be(l | HARDENED));
   return {
-    accountPrivkey: extendedBlob(levels, account.chainCode, account.privateKey),
-    xpub: extendedBlob(levels, account.chainCode, account.publicKey),
+    accountPrivkey: extendedBlob(blobLevels, account.chainCode, account.privateKey),
+    xpub: extendedBlob(blobLevels, account.chainCode, account.publicKey),
     network,
-    coinType,
+    coinType: COIN_TYPES[network],
   };
 }
 

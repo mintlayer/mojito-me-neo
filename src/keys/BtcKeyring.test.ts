@@ -6,7 +6,8 @@ import { strict as assert } from 'node:assert/strict';
 import { base58check } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-import { btcAddressAt, btcPrivateKeyAt, deriveBtcAccount } from './BtcKeyring';
+import { btcAddressAt, btcPrivateKeyAt, deriveBtcAccount, type BtcAccount } from './BtcKeyring';
+import { deriveCustomScan } from './customPath';
 
 const VECTOR_12 = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'.split(' ');
 
@@ -56,6 +57,24 @@ async function main() {
   const point = secp256k1.getPublicKey(priv, true);
   const fromXpub = (await import('@scure/bip32')).HDKey.fromExtendedKey(account.xpub).derive('m/0/0');
   assert.deepEqual(point, fromXpub.publicKey, 'private and public paths must agree');
+
+  // A custom account path derives a different account, not the default:
+  // m/84'/0'/3' is not the BIP84 account 0.
+  const custom = await deriveCustomScan(VECTOR_12, "m/84'/0'/3'");
+  assert.equal(custom.chain, 'btc');
+  assert.notEqual((custom.account as BtcAccount).xpub, account.xpub, 'custom account index 3 differs');
+  const customAddr = await btcAddressAt(custom.account as BtcAccount, 0, 0);
+  assert.ok(customAddr.startsWith('bc1q'), 'custom mainnet path yields a mainnet address');
+
+  // The canonical path parses to exactly the default derivation.
+  const canonical = await deriveCustomScan(VECTOR_12, "m/84'/0'/0'");
+  assert.equal((canonical.account as BtcAccount).xpub, account.xpub);
+
+  // Unsupported purposes and malformed shapes are rejected, not ignored.
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/49'/0'/0'"), /purpose/);
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/84'/5'/0'"), /coin/);
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/84'/0'"), /shape/);
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/84'/0'/0'/0"), /shape/);
 
   console.log('BtcKeyring.test.ts: BIP84 vectors match');
 }

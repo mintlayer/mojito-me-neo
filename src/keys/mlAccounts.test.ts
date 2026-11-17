@@ -5,6 +5,7 @@
 import { strict as assert } from 'node:assert/strict';
 
 import { deriveMlAccount, mlAddressAt, mlAddressPublicKey } from './mlAccounts';
+import { deriveCustomScan } from './customPath';
 
 const MNEMONIC = `${Array(23).fill('abandon').join(' ')} art`;
 
@@ -84,6 +85,22 @@ async function main() {
   const tn = await deriveMlAccount(words, 'testnet');
   const first = await mlAddressAt(tn.xpub, 0, 0, 'testnet');
   assert.ok(first.startsWith('tmt1'), 'testnet address prefix');
+
+  // The custom-path scan reuses the same derivation: the canonical testnet
+  // account path reproduces the parity xpub blob above, and a different
+  // account index differs from it.
+  const scanned = await deriveCustomScan(words, "m/44'/1'/0'");
+  assert.equal(scanned.chain, 'ml');
+  assert.equal(
+    bytesToHex((scanned.account as import('./mlAccounts').MlAccount).xpub),
+    PARITY.xpub.testnet,
+    'custom scan of the canonical path must match the parity vector',
+  );
+  const other = await deriveCustomScan(words, "m/44'/1'/2'");
+  assert.notEqual(
+    bytesToHex((other.account as import('./mlAccounts').MlAccount).xpub),
+    PARITY.xpub.testnet,
+  );
 
   console.log('mlAccounts.test.ts: all parity vectors match');
 }

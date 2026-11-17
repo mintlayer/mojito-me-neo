@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { TextInput, View } from 'react-native';
 import { t } from '../../i18n';
-import { deriveMlAccount, mlReceiveAddresses } from '../../keys/mlAccounts';
-import { deriveBtcAccount, btcReceiveAddresses } from '../../keys/BtcKeyring';
+import { deriveMlAccount, mlReceiveAddresses, type MlAccount } from '../../keys/mlAccounts';
+import { deriveBtcAccount, btcReceiveAddresses, type BtcAccount } from '../../keys/BtcKeyring';
+import { CustomPathError, deriveCustomScan } from '../../keys/customPath';
 import { createFixtureAddressProbe, type AddressProbe } from '../AddressProbe';
 import { C, alpha, black, white } from '../../theme';
 import { Btn, Callout, Sheet, Ticker, Txt } from '../../ui';
@@ -29,36 +30,62 @@ type Derived = {
  * Balances and history arrive in M2 behind the same interface.
  */
 export function Discovery({ ctx }: { ctx: Ctx }) {
-  const [phase, setPhase] = useState<'deriving' | 'done'>('deriving');
+  const [phase, setPhase] = useState<'deriving' | 'done' | 'error'>('deriving');
   const [derived, setDerived] = useState<Derived | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
   const [path, setPath] = useState("m/84'/0'/3'");
+  /** null = the default accounts; otherwise the entered account path. */
+  const [scanPath, setScanPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (phase !== 'deriving') return;
     const words = ctx.seedWords;
+    // No phrase in memory (deep re-entry after state loss): a dedicated
+    // error phase with real copy instead of the progress label wedging.
     if (!words) {
-      setError(t('onboarding.discovery.deriving'));
+      setError(t('onboarding.discovery.missingPhrase'));
+      setPhase('error');
       return;
     }
     let alive = true;
     void (async () => {
-      const ml = await deriveMlAccount(words, 'testnet');
-      const mlAddresses = await mlReceiveAddresses(ml.xpub, 'testnet', ADDRESS_COUNT);
-      const btc = await deriveBtcAccount(words, 'testnet');
-      const btcAddresses = await btcReceiveAddresses(btc, ADDRESS_COUNT);
+      let mlAddresses: string[];
+      let btcAddresses: string[];
+      if (scanPath === null) {
+        const ml = await deriveMlAccount(words, 'testnet');
+        mlAddresses = await mlReceiveAddresses(ml.xpub, 'testnet', ADDRESS_COUNT);
+        const btc = await deriveBtcAccount(words, 'testnet');
+        btcAddresses = await btcReceiveAddresses(btc, ADDRESS_COUNT);
+      } else {
+        // The custom scan derives the chain the path names (purpose 44 ML,
+        // purpose 84 BTC) and lists its first receiving addresses.
+        const scan = await deriveCustomScan(words, scanPath);
+        if (scan.chain === 'ml') {
+          mlAddresses = await mlReceiveAddresses((scan.account as MlAccount).xpub, scan.network, ADDRESS_COUNT);
+          btcAddresses = [];
+        } else {
+          mlAddresses = [];
+          btcAddresses = await btcReceiveAddresses(scan.account as BtcAccount, ADDRESS_COUNT);
+        }
+      }
       const { funded } = await probe.probe([...mlAddresses, ...btcAddresses]);
       if (!alive) return;
       setDerived({ mlAddresses, btcAddresses, funded: new Set(funded) });
       setPhase('done');
-    })().catch(() => {
-      if (alive) setError(t('common.error.generic'));
+    })().catch((e) => {
+      if (!alive) return;
+      setError(
+        e instanceof CustomPathError
+          ? t('onboarding.discovery.pathInvalid')
+          : t('common.error.generic'),
+      );
+      setPhase('error');
     });
     return () => {
       alive = false;
     };
-  }, [phase, ctx]);
+  }, [phase, ctx, scanPath]);
 
   const found = (derived?.funded.size ?? 0) > 0;
 
@@ -66,7 +93,14 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
     <Column>
       <StepHeader onBack={ctx.pop} step={4} />
 
-      {phase === 'deriving' ? (
+      {phase === 'error' ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <BigBadge icon="history" size={72} square />
+          <Txt className="text-[15px] font-semibold mt-5 text-center leading-[21px]" style={{ color: C.red }}>
+            {error}
+          </Txt>
+        </View>
+      ) : phase === 'deriving' ? (
         <View className="flex-1 items-center justify-center px-6">
           <BigBadge icon="scan" pulsing />
           <Txt className="text-[20px] font-bold tracking-tightest mt-6">{t('onboarding.discovery.deriving')}</Txt>
@@ -153,7 +187,7 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
             <BigBadge icon="history" size={72} square />
             <Txt className="text-[20px] font-bold tracking-tightest mt-5">{t('onboarding.discovery.none')}</Txt>
             <Txt className="text-[13px] text-text2 mt-2 text-center leading-[20px] max-w-[270px]">
-              {t('onboarding.discovery.noneSub')}
+              {scanPath === null ? t('onboarding.discovery.noneSub') : t('onboarding.discovery.customNone')}
             </Txt>
           </View>
           <Btn tone="primary" onPress={() => ctx.finish(false)}>
@@ -183,7 +217,14 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
           tone="primary"
           className="mt-3.5"
           onPress={() => {
+            // The entered path really drives the derivation: the scan effect
+            // re-runs against it, and an unsupported path lands in the error
+            // phase with dedicated copy instead of a silent default scan.
+            const entered = path.trim();
             setSheet(false);
+            setDerived(null);
+            setError(null);
+            setScanPath(entered);
             setPhase('deriving');
           }}>
           {t('onboarding.discovery.scanCta')}

@@ -38,8 +38,29 @@ export async function deriveBtcAccount(
   network: BtcNetwork,
   passphrase?: string,
 ): Promise<BtcAccount> {
+  return deriveBtcAccountAtPath(words, defaultAccountPath(network), network, passphrase);
+}
+
+function defaultAccountPath(network: BtcNetwork): string {
+  const coinType = network === 'mainnet' ? 0 : 1;
+  return `m/84'/${coinType}'/${ACCOUNT_INDEX}'`;
+}
+
+/**
+ * Derive a BTC account from an explicit account path (the discovery
+ * custom-path scan). The path replaces the default m/84'/<coin>'/0'; the
+ * receiving/change layout below it stays <branch>/<index>.
+ */
+export async function deriveBtcAccountAtPath(
+  words: string[],
+  path: string,
+  network: BtcNetwork,
+  passphrase?: string,
+): Promise<BtcAccount> {
   const seed = await mnemonicToSeed(words, passphrase);
-  return { xpub: accountHd(network, seed).publicExtendedKey, network };
+  const hd = HDKey.fromMasterSeed(seed).derive(path);
+  if (!hd.publicKey) throw new Error('btc account derivation failed');
+  return { xpub: hd.publicExtendedKey, network };
 }
 
 /** Address for a key index on the receiving (0) or change (1) branch. */
