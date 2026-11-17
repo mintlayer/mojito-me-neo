@@ -18,7 +18,7 @@ mobile app, rebuilt in React Native.
 Real since M1, with vector-backed tests:
 
 - **Recovery phrase**: full BIP39 over the complete 2048-word English list. Generation from device secure random (optionally mixed with the drawn-entropy screen, which genuinely feeds the phrase), import validation with checksum, PBKDF2-HMAC-SHA512 seeding.
-- **Vault**: the phrase is sealed with AES-256-GCM under a Keychain (iOS) or Keystore (Android) resident key before onboarding completes; the wallet survives kill and relaunch. The key is **user-authentication gated**: with biometrics enrolled, every seal/open runs the biometric prompt and enrolling a new biometric invalidates the key.
+- **Vault**: the phrase is sealed with AES-256-GCM under a Keychain (iOS) or Keystore (Android) resident key before onboarding completes; the wallet survives kill and relaunch. The key is **user-authentication gated only when you chose biometrics on the Secure screen** (the persisted choice, never hardware detection): every seal and open then runs the OS biometric prompt inside the native module, and enrolling a new biometric invalidates the key. Enabling biometrics later re-seals the vault under a gated key at the next unlock.
 - **PIN and lock**: persisted PBKDF2 verifier with an escalating lockout that survives restart; real `LocalAuthentication` biometric prompts (biometry-only for the wallet lock, in-app PIN always works); auto-lock on background; the recovery-phrase reveal sits behind a re-auth step-up.
 - **Derivation**: Mintlayer account 0 (`m/44'/<coin type>'/0'`) and BTC BIP84 account (`m/84'/<coin>'/0'`) in pure TypeScript, byte-pinned to the bindings' published parity vectors and the BIP84 test vectors. Discovery derives real addresses (balance probing is still a fixture seam).
 
@@ -166,12 +166,17 @@ phrase is on screen, and released on unmount.
 
 ## Storage and crypto (M1 state)
 
-- `src/storage/secureStore.ts` exposes a `seal`/`open`/`wipe`/`keyExists` facade over the native
-  MojitoCore module (AES-256-GCM, key resident in Keychain or Keystore, never returned to JS).
-  With biometrics enrolled the key carries user-authentication gating (Keystore
+- `src/storage/secureStore.ts` exposes a `seal`/`open`/`wipe`/`keyExists`/`keyGated` facade over the native
+  MojitoCore module (AES-256-GCM, key resident in Keychain or Keystore, never returned to JS). When the
+  wallet's Secure-screen choice was biometrics, the key carries user-authentication gating (Keystore
   `setUserAuthenticationRequired` plus biometric-enrolment invalidation on Android,
-  `kSecAccessControlBiometryCurrentSet` on iOS); the TS facade maps the native refusal to a typed
-  `VaultAuthRequiredError` and the app re-prompts once.
+  `kSecAccessControlBiometryCurrentSet` on iOS) and the OS biometric prompt runs inside the native
+  module: Android wraps the Keystore cipher in a `BiometricPrompt.CryptoObject`, iOS relies on the
+  Keychain ACL, so a generic prompt can never be mistaken for authorization. The TS facade maps the
+  rejections to a typed `VaultAuthRequiredError` (cancelled or failed check, wallet stays locked) and
+  `VaultKeyInvalidatedError` (terminal key state: a biometric change killed the key; the sealed phrase
+  recovers only via phrase restore). `keyExists` is an attribute-level query and never prompts.
+  PIN-only wallets are never created gated, so their vault operations never show a biometric prompt.
 - `src/storage/blobStore.ts` persists the sealed ciphertext (AsyncStorage); `walletVault.ts` keeps
   the phrase under `seed.v1`, `pinStore.ts` keeps the PIN verifier and lockout under `pin.meta.v1`,
   `appSettings.ts` keeps the plain security toggles.
@@ -226,6 +231,23 @@ npx tsx src/theme.test.ts
 logic. Until then, changes touching navigation or gestures should be verified on a device or
 simulator: a green `tsc` has repeatedly failed to catch runtime issues here (a modal that
 swallowed every touch typechecked and bundled perfectly).
+
+### Manual checks (device, gated-vault paths)
+
+The native auth gate cannot be exercised in Node; verify these by hand on a device build:
+
+1. **Biometric choice gates the key.** Onboard with "Enable Face ID" (or fingerprint): the first
+   seal at finish shows the OS biometric prompt from inside the module, and every unlock runs it.
+   Onboard again with "Use PIN instead": no vault operation ever shows a biometric prompt.
+2. **Declined prompt stays fail-closed.** Cancel the OS prompt at unlock: the wallet stays locked
+   with no error loop; the next attempt re-runs the prompt.
+3. **Biometric change recovery.** On a gated wallet, enrol a different biometric: seal and open now
+   fail with the invalidated-key guidance, and the wallet recovers only via phrase restore (sign out,
+   then import the phrase). This is deliberate: the phrase is the single recovery path.
+4. **Legacy ungated upgrade.** A wallet created before the choice-based gate, with the persisted
+   biometrics choice on, re-seals under a fresh gated key at the next unlock.
+5. **Cold start never prompts.** Kill and relaunch the app: the existence probe must not show a
+   biometric prompt behind the splash.
 
 ---
 
