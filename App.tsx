@@ -137,7 +137,16 @@ function Shell() {
           // a prompt that can never succeed. The Settings toggle now guards
           // the write; this repairs state persisted before that guard.
           const bioUsable = detected !== null;
-          const bioChoice = saved.biometrics === true && bioUsable;
+          // The persisted choice is the gate truth at unlock. When the
+          // settings read failed (biometrics: null) on a device that holds
+          // a vault, the live key's native gate is the remaining truth: an
+          // unknown choice must not itself strip an existing gate at the
+          // next unlock, so wantGated follows walletVault.keyGated() until
+          // the choice is readable again.
+          const bioChoice =
+            saved.biometrics === null
+              ? await walletVault.keyGated().catch(() => false)
+              : saved.biometrics === true && bioUsable;
           if (saved.biometrics === true && !bioUsable) {
             void saveAppSettings({ biometrics: false }).catch(() => undefined);
           }
@@ -155,13 +164,17 @@ function Shell() {
         // The existence probe itself failed: degrade to the locked state so
         // a cancelled prompt or a keychain hiccup can never wedge the app on
         // the splash. Unlocking re-runs the real decrypt and surfaces the
-        // failure there.
+        // failure there. The persisted choice is unknown for the same
+        // reason, so bioChoice follows the live key's current gate (same
+        // rule as the settings-read failure above): a hiccup must not turn
+        // the next unlock into a silent un-gate.
         const detected = await detectBio();
+        const keyGated = await walletVault.keyGated().catch(() => false);
         setSession({
           vault: null,
           deferred: false,
           bio: detected ?? 'face',
-          bioChoice: false,
+          bioChoice: keyGated,
           settings: { biometrics: detected !== null, autoLock: true, testnet: false },
         });
         setLocked(true);
