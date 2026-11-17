@@ -1,7 +1,7 @@
 // Mock fixtures for the demo UI. Lifted out of the per-screen JSX in the source
 // design so screens stay presentational and nothing is declared twice.
 
-import type { ActivityRow, AssetRow } from './data/providers/types';
+import type { ActivityRow, AssetRow, CandleInterval, PriceRange } from './data/providers/types';
 import type { IconName } from './ui/icons';
 import type { StepState } from './ui/StepState';
 import type { ChainName, Tone } from './theme';
@@ -20,7 +20,7 @@ export const BALANCE = {
   spark: [120, 124, 122, 130, 128, 138, 134, 142, 148, 145, 152, 158, 154, 162, 168, 172],
 };
 
-export const RANGES = ['1H', '4H', '1D', '1W', '1M', '1Y', 'ALL'];
+export const RANGES: PriceRange[] = ['1H', '4H', '1D', '1W', '1M', '1Y', 'ALL'];
 
 export const ASSETS: AssetRow[] = [
   { sym: 'BTC', name: 'Bitcoin', chain: 'Bitcoin', amt: 0.4821, price: 96420.32, change: 2.18, value: 46485.57, spark: [100, 102, 99, 105, 108, 106, 112, 110, 115] },
@@ -74,7 +74,7 @@ export const BIDS = [
   { p: 0.3414, s: 3210, t: 1096 },
 ] satisfies { p: number; s: number; t: number }[];
 
-export const TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'];
+export const TIMEFRAMES: CandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
 /* ── Swap ────────────────────────────────────────────────── */
 

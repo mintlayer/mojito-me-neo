@@ -15,14 +15,13 @@ export function DexScreen() {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [book, setBook] = useState<'book' | 'trades' | 'depth'>('book');
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
-  const [tf, setTf] = useState('1h');
+  const [tf, setTf] = useState<CandleInterval>('1h');
   const [amount, setAmount] = useState('250');
   const { price } = useProviders();
   const [candles, setCandles] = useState<Candle[] | null>(null);
   useEffect(() => {
     let live = true;
-    // timeframes come from the provider as strings; the fixture set is the interval union.
-    price.getCandles('ML/USDT', tf as CandleInterval).then((rows) => {
+    price.getCandles('ML/USDT', tf).then((rows) => {
       if (live) setCandles(rows);
     });
     return () => {

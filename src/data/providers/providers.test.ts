@@ -34,6 +34,9 @@ async function main() {
   assert.ok(history.length > 10);
   const candles = await providers.price.getCandles('ML/USDT', '1h');
   assert.equal(candles.length, 90);
+  // gap-1 contract: candle money fields are decimal strings, never floats.
+  assert.equal(typeof candles[0].o, 'string');
+  assert.equal(typeof candles[0].v, 'string');
 
   const joined = await providers.waitlist.join('user@example.com');
   assert.equal(joined.ok, true);

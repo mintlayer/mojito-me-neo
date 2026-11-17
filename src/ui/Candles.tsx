@@ -3,27 +3,32 @@ import { C } from '../theme';
 import Svg, { G, Line, Rect } from 'react-native-svg';
 import type { Candle } from '../data/providers';
 
-/** Presentational candlestick chart: scales the given series into a 320x80 viewbox. */
+/** Presentational candlestick chart: scales the given series into a 320x80 viewbox.
+ *  Candle money fields are decimal strings per the gap-1 contract; parsed here. */
 export function Candles({ candles, height = 80, maxBars = 24 }: { candles: Candle[]; height?: number; maxBars?: number }) {
   const bars = useMemo(() => {
     const shown = candles.slice(-maxBars);
     if (shown.length === 0) return null;
-    const hi = Math.max(...shown.map((c) => c.h));
-    const lo = Math.min(...shown.map((c) => c.l));
+    const hi = Math.max(...shown.map((k) => parseFloat(k.h)));
+    const lo = Math.min(...shown.map((k) => parseFloat(k.l)));
     const span = hi - lo || 1;
     const step = 320 / shown.length;
     const y = (v: number) => 4 + (1 - (v - lo) / span) * 72;
     return {
-      last: y(shown[shown.length - 1].c),
-      rows: shown.map((c, i) => ({
-        x: i * step + step * 0.2,
-        w: step * 0.6,
-        o: y(c.o),
-        c: y(c.c),
-        hi: y(c.h),
-        lo: y(c.l),
-        up: c.c >= c.o,
-      })),
+      last: y(parseFloat(shown[shown.length - 1].c)),
+      rows: shown.map((k, i) => {
+        const o = parseFloat(k.o);
+        const close = parseFloat(k.c);
+        return {
+          x: i * step + step * 0.2,
+          w: step * 0.6,
+          o: y(o),
+          c: y(close),
+          hi: y(parseFloat(k.h)),
+          lo: y(parseFloat(k.l)),
+          up: close >= o,
+        };
+      }),
     };
   }, [candles, maxBars]);
 

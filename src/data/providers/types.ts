@@ -57,7 +57,7 @@ export type PriceSnapshot = {
   change24hPct: number;
   updatedAt: number;
 };
-export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+export type Candle = { t: number; o: string; h: string; l: string; c: string; v: string }; // decimal strings per gap-1: parse at render, never float math in state
 export type CandleInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
 export interface PriceProvider {
@@ -107,12 +107,12 @@ export interface WalletData {
   getAssetBalances(): Promise<Record<string, string>>;
   getActivity(limit: number): Promise<ActivityRow[]>;
   getNetworks(): Promise<ChainName[]>;
-  getRanges(): Promise<string[]>;
+  getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;
   // dex
   getMarket(pair: string): Promise<MarketSummary>;
   getOrderBook(pair: string): Promise<{ asks: BookLevel[]; bids: BookLevel[] }>;
-  getTimeframes(): Promise<string[]>;
+  getTimeframes(): Promise<CandleInterval[]>;
   // swap
   getHtlcSteps(): Promise<HtlcStep[]>;
   getSwapStats(): Promise<SwapStat[]>;

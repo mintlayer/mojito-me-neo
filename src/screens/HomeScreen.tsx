@@ -128,7 +128,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
           <View className="flex-row justify-between mt-1">
             {ranges.map((r) => (
-              <Pressable key={r} onPress={() => setRange(r as PriceRange)}>
+              <Pressable key={r} onPress={() => setRange(r)}>
                 <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
                   {t(`home.ranges.${r}` as I18nKey)}
                 </Txt>

@@ -80,7 +80,13 @@ export function createFixturePriceProvider(): PriceProvider {
       const o = i === 0 ? c * (1 - 0.004) : closes[i - 1];
       const hi = Math.max(o, c) * (1 + rand() * 0.006);
       const lo = Math.min(o, c) * (1 - rand() * 0.006);
-      return { t: now - (count - 1 - i) * stepSec, o, h: hi, l: lo, c, v: Math.round(4000 + rand() * 16000) };
+      // Money fields are decimal strings per the gap-1 contract; six places
+      // cover the ML quote range without float tail noise.
+      return {
+        t: now - (count - 1 - i) * stepSec,
+        o: o.toFixed(6), h: hi.toFixed(6), l: lo.toFixed(6), c: c.toFixed(6),
+        v: String(Math.round(4000 + rand() * 16000)),
+      };
     });
   };
 
