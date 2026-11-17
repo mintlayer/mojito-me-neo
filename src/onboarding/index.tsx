@@ -1,11 +1,11 @@
 import React, { useCallback, useState } from 'react';
+import { Alert } from 'react-native';
 import { Enter } from '../ui';
+import { t } from '../i18n';
 import type { Bio } from './ui';
 import type { Ctx, ScreenId } from './context';
 import { walletVault, type VaultMeta } from '../storage/walletVault';
 import { SUPPORTED_COUNTS, type WordCount } from '../keys/bip39';
-import { VaultAuthRequiredError } from '../../modules/mojito-core';
-import { stepUpDeviceAuth } from './ui';
 import { Welcome } from './screens/Welcome';
 import { Secure } from './screens/Secure';
 import { PinSet } from './screens/PinSet';
@@ -90,15 +90,19 @@ export function Onboarding({
             hasPassphrase: false,
           };
           try {
-            await walletVault.save(words, meta);
-          } catch (e) {
-            // The native key gate can refuse the first seal without a fresh
-            // biometric: one device step-up prompt, then a single retry.
-            // Anything else fails loudly: the wallet would otherwise not
-            // survive a relaunch.
-            if (!(e instanceof VaultAuthRequiredError)) throw e;
-            if (!(await stepUpDeviceAuth())) throw e;
-            await walletVault.save(words, meta);
+            // The gate choice rides the seal: the vault key is created
+            // auth-gated only when the Secure screen enrolled biometrics
+            // (the persisted user choice, never hardware detection).
+            await walletVault.save(words, meta, biometrics);
+          } catch {
+            // The native gate prompts inside the module; a declined or
+            // failed seal must fail loudly yet not throw into the void
+            // (this IIFE is async: an unhandled rejection would surface
+            // nothing and onboarding would silently stall). Nothing was
+            // sealed, so the wallet would not survive a relaunch: stay on
+            // the flow and let the user retry.
+            Alert.alert(t('onboarding.seed.sealErrorTitle'), t('onboarding.seed.sealErrorBody'));
+            return;
           }
         }
         onDone({ deferred, bio, biometrics });

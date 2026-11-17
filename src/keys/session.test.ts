@@ -18,7 +18,7 @@ async function main() {
   // No wallet: the session cannot exist.
   await assert.rejects(() => openKeySession(), /vault is empty/);
 
-  await walletVault.save(WORDS, META);
+  await walletVault.save(WORDS, META, false);
   const session = await openKeySession();
 
   // The seed handed to the closure is the published BIP39 vector seed, and

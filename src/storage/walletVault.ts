@@ -46,11 +46,22 @@ export const walletVault = {
     return store.keyExists(SEED_KEY);
   },
 
-  /** Seal the phrase under seed.v1 and persist the blob. */
-  async save(words: string[], meta: VaultMeta): Promise<void> {
+  /** Whether the vault key actually carries the native user-auth gate.
+   *  Read without any decryption or biometric prompt; drives the ungated-key
+   *  upgrade check at unlock. */
+  async keyGated(): Promise<boolean> {
+    const { store } = await getSecureStore();
+    return store.keyGated(SEED_KEY);
+  },
+
+  /** Seal the phrase under seed.v1 and persist the blob. `gated` travels to
+   *  the native key creation: the vault key is auth-gated only when the
+   *  wallet chose biometrics on the Secure screen (the persisted choice),
+   *  never because hardware happens to have biometrics. */
+  async save(words: string[], meta: VaultMeta, gated: boolean): Promise<void> {
     const { store } = await getSecureStore();
     const { store: blobs } = await getBlobStore();
-    const blob = await store.seal(SEED_KEY, encodePayload({ meta, words }));
+    const blob = await store.seal(SEED_KEY, encodePayload({ meta, words }), gated);
     await blobs.set(SEED_KEY, blob);
   },
 

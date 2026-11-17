@@ -1,8 +1,9 @@
 // Expo module registration and the MojitoCore type surface. The native module
 // ships the crypto facade for real (secure random, AES-256-GCM seal and open
 // over Keychain or Keystore resident keys, with the vault key gated on user
-// authentication whenever biometrics are enrolled; the TS facade maps the
-// native auth-required rejection to VaultAuthRequiredError).
+// authentication only when the wallet chose biometrics on the Secure screen;
+// the TS facade maps the native rejections to VaultAuthRequiredError and
+// VaultKeyInvalidatedError).
 //
 // Bindings implementation status (M1): the artifacts are vendored
 // (vendor/mintlayer, release wallet-bindings-v0.1.0) and linked from the
@@ -36,10 +37,16 @@ export type {
 export type SealedBlob = { v: 1; iv: string; ct: string; tag: string };
 
 /** The sealed-key surface requires user authentication (the native biometric
- *  gate on Keychain/Keystore) and the OS denied or never ran the prompt.
- *  Callers recover by running a device biometric step-up prompt and retrying
- *  the failing operation once. */
+ *  gate on Keychain/Keystore) and the OS prompt did not complete: the user
+ *  cancelled it, recognition failed, or a temporary lockout is active. The
+ *  next attempt re-runs the native prompt; there is no separate JS step-up
+ *  that could authorize a crypto-bound key. */
 export class VaultAuthRequiredError extends Error {}
+
+/** Terminal key state: the key cannot be authorized again on this device
+ *  (biometric re-enrolment invalidated it, or the gate can no longer be
+ *  satisfied at all). The sealed phrase recovers only via phrase restore. */
+export class VaultKeyInvalidatedError extends Error {}
 
 /** Expo promise rejections carry their native code; the message is matched as
  *  a fallback so a bridge that drops the code still maps to the typed error. */
@@ -47,6 +54,11 @@ function isAuthRequiredRejection(e: unknown): boolean {
   const err = e as { code?: string; message?: string } | null;
   if (err?.code === 'MOJITO_AUTH_REQUIRED') return true;
   return /user authentication required/.test(err?.message ?? '');
+}
+
+function isKeyInvalidatedRejection(e: unknown): boolean {
+  const err = e as { code?: string } | null;
+  return err?.code === 'MOJITO_KEY_INVALIDATED';
 }
 
 type NativeCore = Record<string, (...args: unknown[]) => Promise<unknown>>;
@@ -110,10 +122,14 @@ export async function hasNativeCore(): Promise<boolean> {
 export interface MojitoCore extends MintlayerBindings {
   secureRandom(length: number): Promise<Uint8Array>;
   // storage: key is generated and stored inside Keychain/Keystore, never returned
-  seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob>;
+  seal(keyId: string, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob>;
   open(keyId: string, blob: SealedBlob): Promise<Uint8Array>;
   wipe(keyId: string): Promise<void>;
   keyExists(keyId: string): Promise<boolean>;
+  /** Whether the resident key actually carries the native user-auth gate.
+   *  Android reads the Keystore key characteristics; iOS reads the module's
+   *  own creation-time marker. Never triggers a biometric prompt. */
+  keyGated(keyId: string): Promise<boolean>;
 }
 
 /** Bridge-side guard: a negative count crashes iOS unrecoverably; keep the
@@ -141,14 +157,15 @@ export const MojitoCore: MojitoCore = {
     return toBytes(await native['secureRandom'](length));
   },
 
-  async seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob> {
+  async seal(keyId: string, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob> {
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
     let blob: { iv: string; ct: string; tag: string };
     try {
-      blob = (await native['seal'](keyId, plaintext)) as { iv: string; ct: string; tag: string };
+      blob = (await native['seal'](keyId, plaintext, gated)) as { iv: string; ct: string; tag: string };
     } catch (e) {
       if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to seal ' + keyId);
+      if (isKeyInvalidatedRejection(e)) throw new VaultKeyInvalidatedError('vault key for ' + keyId + ' is invalidated; restore from the recovery phrase');
       throw e;
     }
     return { v: 1, iv: blob.iv, ct: blob.ct, tag: blob.tag };
@@ -162,6 +179,7 @@ export const MojitoCore: MojitoCore = {
       return toBytes(await native['open'](keyId, blob.iv, blob.ct, blob.tag));
     } catch (e) {
       if (isAuthRequiredRejection(e)) throw new VaultAuthRequiredError('user authentication required to open ' + keyId);
+      if (isKeyInvalidatedRejection(e)) throw new VaultKeyInvalidatedError('vault key for ' + keyId + ' is invalidated; restore from the recovery phrase');
       throw e;
     }
   },
@@ -176,6 +194,12 @@ export const MojitoCore: MojitoCore = {
     const native = await loadNative();
     if (!native) throw bindingsError('native module unavailable');
     return (await native['keyExists'](keyId)) === true;
+  },
+
+  async keyGated(keyId: string): Promise<boolean> {
+    const native = await loadNative();
+    if (!native) throw bindingsError('native module unavailable');
+    return (await native['keyGated'](keyId)) === true;
   },
 
   // keys and addresses

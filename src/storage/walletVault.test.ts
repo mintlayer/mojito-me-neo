@@ -22,8 +22,10 @@ async function main() {
   assert.equal(await walletVault.meta(), null);
   await assert.rejects(() => walletVault.openWords(), /vault is empty/);
 
-  await walletVault.save(WORDS, META);
+  await walletVault.save(WORDS, META, false);
   assert.equal(await walletVault.exists(), true);
+  // The memory double never gates: keyGated reports the native gate state.
+  assert.equal(await walletVault.keyGated(), false);
 
   const meta = await walletVault.meta();
   assert.deepEqual(meta, META);

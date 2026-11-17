@@ -33,34 +33,15 @@ export type BioScan = {
 };
 
 /**
- * One-shot device biometric step-up for sensitive flows: the recovery-phrase
- * reveal boundary and the native vault-key gate refusing a decrypt
- * (VaultAuthRequiredError). Resolves true only when the OS-level biometric
- * check succeeds; biometry-only by product decision, the OS device credential
- * is not accepted for the wallet lock (see decisions.md), the in-app PIN
- * fallback is a separate, always-working path.
- */
-export async function stepUpDeviceAuth(): Promise<boolean> {
-  try {
-    if ((await detectBio()) === null) return false;
-    const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: t('onboarding.unlock.bioReason'),
-      cancelLabel: t('common.cancel'),
-      disableDeviceFallback: true,
-    });
-    return result.success;
-  } catch {
-    return false;
-  }
-}
-
-/**
  * Real biometric prompt over expo-local-authentication (M0 shipped this as a
  * simulated scan). Resolves to the ok phase only when the OS-level check
  * succeeds; failures drop back to idle with the failure count for the PIN
  * fallback copy. Biometry-only by product decision: the OS device credential
  * is not offered on the wallet's prompt (the in-app PIN fallback in
- * usePinEntry is the always-working path; see decisions.md).
+ * usePinEntry is the always-working path; see decisions.md). This is the
+ * UI-level check for enrolment and the unlock screen only: vault cipher
+ * operations are authorized by the native module's own BiometricPrompt, and
+ * a generic prompt without a CryptoObject cannot authorize those keys.
  */
 export function useBioScan(onDone: () => void, onFail?: () => void): BioScan {
   const [phase, setPhase] = useState<ScanPhase>('idle');

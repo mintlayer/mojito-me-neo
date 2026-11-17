@@ -91,7 +91,9 @@ class PinStore {
       await this.store.wipe(PIN_KEY);
       return;
     }
-    const blob = await this.store.seal(PIN_KEY, encodeState(state));
+    // The PIN verifier never rides a biometric-gated key: the PIN is the
+    // always-working path, so its own storage must open without one.
+    const blob = await this.store.seal(PIN_KEY, encodeState(state), false);
     await blobs.set(PIN_KEY, blob);
   }
 

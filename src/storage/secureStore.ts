@@ -22,10 +22,13 @@ function memoryFallbackAllowed(): boolean {
 }
 
 export interface SecureStore {
-  seal(keyId: StorageKeyId, plaintext: Uint8Array): Promise<SealedBlob>;
+  seal(keyId: StorageKeyId, plaintext: Uint8Array, gated: boolean): Promise<SealedBlob>;
   open(keyId: StorageKeyId, blob: SealedBlob): Promise<Uint8Array>;
   wipe(keyId: StorageKeyId): Promise<void>;
   keyExists(keyId: StorageKeyId): Promise<boolean>;
+  /** Whether the resident key carries the native user-auth gate; never
+   *  triggers a biometric prompt. */
+  keyGated(keyId: StorageKeyId): Promise<boolean>;
 }
 
 const IV_BYTES = 12;
@@ -66,10 +69,10 @@ export async function getSecureStore(): Promise<{ kind: SecureStoreKind; store: 
 }
 
 const nativeStore: SecureStore = {
-  async seal(keyId, plaintext) {
+  async seal(keyId, plaintext, gated) {
     const core = await getCore();
     if (!core) throw new Error('native core unavailable');
-    return core.MojitoCore.seal(keyId, plaintext);
+    return core.MojitoCore.seal(keyId, plaintext, gated);
   },
   async open(keyId, blob) {
     const core = await getCore();
@@ -85,6 +88,11 @@ const nativeStore: SecureStore = {
     const core = await getCore();
     if (!core) throw new Error('native core unavailable');
     return core.MojitoCore.keyExists(keyId);
+  },
+  async keyGated(keyId) {
+    const core = await getCore();
+    if (!core) throw new Error('native core unavailable');
+    return core.MojitoCore.keyGated(keyId);
   },
 };
 
@@ -163,6 +171,7 @@ export function createMemorySecureStore(): SecureStore {
   };
 
   return {
+    // gated is accepted but ignored: the test double has no native gate.
     async seal(keyId, plaintext) {
       const key = loadOrCreateKey(keyId);
       const iv = randomBytes(IV_BYTES);
@@ -187,6 +196,11 @@ export function createMemorySecureStore(): SecureStore {
 
     async keyExists(keyId) {
       return keys.has(keyId);
+    },
+
+    // The memory double never gates: callers treat false as "no native gate".
+    async keyGated() {
+      return false;
     },
   };
 }

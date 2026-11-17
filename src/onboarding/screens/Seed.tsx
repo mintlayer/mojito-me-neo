@@ -2,11 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../../i18n';
 import { generateMnemonic, mixEntropy } from '../../keys/bip39';
-import { VaultAuthRequiredError } from '../../../modules/mojito-core';
 import { walletVault } from '../../storage/walletVault';
 import { C, alpha, white } from '../../theme';
 import { Btn, Card, Chip, Enter, Icon, ListRow, Sheet, Txt, tint } from '../../ui';
-import { Body, Column, LinkBtn, SCREENSHOT_BLOCKING, SeedGrid, StepHeader, useSeedProtection, stepUpDeviceAuth } from '../ui';
+import { Body, Column, LinkBtn, SCREENSHOT_BLOCKING, SeedGrid, StepHeader, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
 /**
@@ -25,24 +24,18 @@ export function Seed({ ctx, backup }: { ctx: Ctx; backup?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Backup re-entry: show the stored phrase, never generate or re-seal.
-  // The native key gate can refuse the decrypt without a fresh biometric:
-  // one device step-up prompt, then a single retry, before the load error.
+  // Backup re-entry: show the stored phrase, never generate or re-seal. The
+  // native key gate prompts inside the module when the key is gated; a
+  // cancelled prompt lands in the load error, and a retry re-runs it.
   useEffect(() => {
     if (!backup) return;
     let alive = true;
-    const load = async (): Promise<void> => {
-      try {
-        const words = await walletVault.openWords();
+    walletVault
+      .openWords()
+      .then((words) => {
         if (alive) ctx.setSeedWords(words);
-      } catch (e) {
-        if (!(e instanceof VaultAuthRequiredError)) throw e;
-        if (!(await stepUpDeviceAuth())) throw e;
-        const words = await walletVault.openWords();
-        if (alive) ctx.setSeedWords(words);
-      }
-    };
-    load().catch(() => alive && setError(t('onboarding.seed.loadError')));
+      })
+      .catch(() => alive && setError(t('onboarding.seed.loadError')));
     return () => {
       alive = false;
     };
