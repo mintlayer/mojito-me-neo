@@ -10,13 +10,15 @@ export type PinVerdict = {
 };
 
 /**
- * Store-backed verdict for usePinEntry's check, shared by the app lock and
- * the Settings disable step-up so the lockout bookkeeping behaves
- * identically in both. 'unset' (no PIN row) fails closed without feeding
- * the lockout: there is no verifier the lockout could ever be cleared
- * against.
+ * Store-backed verdict for usePinEntry's check, shared by the app lock, the
+ * Settings disable step-up and the change-PIN old-PIN verify so the lockout
+ * bookkeeping behaves identically in all of them. 'unset' (no PIN row) fails
+ * closed without feeding the lockout: there is no verifier the lockout could
+ * ever be cleared against. `unsetCopy` overrides the message for that verdict
+ * in contexts where "unlock failed" reads wrong (change PIN, step-up).
  */
-export function pinEntryCheck(): (pin: string) => Promise<PinVerdict> {
+export function pinEntryCheck(opts?: { unsetCopy?: string }): (pin: string) => Promise<PinVerdict> {
+  const unsetCopy = opts?.unsetCopy ?? t('onboarding.unlock.failed');
   return async (pin) => {
     const verdict = await pinStore.verify(pin);
     if (verdict === 'ok') return { verdict: 'ok' };
@@ -24,7 +26,7 @@ export function pinEntryCheck(): (pin: string) => Promise<PinVerdict> {
       const seconds = await pinStore.lockSecondsLeft();
       return { verdict: 'locked', message: t('onboarding.pin.locked', { seconds }), lockSeconds: seconds };
     }
-    if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
+    if (verdict === 'unset') return { verdict: 'wrong', message: unsetCopy };
     await pinStore.registerFailure();
     const seconds = await pinStore.lockSecondsLeft();
     if (seconds > 0) {
@@ -33,7 +35,7 @@ export function pinEntryCheck(): (pin: string) => Promise<PinVerdict> {
     const left = LOCK_ATTEMPTS - ((await pinStore.attempts()) % LOCK_ATTEMPTS);
     return {
       verdict: 'wrong',
-      message: t('onboarding.unlock.wrongPin', { attempts: left, plural: left === 1 ? '' : 's' }),
+      message: t('onboarding.pin.wrongAttempts', { left }),
     };
   };
 }

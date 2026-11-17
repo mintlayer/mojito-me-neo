@@ -97,7 +97,7 @@ for (const [key, value] of Object.entries(en)) {
 // 5. Runtime smoke: lookups and interpolation.
 assert.equal(t('common.cancel'), 'Cancel');
 assert.equal(t('home.networks.active', { count: 5 }), '5 active');
-assert.equal(t('onboarding.unlock.wrongPin', { attempts: 1, plural: '' }), 'Wrong PIN · 1 attempt left');
+assert.equal(t('onboarding.pin.wrongAttempts', { left: 1 }), 'Wrong PIN. Attempts left: 1');
 assert.throws(() => t('definitely.missing' as never), /missing translation/);
 
 if (failures.length > 0) {

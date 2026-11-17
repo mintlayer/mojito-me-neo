@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { t } from '../../i18n';
-import { pinStore, LOCK_ATTEMPTS } from '../../storage/pinStore';
 import type { Ctx } from '../context';
 import { PinPad } from './PinPad';
 import { bioName } from '../context';
-import { usePinEntry } from '../ui';
+import { pinEntryCheck, usePinEntry } from '../ui';
 
 /**
  * PIN setup. Two shapes:
@@ -16,38 +15,12 @@ export function PinSet({ ctx }: { ctx: Ctx }) {
   const [phase, setPhase] = useState<'verify-old' | 'collect'>(ctx.pinOnly ? 'verify-old' : 'collect');
 
   const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
-    // In verify-old mode the verdict comes from the persisted verifier.
+    // In verify-old mode the verdict comes from the persisted verifier,
+    // through the shared store-backed check so the lockout bookkeeping is
+    // identical everywhere.
     target: null,
     resetKey: phase,
-    check:
-      phase === 'verify-old'
-        ? async (pin) => {
-            const verdict = await pinStore.verify(pin);
-            if (verdict === 'ok') return { verdict: 'ok' };
-            if (verdict === 'locked') {
-              const seconds = await pinStore.lockSecondsLeft();
-              return {
-                verdict: 'locked',
-                message: t('onboarding.pin.locked', { seconds }),
-                lockSeconds: seconds,
-              };
-            }
-            // 'unset' (no PIN row) fails closed without feeding the lockout:
-            // there is no verifier the lockout could ever be cleared against.
-            if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
-            await pinStore.registerFailure();
-            const seconds = await pinStore.lockSecondsLeft();
-            if (seconds > 0) {
-              return {
-                verdict: 'locked',
-                message: t('onboarding.pin.locked', { seconds }),
-                lockSeconds: seconds,
-              };
-            }
-            const left = LOCK_ATTEMPTS - ((await pinStore.attempts()) % LOCK_ATTEMPTS);
-            return { verdict: 'wrong', message: t('pin.wrong.attempts', { left }) };
-          }
-        : undefined,
+    check: phase === 'verify-old' ? pinEntryCheck() : undefined,
     onMatch: (pin) => {
       if (phase === 'verify-old') {
         setPhase('collect');
