@@ -1,5 +1,17 @@
-/** Props the overlay screens receive from App. */
-export type Sheet = { onClose?: () => void };
+import type { Bio } from '../onboarding';
+
+/** Props the overlay screens receive from App. Most sheets consume a subset. */
+export type Sheet = {
+  onClose?: () => void;
+  /** Re-enters the seed/verify backup flow (Settings only). */
+  onBackup?: () => void;
+  /** Opens the change-PIN flow (Settings only). */
+  onChangePin?: () => void;
+  /** Locks the app (Settings only). */
+  onLock?: () => void;
+  /** Session biometric mode; SendScreen reads it for the auth copy. */
+  bio?: Bio;
+};
 
 /** Props the tab screens receive from App. Only Home consumes them all. */
 export type Nav = {

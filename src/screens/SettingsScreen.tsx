@@ -7,14 +7,7 @@ import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
 import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
-type SettingsNav = Sheet & {
-  /** Re-enters the seed/verify flow. */
-  onBackup?: () => void;
-  onChangePin?: () => void;
-  onLock?: () => void;
-};
-
-export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: SettingsNav) {
+export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
   const dapps = useData((d) => d.getDapps());

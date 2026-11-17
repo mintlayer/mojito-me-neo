@@ -103,10 +103,13 @@ export const BRIDGE_CHAINS = [
   { name: 'BNB', sym: 'BNB' },
 ] satisfies { name: ChainName; sym: string }[];
 
+/** Arbitrum-side mint contract shown in the route and the bridge fixture. */
+export const BRIDGE_CONTRACT = '0xA1c2…F39e';
+
 export const BRIDGE_ROUTE = [
   { label: 'Lock on Mintlayer', detail: 'mojito.mlbridge.v2', icon: 'lock', eta: '~15s' },
   { label: 'Validator attestation', detail: '7 of 11 signatures', icon: 'shield', eta: '~45s' },
-  { label: 'Mint on Arbitrum', detail: '0xA1c2…F39e (mUSDT)', icon: 'flash', eta: '~5s' },
+  { label: 'Mint on Arbitrum', detail: `${BRIDGE_CONTRACT} (mUSDT)`, icon: 'flash', eta: '~5s' },
 ] satisfies { label: string; detail: string; icon: IconName; eta: string }[];
 
 export const BRIDGE_QUOTE = [

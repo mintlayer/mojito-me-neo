@@ -22,6 +22,7 @@ export { Field } from './Field';
 export { IconBtn } from './IconBtn';
 export { IconTile } from './IconTile';
 export { KV } from './KV';
+export { KVGrid } from './KVGrid';
 export { KVRow } from './KVRow';
 export { Label } from './Label';
 export { ListRow } from './ListRow';

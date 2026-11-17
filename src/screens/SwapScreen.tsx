@@ -5,7 +5,7 @@ import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as
 import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
-import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
+import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
 
 export function SwapScreen() {
   const assets = useData((d) => d.getAssets());
@@ -75,12 +75,8 @@ export function SwapScreen() {
       </View>
 
       <View className="px-5 pt-3">
-        <Card className="px-3.5 py-2.5 flex-row flex-wrap">
-          {swapStats.map(([k, v], i) => (
-            <View key={k} className="w-1/2 py-1">
-              <KV k={k} v={v} right={i % 2 === 1} tone={i === 1 ? C.green : i === 3 ? C.amber : C.text0} />
-            </View>
-          ))}
+        <Card className="px-3.5 py-2.5">
+          <KVGrid rows={swapStats} tone={(i) => (i === 1 ? C.green : i === 3 ? C.amber : C.text0)} />
         </Card>
       </View>
 

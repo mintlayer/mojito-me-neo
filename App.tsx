@@ -13,6 +13,7 @@ import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, OnboardingResult, UnlockScreen } from './src/onboarding';
 import { Splash } from './src/screens/intro';
+import type { Nav, Sheet } from './src/screens/types';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { DexScreen } from './src/screens/DexScreen';
 import { SwapScreen } from './src/screens/SwapScreen';
@@ -34,7 +35,7 @@ const TABS: { id: TabId; icon: IconName; labelKey: 'tabs.wallet' | 'tabs.dex' | 
 ];
 
 // Only Home consumes the nav callbacks; the rest ignore them.
-const SCREENS: Record<TabId, React.ComponentType<any>> = {
+const SCREENS: Record<TabId, React.ComponentType<Nav>> = {
   home: HomeScreen,
   dex: DexScreen,
   swap: SwapScreen,
@@ -43,7 +44,7 @@ const SCREENS: Record<TabId, React.ComponentType<any>> = {
 };
 
 // Settings takes extra nav props; the others ignore them.
-const OVERLAYS: Record<string, React.ComponentType<any>> = {
+const OVERLAYS: Record<Exclude<Overlay, null>, React.ComponentType<Sheet>> = {
   send: SendScreen,
   receive: ReceiveScreen,
   settings: SettingsScreen,
@@ -116,6 +117,7 @@ function Shell() {
             <Layer z={Z.overlay}>
               <Sheet
                 onClose={() => setOverlay(null)}
+                bio={session.bio}
                 onBackup={() => {
                   setOverlay(null);
                   setBackup(true);

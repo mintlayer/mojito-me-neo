@@ -23,7 +23,7 @@ export function useProviders(): Providers {
  * Resolve one WalletData call. Fixtures settle in a microtask, so callers
  * render the app chrome on the first frame and identical content right after.
  */
-export function useData<T>(load: (data: WalletData) => Promise<T>, deps: readonly unknown[] = []): T | null {
+export function useData<T>(load: (data: WalletData) => Promise<T>): T | null {
   const { data } = useProviders();
   const [value, setValue] = useState<T | null>(null);
   useEffect(() => {
@@ -34,7 +34,7 @@ export function useData<T>(load: (data: WalletData) => Promise<T>, deps: readonl
     return () => {
       live = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- callers pass the changing inputs via deps
-  }, [data, ...deps]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is an inline arrow recreated every render
+  }, [data]);
   return value;
 }

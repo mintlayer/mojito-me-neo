@@ -5,7 +5,7 @@ import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { C, CHAINS, G, alpha } from '../theme';
 import type { ChainName } from '../theme';
-import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, KV, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop, tile } from '../ui';
+import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, KVGrid, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop, tile } from '../ui';
 
 export function BridgeScreen() {
   const assetBalances = useData((d) => d.getAssetBalances());
@@ -68,7 +68,7 @@ export function BridgeScreen() {
       <View className="px-5 pt-6">
         <Card grad={G.raisedViolet} className="px-5 py-7 rounded-[22px]">
           <View className="flex-row items-center gap-3">
-            <ChainCard name={src} side={t('bridge.sideFrom')} onPress={src === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
+            <ChainCard name={src} sym={bridgeChains.find((c) => c.name === src)?.sym ?? src} side={t('bridge.sideFrom')} onPress={src === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
             <Pressable
               onPress={() => {
                 setSrc(dst);
@@ -78,7 +78,7 @@ export function BridgeScreen() {
               style={{ backgroundColor: C.bg1, borderWidth: 1, borderColor: C.line }}>
               <Icon name="swap" size={14} color={C.violet} />
             </Pressable>
-            <ChainCard name={dst} side={t('bridge.sideTo')} onPress={dst === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
+            <ChainCard name={dst} sym={bridgeChains.find((c) => c.name === dst)?.sym ?? dst} side={t('bridge.sideTo')} onPress={dst === HOME_CHAIN ? undefined : () => setChainPicker(true)} />
           </View>
 
           <View className="h-[60px] mt-6 justify-center">
@@ -168,12 +168,8 @@ export function BridgeScreen() {
               compact
             />
           ))}
-          <View className="mt-2.5 pt-2.5 flex-row flex-wrap" style={hairlineTop}>
-            {bridgeQuote.map(([k, v], i) => (
-              <View key={k} className="w-1/2 py-1">
-                <KV k={k} v={v} right={i % 2 === 1} tone={i === 1 ? C.violet : C.text0} />
-              </View>
-            ))}
+          <View className="mt-2.5 pt-2.5" style={hairlineTop}>
+            <KVGrid rows={bridgeQuote} tone={(i) => (i === 1 ? C.violet : C.text0)} />
           </View>
         </Card>
       </View>
@@ -189,19 +185,16 @@ export function BridgeScreen() {
 
 const HOME_CHAIN = 'Mintlayer';
 
-function ChainCard({ name, side, onPress }: { name: ChainName; side: string; onPress?: () => void }) {
-  const bridgeChains = useData((d) => d.getBridgeChains());
-  const chain = bridgeChains?.find((c) => c.name === name);
+function ChainCard({ name, sym, side, onPress }: { name: ChainName; sym: string; side: string; onPress?: () => void }) {
   const c = CHAINS[name];
-  if (!chain) return <View className="flex-1" />;
   return (
     <Pressable onPress={onPress} className="flex-1 p-3 rounded-[14px]" style={tile(0.04, alpha(c, 0.25))}>
       <Txt className="text-[9px] text-text3 tracking-label">{side.toUpperCase()}</Txt>
       <View className="flex-row items-center gap-2 mt-1.5">
-        <ChainGlyph chain={chain.name} />
+        <ChainGlyph chain={name} />
         <View className="flex-1">
-          <Txt className="text-[13px] font-semibold">{chain.name}</Txt>
-          <Txt className="text-[9px] text-text3">{chain.sym}</Txt>
+          <Txt className="text-[13px] font-semibold">{name}</Txt>
+          <Txt className="text-[9px] text-text3">{sym}</Txt>
         </View>
         {onPress && <Icon name="chevron_r" size={13} color={C.text3} />}
       </View>

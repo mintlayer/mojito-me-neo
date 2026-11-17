@@ -11,6 +11,7 @@ import {
   BALANCE,
   BIDS,
   BRIDGE_CHAINS,
+  BRIDGE_CONTRACT,
   BRIDGE_QUOTE,
   BRIDGE_ROUTE,
   CARD_FEATURES,
@@ -28,6 +29,7 @@ import {
   TIMEFRAMES,
   WAITLIST,
 } from '../../data';
+import { endpointsFor } from '../../config/endpoints';
 import type {
   BridgeHandle,
   BridgeProvider,
@@ -89,16 +91,20 @@ export function createFixtureBroadcastProvider(): BroadcastProvider {
 
 /** Simulated bridge walk (missing-architecture gap 5): quotes from fixtures. */
 export function createFixtureBridgeProvider(): BridgeProvider {
+  // Reads the endpoints seam so an unconfigured bridge base fails loudly here
+  // instead of silently at M4 call time; the fixture id is scoped to the base.
+  const bridgeBase = endpointsFor().bridgeBase;
+  if (!bridgeBase) throw new Error('bridge base endpoint unconfigured');
   const quote = async (_req: BridgeQuoteRequest): Promise<BridgeQuote> => ({
     feePct: '0.15',
     feeAmount: '0.75',
     minAmount: '10.00',
     etaSeconds: 65,
-    destContractOrAddress: '0xA1c2…F39e',
+    destContractOrAddress: BRIDGE_CONTRACT,
   });
   const initiate = async (req: BridgeQuoteRequest): Promise<BridgeHandle> => {
     await delay(300);
-    return { id: fakeTxId(`${req.route}:${req.amount}:${req.destAddr}`), createdAt: Date.now() };
+    return { id: fakeTxId(`${bridgeBase}|${req.route}:${req.amount}:${req.destAddr}`), createdAt: Date.now() };
   };
   const status = async (handle: BridgeHandle): Promise<BridgeState> => {
     const elapsed = (Date.now() - handle.createdAt) / 1000;

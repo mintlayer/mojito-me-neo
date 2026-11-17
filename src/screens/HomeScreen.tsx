@@ -227,10 +227,9 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   );
 }
 
-/** Asset list line: token icon, symbol + chain, sparkline, value + change. */
-
 /* ══ Home ═══════════════════════════════════════════════════ */
 
+/** Asset list line: token icon, symbol + chain, sparkline, value + change. */
 function TokenRow({ asset }: { asset: AssetRow }) {
   return (
     <View className="flex-row items-center gap-3 py-3">
