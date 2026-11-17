@@ -20,6 +20,12 @@ public class MojitoCoreModule: Module {
     Name("MojitoCore")
 
     AsyncFunction("secureRandom") { (length: Int, promise: Promise) in
+      // Reject bad lengths instead of trapping: Array(count:) is fatal on
+      // negative counts and a JS-side bug must not crash the app.
+      guard length >= 0 else {
+        promise.reject(ERR_CODE, "secureRandom length must be >= 0", nil)
+        return
+      }
       var bytes = [UInt8](repeating: 0, count: length)
       let status = SecRandomCopyBytes(kSecRandomDefault, length, &bytes)
       if status != errSecSuccess {
@@ -45,11 +51,15 @@ public class MojitoCoreModule: Module {
 
     AsyncFunction("open") { (keyId: String, iv: String, ct: String, tag: String, promise: Promise) in
       do {
-        guard let nonce = AES.GCM.Nonce(data: unhex(iv)) else {
+        let ivBytes = try unhex(iv)
+        guard ivBytes.count == 12 else {
+          throw CoreError.crypto("iv must be exactly 12 bytes")
+        }
+        guard let nonce = AES.GCM.Nonce(data: ivBytes) else {
           throw CoreError.crypto("invalid nonce")
         }
         let key = try self.loadOrCreateKey(keyId)
-        let box = try AES.GCM.SealedBox(nonce: nonce, ciphertext: unhex(ct), tag: unhex(tag))
+        let box = try AES.GCM.SealedBox(nonce: nonce, ciphertext: try unhex(ct), tag: try unhex(tag))
         let plain = try AES.GCM.open(box, using: key)
         promise.resolve(plain)
       } catch {
@@ -196,6 +206,12 @@ public class MojitoCoreModule: Module {
     add[kSecValueData as String] = raw
     add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
     let status = SecItemAdd(add as CFDictionary, nil)
+    if status == errSecDuplicateItem {
+      // First-use race: a concurrent seal() created the key; use the stored one.
+      if let existing = try keyData(keyId) {
+        return SymmetricKey(data: existing)
+      }
+    }
     if status != errSecSuccess { throw CoreError.status(status) }
     return SymmetricKey(data: raw)
   }
@@ -216,14 +232,21 @@ public class MojitoCoreModule: Module {
   }
 }
 
-private func unhex(_ value: String) -> Data {
+// Strict hex decode: even length, every pair a valid byte. Malformed input
+// throws so failures surface here instead of as opaque GCM auth errors later
+// (mirrors the Kotlin require-based decoder).
+private func unhex(_ value: String) throws -> Data {
+  guard value.count % 2 == 0 else {
+    throw CoreError.crypto("odd-length hex string")
+  }
   var bytes = [UInt8]()
   var index = value.startIndex
   while index < value.endIndex {
     let next = value.index(index, offsetBy: 2)
-    if let byte = UInt8(value[index ..< next], radix: 16) {
-      bytes.append(byte)
+    guard let byte = UInt8(value[index ..< next], radix: 16) else {
+      throw CoreError.crypto("invalid hex string")
     }
+    bytes.append(byte)
     index = next
   }
   return Data(bytes)
