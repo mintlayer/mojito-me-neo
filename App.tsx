@@ -10,7 +10,7 @@ import './global.css';
 import { t } from './src/i18n';
 import { ProvidersProvider } from './src/data/providers/context';
 import { VaultKeyInvalidatedError } from './modules/mojito-core';
-import { walletVault, type WalletVaultHandle } from './src/storage/walletVault';
+import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
 import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { detectBio } from './src/onboarding/ui/useBioScan';
@@ -95,6 +95,10 @@ type AppSession = {
   vault: WalletVaultHandle | null;
   deferred: boolean;
   bio: Bio;
+  /** The persisted Secure-screen choice. Kept distinct from
+   *  settings.biometrics, which folds in hardware detection for the unlock
+   *  UI: only a real choice justifies treating the vault key as gated. */
+  bioChoice: boolean;
   settings: { biometrics: boolean; autoLock: boolean; testnet: boolean };
 };
 
@@ -132,6 +136,7 @@ function Shell() {
             vault: null,
             deferred: false,
             bio: detected ?? 'face',
+            bioChoice: saved.biometrics === true,
             settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
           });
           setLocked(true);
@@ -146,6 +151,7 @@ function Shell() {
           vault: null,
           deferred: false,
           bio: detected ?? 'face',
+          bioChoice: false,
           settings: { biometrics: detected !== null, autoLock: true, testnet: false },
         });
         setLocked(true);
@@ -170,6 +176,9 @@ function Shell() {
     void (async () => {
       try {
         const meta = await walletVault.meta();
+        // null meta means the blob is gone (post-wipe recovery window); there
+        // is nothing to re-seal and nothing to gate, unlock as before.
+        if (meta) await upgradeUngatedKey(meta);
         setSession((s) => (s && meta ? { ...s, vault: { meta } } : s));
         setLocked(false);
       } catch (e) {
@@ -188,6 +197,24 @@ function Shell() {
     })();
   };
 
+  /** Downgrade guard: the persisted choice says biometrics, but the vault
+   *  key predates the choice-based gate and carries none. The session seed
+   *  is re-sealed under a fresh gated key. The wipe-save window is
+   *  unavoidable with a single key slot; if the re-seal fails (a declined
+   *  prompt among others) the wallet is gone and the phrase is the only way
+   *  back, which the failure alert states outright. */
+  const upgradeUngatedKey = async (meta: VaultMeta): Promise<void> => {
+    if (!session?.bioChoice || (await walletVault.keyGated())) return;
+    const words = await walletVault.openWords();
+    await walletVault.wipe();
+    try {
+      await walletVault.save(words, meta, true);
+    } catch {
+      Alert.alert(t('onboarding.unlock.invalidatedTitle'), t('onboarding.unlock.invalidatedBody'));
+      throw new VaultKeyInvalidatedError('vault key upgrade failed; restore from the recovery phrase');
+    }
+  };
+
   const finishOnboarding = (r: OnboardingResult) => {
     void (async () => {
       // Persist the Secure-screen choice so cold start respects "Use PIN
@@ -198,6 +225,7 @@ function Shell() {
         vault: meta ? { meta } : null,
         deferred: r.deferred,
         bio: r.bio,
+        bioChoice: r.biometrics,
         settings: { biometrics: r.biometrics, autoLock: true, testnet: false },
       });
     })();
