@@ -110,7 +110,8 @@ modules/mojito-core/        Expo native module: AES-256-GCM seal/open, secure
 vendor/mintlayer/           vendored wallet-bindings v0.1.0 artifacts
   CHECKSUMS.txt             upstream SHA256SUMS provenance, verified in CI
 
-scripts/no-em-dash.ts       dash gate (no em or en dashes in code or specs)
+scripts/no-em-dash.ts       dash gate (no em or en dashes in code or specs;
+                            vendored artifacts excluded: checksum-pinned)
 scripts/no-console.ts       secret-logging gate (keys, storage, onboarding, module)
 ```
 

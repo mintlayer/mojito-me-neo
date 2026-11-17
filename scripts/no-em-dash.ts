@@ -1,6 +1,10 @@
 // Gate scan for U+2014 (em dash) and U+2013 (en dash) across app source
 // (decision D9: no dash characters anywhere in specs or code).
 //   npx tsx scripts/no-em-dash.ts
+// vendor/ is deliberately outside the scan roots: the vendored bindings are
+// third-party release artifacts, not authored text, and they are pinned by
+// vendor/mintlayer/CHECKSUMS.txt (re-hashed by CI, see ci.yml). Touching them
+// to satisfy a copy rule would break the checksums; edits belong upstream.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 

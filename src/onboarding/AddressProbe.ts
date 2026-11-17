@@ -10,13 +10,13 @@ export interface AddressProbe {
 
 /**
  * Fixture probe: a static funded list. It pins the public parity testnet
- * address, so importing the published test mnemonic demonstrates the found
- * branch while every freshly generated wallet lands on none.
+ * address only: the default scan probes testnet derivations, and a custom
+ * mainnet path derives addresses this fixture has never seen, so a mainnet
+ * entry would be dead weight pretending to be reachable.
  */
 export function createFixtureAddressProbe(): AddressProbe {
   const funded = new Set<string>([
     'tmt1qyxqfq37rra32sq6zhayqcpjwh4trc07mcfardwt',
-    'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
   ]);
   return {
     async probe(addresses: string[]) {

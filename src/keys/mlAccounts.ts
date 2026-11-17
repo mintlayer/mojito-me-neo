@@ -21,7 +21,7 @@ import { secp256k1 } from '@noble/curves/secp256k1.js';
 import { blake2b } from '@noble/hashes/blake2.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha512 } from '@noble/hashes/sha2.js';
-import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import { bech32m } from '@scure/base';
 
 import { mnemonicToSeed } from './bip39';
@@ -229,11 +229,3 @@ export async function mlReceiveAddresses(
   }
   return out;
 }
-
-/** Test helper surface: raw blob codecs. */
-export const MlBlobs = {
-  pointFromHex(hex: string): Uint8Array {
-    return hexToBytes(hex);
-  },
-  blobHexToBytes: hexToBytes,
-};

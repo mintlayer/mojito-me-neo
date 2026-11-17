@@ -91,7 +91,11 @@ export function Onboarding({
           const meta: VaultMeta = {
             v: 1,
             createdAt: Date.now(),
-            network: 'mainnet',
+            // Discovery probes the testnet fixtures in this build (the
+            // mainnet indexer is live-verified but the wallet defaults to
+            // testnet derivation), so the stored meta names what the
+            // addresses actually are.
+            network: 'testnet',
             wordCount: count,
             hasPassphrase: false,
           };
