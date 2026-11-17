@@ -1,54 +1,22 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { C } from '../theme';
 import { Btn, MojitoLogo, Txt } from '../ui';
-import { Bio, BioCircle, BioGlyph, Column, Keypad, LinkBtn, PinDots, useBioScan } from '././ui';
-import { LOCK_ATTEMPTS, LOCK_SECONDS, bioName } from './context';
+import { Bio, BioCircle, BioGlyph, Column, Keypad, LinkBtn, PinDots, useBioScan, usePinEntry } from './ui';
+import { bioName } from './context';
 
 export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; onUnlock: () => void }) {
   const [mode, setMode] = useState<'bio' | 'pin'>('bio');
-  const [val, setVal] = useState('');
-  const [attempts, setAttempts] = useState(LOCK_ATTEMPTS);
-  const [err, setErr] = useState(false);
-  const [msg, setMsg] = useState('');
-  const [lockLeft, setLockLeft] = useState(0);
   const scan = useBioScan(onUnlock);
-  const locked = lockLeft > 0;
   const onUnlockRef = useRef(onUnlock);
   onUnlockRef.current = onUnlock;
 
-  // Real countdown. Without this the "locked for 30s" copy is a lie and the
-  // wallet stays bricked until the JS context restarts.
-  useEffect(() => {
-    if (lockLeft <= 0) return;
-    const t = setTimeout(() => {
-      const next = lockLeft - 1;
-      setLockLeft(next);
-      if (next === 0) {
-        setAttempts(LOCK_ATTEMPTS);
-        setMsg('');
-      }
-    }, 1000);
-    return () => clearTimeout(t);
-  }, [lockLeft]);
-
-  useEffect(() => {
-    if (val.length !== 6 || locked) return;
-    if (val === pin) {
-      const t = setTimeout(() => onUnlockRef.current(), 200);
-      return () => clearTimeout(t);
-    }
-    const left = attempts - 1;
-    setErr(true);
-    setMsg(left <= 0 ? '' : `Wrong PIN · ${left} attempt${left === 1 ? '' : 's'} left`);
-    const t = setTimeout(() => {
-      setVal('');
-      setErr(false);
-      setAttempts(left);
-      if (left <= 0) setLockLeft(LOCK_SECONDS);
-    }, 650);
-    return () => clearTimeout(t);
-  }, [val, locked, pin, attempts]);
+  const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
+    target: pin,
+    settle: 200,
+    onMatch: () => onUnlockRef.current(),
+    onMismatch: (left) => (left <= 0 ? '' : `Wrong PIN · ${left} attempt${left === 1 ? '' : 's'} left`),
+  });
 
   return (
     <Column>
@@ -89,12 +57,9 @@ export function UnlockScreen({ bio, pin, onUnlock }: { bio: Bio; pin: string; on
           <Keypad
             disabled={locked}
             onKey={(k) => {
-              if (val.length < 6) {
-                setMsg('');
-                setVal(val + k);
-              }
+              if (val.length < 6) setValue(val + k);
             }}
-            onDelete={() => setVal(val.slice(0, -1))}
+            onDelete={() => setValue(val.slice(0, -1))}
             corner={
               <Pressable onPress={() => setMode('bio')} className="p-2">
                 <BioGlyph bio={bio} size={26} color={C.text2} />

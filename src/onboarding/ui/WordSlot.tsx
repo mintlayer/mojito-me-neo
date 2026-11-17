@@ -13,8 +13,10 @@ export const WordSlot = forwardRef<
     onChangeText: (v: string) => void;
     onFocus: () => void;
     onSubmit: () => void;
+    /** secureTextEntry: committed words show as dots until the slot is focused. */
+    masked?: boolean;
   }
->(function WordSlot({ index, value, active, bad, onChangeText, onFocus, onSubmit }, ref) {
+>(function WordSlot({ index, value, active, bad, masked, onChangeText, onFocus, onSubmit }, ref) {
   return (
     <View
       className="flex-row items-center gap-1 px-2 h-[38px] rounded-[9px]"
@@ -39,6 +41,7 @@ export const WordSlot = forwardRef<
         autoCapitalize="none"
         autoCorrect={false}
         spellCheck={false}
+        secureTextEntry={masked}
         className="flex-1 font-mono text-[11.5px] font-medium text-text0 p-0"
       />
     </View>

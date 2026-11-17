@@ -1,14 +1,18 @@
 import React, { useState, useRef } from 'react';
 import { TextInput, View } from 'react-native';
-import { BIP39, PHRASE_LENGTHS, checksumOK } from '.././data';
+import * as Clipboard from 'expo-clipboard';
+import { BIP39, PHRASE_LENGTHS, checksumOK } from '../data';
 import { C, alpha } from '../../theme';
-import { Btn, Callout, Txt } from '../../ui';
-import { Body, Column, StepHeader, WordChip, WordSlot } from '.././ui';
+import { Btn, Callout, hairlineTop, Txt } from '../../ui';
+import { Body, Column, StepHeader, WordChip, WordSlot, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
 const EMPTY_PHRASE: string[] = Array(24).fill('');
 
 export function ImportPhrase({ ctx }: { ctx: Ctx }) {
+  // Whatever is typed or pasted here is the user's real wallet: same
+  // FLAG_SECURE/screenshot-alert guard as the Seed and Verify screens.
+  useSeedProtection();
   const [len, setLen] = useState(24);
   const [words, setWords] = useState<string[]>(EMPTY_PHRASE);
   const [active, setActive] = useState(0);
@@ -28,6 +32,9 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
     setLen(L);
     setWords(EMPTY_PHRASE.map((_, i) => parts[i] ?? ''));
     setActive(Math.min(parts.length, L - 1));
+    // A pasted phrase must not linger in the clipboard, where keyboards and
+    // clipboard managers can read it, so scrub it as soon as the words land.
+    Clipboard.setStringAsync('').catch(() => undefined);
   };
 
   const setWord = (i: number, raw: string) => {
@@ -69,6 +76,9 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
                   value={w}
                   active={isActive}
                   bad={bad}
+                  // Committed words are masked; only the word being edited is
+                  // legible, so the full phrase is never on screen at once.
+                  masked={!isActive}
                   onChangeText={(t) => setWord(i, t)}
                   onFocus={() => setActive(i)}
                   onSubmit={() => w && focusNext(i)}
@@ -100,7 +110,7 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
       </Body>
 
       {/* Suggestion rail pinned above the keyboard. */}
-      <View className="px-5 pt-2" style={{ borderTopWidth: 1, borderTopColor: C.lineSoft, backgroundColor: alpha(C.bg0, 0.7) }}>
+      <View className="px-5 pt-2" style={[hairlineTop, { backgroundColor: alpha(C.bg0, 0.7) }]}>
         <View className="flex-row flex-wrap gap-1.5 min-h-[34px] mb-2 items-center">
           {suggestions.length > 0 ? (
             suggestions.map((w) => (
