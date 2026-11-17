@@ -29,9 +29,15 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
   // comes back declined (the app re-locks, this screen stays mounted) the
   // ok phase drops so the copy never claims an unlock that did not happen.
   const resetRef = useRef<() => void>(() => undefined);
+  // Re-entrancy guard: a second scan or tap while an unlock is in flight
+  // must not fire a second gate resolution (duplicate native prompts).
+  const verifyingRef = useRef(false);
   const runUnlock = useCallback(() => {
+    if (verifyingRef.current) return;
+    verifyingRef.current = true;
     setVerifying(true);
     void Promise.resolve(onUnlockRef.current()).finally(() => {
+      verifyingRef.current = false;
       setVerifying(false);
       resetRef.current();
     });
@@ -141,7 +147,10 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
             }}
             onDelete={() => setValue(val.slice(0, -1))}
             corner={
-              !locked ? (
+              // Matches the Keypad gating plus the in-flight unlock: the
+              // corner must not switch to bio mode while verifying, or a
+              // second scan races the running gate resolution.
+              !locked && !verifying ? (
                 <Pressable
                   onPress={() => setMode('bio')}
                   accessibilityRole="button"
