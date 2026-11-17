@@ -87,6 +87,11 @@ async function stub(name: string, args: unknown[]): Promise<never> {
   throw bindingsError('bindings arrive in M1');
 }
 
+/** True when the native MojitoCore module is present (dev builds, not Expo Go). */
+export async function hasNativeCore(): Promise<boolean> {
+  return (await loadNative()) !== null;
+}
+
 export interface MojitoCore extends MintlayerBindings {
   secureRandom(length: number): Promise<Uint8Array>;
   // storage: key is generated and stored inside Keychain/Keystore, never returned
