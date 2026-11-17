@@ -39,23 +39,39 @@ function parseAccountPath(path: string): number[] {
 }
 
 /**
+ * Validate an account path without deriving anything: returns the
+ * CustomPathError rejection, or null when the path would scan.
+ */
+export function validateCustomPath(path: string): CustomPathError | null {
+  try {
+    const [purpose, coin] = parseAccountPath(path);
+    if (purpose !== 84 && purpose !== 44) return new CustomPathError('purpose');
+    if (purpose === 84 ? coin !== 0 && coin !== 1 : coin !== 19788 && coin !== 1) {
+      return new CustomPathError('coin');
+    }
+    return null;
+  } catch (e) {
+    return e instanceof CustomPathError ? e : null;
+  }
+}
+
+/**
  * Derive the account a custom path points at. `words` must already be
- * validated (mnemonicToSeed re-validates). Receiving and change addresses
- * hang below the returned account as usual (branch 0/1, soft indices).
+ * validated (mnemonicToSeed re-validates). Validate first, then map: the
+ * network mapping only runs on a validated coin. Receiving and change
+ * addresses hang below the returned account as usual (branch 0/1, soft
+ * indices).
  */
 export async function deriveCustomScan(words: string[], path: string): Promise<CustomScan> {
-  const levels = parseAccountPath(path);
   const trimmed = path.trim();
+  const invalid = validateCustomPath(trimmed);
+  if (invalid) throw invalid;
+  const levels = parseAccountPath(trimmed);
   const [purpose, coin] = levels;
   if (purpose === 84) {
     const network: BtcNetwork = coin === 0 ? 'mainnet' : 'testnet';
-    if (coin !== 0 && coin !== 1) throw new CustomPathError('coin');
     return { chain: 'btc', network, account: await deriveBtcAccountAtPath(words, trimmed, network) };
   }
-  if (purpose === 44) {
-    const network: MlDerivationNetwork = coin === 19788 ? 'mainnet' : 'testnet';
-    if (coin !== 19788 && coin !== 1) throw new CustomPathError('coin');
-    return { chain: 'ml', network, account: await deriveMlAccountAtPath(words, levels, network) };
-  }
-  throw new CustomPathError('purpose');
+  const network: MlDerivationNetwork = coin === 19788 ? 'mainnet' : 'testnet';
+  return { chain: 'ml', network, account: await deriveMlAccountAtPath(words, levels, network) };
 }

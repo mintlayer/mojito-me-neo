@@ -3,7 +3,7 @@ import { TextInput, View } from 'react-native';
 import { t } from '../../i18n';
 import { deriveMlAccount, mlReceiveAddresses, type MlAccount } from '../../keys/mlAccounts';
 import { deriveBtcAccount, btcReceiveAddresses, type BtcAccount } from '../../keys/BtcKeyring';
-import { CustomPathError, deriveCustomScan } from '../../keys/customPath';
+import { CustomPathError, deriveCustomScan, validateCustomPath } from '../../keys/customPath';
 import { createFixtureAddressProbe, type AddressProbe } from '../AddressProbe';
 import { C, alpha, black, white } from '../../theme';
 import { Btn, Callout, Sheet, Ticker, Txt } from '../../ui';
@@ -34,9 +34,13 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
   const [derived, setDerived] = useState<Derived | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [path, setPath] = useState("m/84'/0'/3'");
+  /** The entered path starts empty; the placeholder shows the shape. */
+  const [path, setPath] = useState('');
   /** null = the default accounts; otherwise the entered account path. */
   const [scanPath, setScanPath] = useState<string | null>(null);
+  /** Whether the error phase came from a rejected custom path: those get an
+   *  Edit-path action that reopens the sheet with the path retained. */
+  const [pathError, setPathError] = useState(false);
 
   useEffect(() => {
     if (phase !== 'deriving') return;
@@ -75,6 +79,7 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
       setPhase('done');
     })().catch((e) => {
       if (!alive) return;
+      setPathError(e instanceof CustomPathError);
       setError(
         e instanceof CustomPathError
           ? t('onboarding.discovery.pathInvalid')
@@ -96,9 +101,20 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
       {phase === 'error' ? (
         <View className="flex-1 items-center justify-center px-6">
           <BigBadge icon="history" size={72} square />
-          <Txt className="text-[15px] font-semibold mt-5 text-center leading-[21px]" style={{ color: C.red }}>
-            {error}
-          </Txt>
+          <View className="w-full max-w-[320px] mt-5">
+            <Callout tone={C.red}>{error}</Callout>
+          </View>
+          {pathError && (
+            <LinkBtn
+              className="mt-4"
+              onPress={() => {
+                // The entered path survives the failure: fixing one typo
+                // must not cost full re-navigation and retyping.
+                setSheet(true);
+              }}>
+              {t('onboarding.discovery.editPath')}
+            </LinkBtn>
+          )}
         </View>
       ) : phase === 'deriving' ? (
         <View className="flex-1 items-center justify-center px-6">
@@ -216,10 +232,21 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
           autoCorrect={false}
           className="font-mono text-[13px] text-text0 h-[46px] rounded-xl px-3.5 mt-4"
           style={{ backgroundColor: black(0.3), borderWidth: 1, borderColor: C.line }}
+          // Locale-neutral technical literal (deliberate): derivation paths
+          // are identical in every locale, so the placeholder stays outside
+          // t().
+          placeholder="m/84'/0'/0'"
+          placeholderTextColor={C.text3}
         />
+        {path.trim().length > 0 && validateCustomPath(path.trim()) && (
+          <Txt className="text-[11.5px] mt-2" style={{ color: C.red }}>
+            {t('onboarding.discovery.pathInvalid')}
+          </Txt>
+        )}
         <Btn
           tone="primary"
           className="mt-3.5"
+          disabled={path.trim().length === 0 || !!validateCustomPath(path.trim())}
           onPress={() => {
             // The entered path really drives the derivation: the scan effect
             // re-runs against it, and an unsupported path lands in the error
@@ -228,6 +255,7 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
             setSheet(false);
             setDerived(null);
             setError(null);
+            setPathError(false);
             setScanPath(entered);
             setPhase('deriving');
           }}>

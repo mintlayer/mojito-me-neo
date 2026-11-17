@@ -325,6 +325,7 @@ export const en = {
   'onboarding.discovery.missingPhrase': "The phrase is no longer in memory. Go back and start the flow again.",
   'onboarding.discovery.pathInvalid': "That path doesn't fit an account path: three hardened levels under m/44' (Mintlayer) or m/84' (Bitcoin), coin 19788 or 1 for m/44', coin 0 or 1 for m/84'.",
   'onboarding.discovery.customNone': 'Nothing found on this path. Your default accounts are still restored.',
+  'onboarding.discovery.editPath': 'Edit path',
   'onboarding.discovery.none': 'No extra accounts found',
   'onboarding.discovery.noneSub': 'No on-chain history was found. Your default accounts are restored anyway - you can add more accounts any time.',
   'onboarding.discovery.customTitle': 'Custom derivation path',
