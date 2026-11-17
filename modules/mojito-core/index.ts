@@ -1,9 +1,15 @@
 // Expo module registration and the MojitoCore type surface. The native module
 // ships the crypto facade for real (secure random, AES-256-GCM seal and open
-// over Keychain or Keystore resident keys). The MintlayerBindings call-throughs
-// are stubbed on the native side until M1 ships the AAR and xcframework; every
-// stub rejects with BindingsError { kind: 'unknown', detail: 'bindings arrive
-// in M1' } so the interface is exercised but nothing pretends to derive keys.
+// over Keychain or Keystore resident keys).
+//
+// Bindings implementation status (M1): the artifacts are vendored
+// (vendor/mintlayer, release wallet-bindings-v0.1.0) and linked from the
+// Android and iOS build files, but the Kotlin and Swift facades still reject
+// with BindingsError { kind: 'unknown', detail: 'bindings facade: native
+// call-through pending native-build verification' }. The M1 derivation and
+// address paths run in TypeScript (src/keys) pinned to the bindings parity
+// vectors; the native call-through lands with the first dev-build run on a
+// build machine (see vendor/mintlayer/CHECKSUMS.txt).
 import { requireNativeModule } from 'expo-modules-core';
 
 import {
@@ -77,7 +83,7 @@ async function stub(name: string, args: unknown[]): Promise<never> {
       // fall through to the structured error
     }
   }
-  throw bindingsError('bindings arrive in M1');
+  throw bindingsError('bindings facade: native call-through pending native-build verification');
 }
 
 /** True when the native MojitoCore module is present (dev builds, not Expo Go). */

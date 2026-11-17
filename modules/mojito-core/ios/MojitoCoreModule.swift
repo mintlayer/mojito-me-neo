@@ -5,9 +5,10 @@ import Security
 // Mojito core facade. The crypto half is real: AES-256-GCM (CryptoKit) with a
 // 256-bit key generated on first use of a keyId and stored in the Keychain
 // (kSecAttrAccessibleWhenUnlockedThisDeviceOnly, never returned to JS). The
-// MintlayerBindings call-throughs are stubs that reject until M1 ships the
-// xcframework (MintlayerWalletBindings). No logging of plaintext or key bytes
-// anywhere; module-level logs may reference the keyId only.
+// MintlayerBindings call-throughs reject until the vendored xcframework
+// (MintlayerWalletBindings, see vendor/mintlayer) is exercised in a dev build
+// on a Mac; the TS key paths do not depend on them. No logging of plaintext
+// or key bytes anywhere; module-level logs may reference the keyId only.
 public class MojitoCoreModule: Module {
   private let service = "mojito.core.keys"
 
@@ -224,7 +225,7 @@ public class MojitoCoreModule: Module {
   }
 
   private func rejectBindings(_ promise: Promise) {
-    promise.reject(BINDINGS_CODE, "bindings arrive in M1", nil)
+    promise.reject(BINDINGS_CODE, "bindings facade: native call-through pending native-build verification", nil)
   }
 
   private func hex(_ data: Data) -> String {

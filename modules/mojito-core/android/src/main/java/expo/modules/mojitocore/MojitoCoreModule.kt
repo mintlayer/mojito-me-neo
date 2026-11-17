@@ -13,9 +13,11 @@ import javax.crypto.spec.GCMParameterSpec
 
 // Mojito core facade. The crypto half is real: AES-256-GCM with a key that is
 // generated inside Android Keystore on first use of a keyId and never leaves
-// it. The MintlayerBindings call-throughs are stubs that reject until M1 ships
-// the AAR (org.mintlayer.wallet.bindings). No logging of plaintext or key
-// bytes anywhere; module-level logs may reference the keyId only.
+// it. The MintlayerBindings call-throughs reject until the vendored AAR
+// (org.mintlayer.wallet.bindings, see vendor/mintlayer) is exercised in a
+// dev build on a build machine; the TS key paths do not depend on them. No
+// logging of plaintext or key bytes anywhere; module-level logs may reference
+// the keyId only.
 class MojitoCoreModule : Module() {
   private val keyAliasPrefix = "mojito.core."
 
@@ -211,7 +213,7 @@ class MojitoCoreModule : Module() {
   }
 
   private fun rejectBindings(promise: Promise) {
-    promise.reject(BINDINGS_CODE, "bindings arrive in M1", null)
+    promise.reject(BINDINGS_CODE, "bindings facade: native call-through pending native-build verification", null)
   }
 
   private fun hex(bytes: ByteArray): String {
