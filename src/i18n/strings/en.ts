@@ -27,6 +27,15 @@ export const en = {
   'common.error.generic': 'Something went wrong. Try again.',
   'common.retry': 'Try again',
 
+  // activity rows (assembled by src/data/activity/ActivityService.ts)
+  'activity.row.send': 'Sent',
+  'activity.row.receive': 'Received',
+  'activity.row.htlc': 'Atomic swap',
+  'activity.state.pending': 'Pending',
+  'activity.state.confirmed': 'Confirmed',
+  'activity.state.confirmations': 'Confirmed · {count}',
+  'activity.time.now': 'now',
+
   // tabs
   'tabs.wallet': 'Wallet',
   'tabs.dex': 'DEX',

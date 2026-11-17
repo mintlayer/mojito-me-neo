@@ -9,7 +9,7 @@
     "ios:dev": "expo run:ios",
     "android:dev": "expo run:android",
     "prebuild": "expo prebuild",
-    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/money.test.ts && tsx src/data/ml/indexerClient.test.ts && tsx src/data/btc/btcChainService.test.ts && tsx src/data/addresses/addressManager.test.ts && tsx src/storage/secureStore.test.ts && tsx src/storage/walletVault.test.ts && tsx src/storage/pinStore.test.ts && tsx src/storage/appSettings.test.ts && tsx src/data/providers/providers.test.ts && tsx src/keys/bip39.test.ts && tsx src/keys/mlAccounts.test.ts && tsx src/keys/BtcKeyring.test.ts && tsx src/keys/session.test.ts && tsx scripts/no-console.ts && tsx scripts/no-em-dash.ts && tsc --noEmit && eslint .",
+    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/money.test.ts && tsx src/data/ml/indexerClient.test.ts && tsx src/data/btc/btcChainService.test.ts && tsx src/data/addresses/addressManager.test.ts && tsx src/data/activity/activityService.test.ts && tsx src/storage/secureStore.test.ts && tsx src/storage/walletVault.test.ts && tsx src/storage/pinStore.test.ts && tsx src/storage/appSettings.test.ts && tsx src/data/providers/providers.test.ts && tsx src/keys/bip39.test.ts && tsx src/keys/mlAccounts.test.ts && tsx src/keys/BtcKeyring.test.ts && tsx src/keys/session.test.ts && tsx scripts/no-console.ts && tsx scripts/no-em-dash.ts && tsc --noEmit && eslint .",
     "lint": "eslint ."
   },
   "dependencies": {

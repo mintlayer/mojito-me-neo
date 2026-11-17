@@ -144,7 +144,8 @@ export class BtcChainService {
 
   /** One request with timeout, typed errors and 429/5xx retry with backoff. */
   private async request(path: string, query?: Record<string, string>): Promise<unknown> {
-    const url = `${this.base}${path}${query ? `?${new URLSearchParams(query).toString()}` : ''}`;
+    const qs = query && Object.keys(query).length > 0 ? `?${new URLSearchParams(query).toString()}` : '';
+    const url = `${this.base}${path}${qs}`;
     let lastError: IndexerError | null = null;
     for (let attempt = 0; attempt <= this.retries; attempt++) {
       if (attempt > 0) await this.delay(Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** (attempt - 1)));
