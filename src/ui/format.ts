@@ -5,3 +5,13 @@ export function usd(amount: string | number, price: number): string {
   const value = (typeof amount === 'string' ? parseFloat(amount || '0') : amount) * price;
   return (Number.isFinite(value) ? value : 0).toFixed(2);
 }
+
+/** Quantize a float product into a display amount string. Percent-picked
+ *  balances (balance * fraction) carry binary float tails; clamp negatives
+ *  and non-finite values to zero, round to the asset's decimals (8 for
+ *  ML/BTC-style assets, the AssetRow default) and strip trailing zeros. */
+export function quantizeAmount(value: number, decimals = 8): string {
+  const clean = Number.isFinite(value) && value > 0 ? value : 0;
+  const fixed = clean.toFixed(decimals);
+  return fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed;
+}

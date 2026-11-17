@@ -5,7 +5,7 @@ import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as
 import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
-import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, usd } from '../ui';
+import { AmountRow, Btn, Card, FlowX, Icon, KVGrid, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors, quantizeAmount, usd } from '../ui';
 
 /** One side of a swap: token, chain, typed amount and provider balance. */
 type SwapPanelData = { sym: string; chain: string; amt: string; bal: number };
@@ -147,7 +147,7 @@ function SwapPanel({
         <Txt mono className="text-[11px] text-text2">
           {t('common.approxUsd', { usd: `$${usdValue}` })}
         </Txt>
-        {onChange && <PctButtons compact onPick={(f) => onChange(String(data.bal * f))} />}
+        <PctButtons compact onPick={(f) => onChange(quantizeAmount(data.bal * f))} />
       </View>
     </Card>
   );

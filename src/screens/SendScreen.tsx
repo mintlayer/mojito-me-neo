@@ -6,7 +6,7 @@ import { useData } from '../data/providers/context';
 import type { FeeTierId } from '../data/providers';
 import { bioName } from '../onboarding/context';
 import { C, G } from '../theme';
-import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop, usd } from '../ui';
+import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, quantizeAmount, tile, hairlineTop, usd } from '../ui';
 
 export function SendScreen({ onClose, bio = 'face' }: Sheet) {
   const assets = useData((d) => d.getAssets());
@@ -151,7 +151,7 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
           {t('common.approxUsd', { usd: `$${usd(amount, token.price)}` })}
         </Txt>
         <View className="w-full mt-3.5">
-          <PctButtons onPick={(f) => setAmount(String(token.amt * f))} />
+          <PctButtons onPick={(f) => setAmount(quantizeAmount(token.amt * f))} />
         </View>
       </View>
 
