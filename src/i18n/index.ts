@@ -1,5 +1,5 @@
-// Central strings module. t('key') with flat dot namespaced keys and {name}
-// interpolation. English only today (decision D7); setLocale plus the registry
+// Central strings module: flat dot namespaced keys and {name} interpolation
+// through t(). English only today (decision D7); setLocale plus the registry
 // keep later locales a data change, not a code change.
 import { en } from './strings/en';
 

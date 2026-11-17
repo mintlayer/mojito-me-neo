@@ -58,9 +58,9 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
     <Column>
       <StepHeader onBack={ctx.pop} step={3} />
       <Body className="px-5 pt-4 pb-2.5">
-        <Txt className="text-[24px] font-bold tracking-tightest">Import recovery phrase</Txt>
+        <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.import.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-1.5 leading-[19px]">
-
+          {t('onboarding.import.sub')}
         </Txt>
 
         <View className="flex-row flex-wrap -m-[3px] mt-4">
