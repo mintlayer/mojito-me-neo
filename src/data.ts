@@ -146,9 +146,9 @@ export const CARD_TIERS = [
 /* ── Send / Receive ──────────────────────────────────────── */
 
 export const FEES = {
-  economy: { eta: '5-15 min', cost: 0.00008 },
-  standard: { eta: '~12 sec', cost: 0.00012 },
-  fast: { eta: '~3 sec', cost: 0.00024 },
+  economy: { cost: 0.00008 },
+  standard: { cost: 0.00012 },
+  fast: { cost: 0.00024 },
 };
 
 export const CONTACTS = [

@@ -40,7 +40,7 @@ export type CardTier = { name: string; stake: string; cashback: string; active?:
 
 // Send and receive
 export type FeeTierId = 'economy' | 'standard' | 'fast';
-export type FeeSchedule = Record<FeeTierId, { eta: string; cost: number }>;
+export type FeeSchedule = Record<FeeTierId, { cost: number }>;
 export type Contact = { name: string; address: string };
 
 // Profile
