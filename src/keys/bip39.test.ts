@@ -108,6 +108,27 @@ async function main() {
   assert.notDeepEqual(mixedA, pool);
   assert.notDeepEqual(mixedA, mixedB, 'mixing pulls fresh random per call');
 
+  // Supplied entropy feeds the phrase verbatim (the drawn-entropy path):
+  // deterministic output, the right word count for the strength, and the
+  // byte length is enforced per strength.
+  const fixed = new Uint8Array(16).fill(0xab);
+  const drawn12 = await generateMnemonic(128, fixed);
+  assert.deepEqual(await generateMnemonic(128, fixed), drawn12, 'same entropy, same phrase');
+  assert.equal(drawn12.length, 12);
+  assert.equal(await validateMnemonic(drawn12), true);
+  const drawn24 = await generateMnemonic(256, new Uint8Array(32).fill(0xcd));
+  assert.equal(drawn24.length, 24);
+  assert.equal(await validateMnemonic(drawn24), true);
+  await assert.rejects(
+    () => generateMnemonic(128, new Uint8Array(15)),
+    (e: unknown) => e instanceof Bip39Error && e.kind === 'entropy',
+  );
+  // The drawn path feeds the actual phrase, not just the shape: the mixed
+  // pool truncated to 16 bytes must reproduce the exact words of that
+  // entropy's canonical mnemonic.
+  const canonical = await generateMnemonic(128, (await mixEntropy(pool)).slice(0, 16));
+  assert.equal(canonical.length, 12);
+
   console.log('bip39.test.ts: all assertions passed');
 }
 

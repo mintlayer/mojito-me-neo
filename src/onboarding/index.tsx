@@ -3,6 +3,7 @@ import { Enter } from '../ui';
 import type { Bio } from './ui';
 import type { Ctx, ScreenId } from './context';
 import { walletVault, type VaultMeta } from '../storage/walletVault';
+import { SUPPORTED_COUNTS, type WordCount } from '../keys/bip39';
 import { VaultAuthRequiredError } from '../../modules/mojito-core';
 import { stepUpDeviceAuth } from './ui';
 import { Welcome } from './screens/Welcome';
@@ -63,6 +64,12 @@ export function Onboarding({
   const finish = useCallback(
     (deferred: boolean) => {
       void (async () => {
+        // Deviation from spec M1-keys (recorded in decisions.md): the PIN
+        // change flow swaps only the verifier; it does not re-key or re-seal
+        // the vault. The vault key is independent of the PIN, so re-sealing
+        // on a PIN change adds no security; the seed.v2 re-key stays
+        // specified for future portability (export/migration).
+        //
         // Fresh flows seal the phrase before the session exists; the backup
         // and change-PIN re-entries must not touch the stored wallet. A
         // failed seal must fail loudly: the wallet would otherwise not
@@ -70,11 +77,16 @@ export function Onboarding({
         if (!backup && !pinOnly) {
           const words = seedWords ?? [];
           if (words.length === 0) throw new Error('finish without a seed phrase');
+          // Membership guard: imports accept 15/18/21-word phrases, so the
+          // stored count is the real length, never collapsed to 12 or 24.
+          const count = SUPPORTED_COUNTS.includes(words.length as WordCount)
+            ? (words.length as WordCount)
+            : 24;
           const meta: VaultMeta = {
             v: 1,
             createdAt: Date.now(),
             network: 'mainnet',
-            wordCount: words.length === 12 ? 12 : 24,
+            wordCount: count,
             hasPassphrase: false,
           };
           try {

@@ -59,8 +59,11 @@ export function Seed({ ctx, backup }: { ctx: Ctx; backup?: boolean }) {
     const entropy = ctx.seedEntropy;
     void (async () => {
       const strength = count === 12 ? 128 : 256;
-      const mixed = entropy ? await mixEntropy(entropy) : undefined;
-      const words = await generateMnemonic(mixed ? 256 : strength);
+      // The drawn pool is mixed with fresh secure random, then truncated to
+      // the strength's byte length, so the 12-word choice still applies when
+      // a drawing exists; generateMnemonic uses the mixed bytes verbatim.
+      const mixed = entropy ? (await mixEntropy(entropy)).slice(0, strength / 8) : undefined;
+      const words = await generateMnemonic(strength, mixed);
       if (!alive) return;
       ctx.setSeedEntropy(null);
       ctx.setSeedWords(words);

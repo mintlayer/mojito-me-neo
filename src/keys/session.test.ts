@@ -49,8 +49,21 @@ async function main() {
   // Closure failures still release the plaintext path cleanly.
   await assert.rejects(() => session.withSeed(async () => { throw new Error('boom'); }), /boom/);
 
+  // release() ends the session: the phrase reference is dropped and every
+  // other method refuses to run. release is idempotent.
+  session.release();
+  session.release();
+  await assert.rejects(() => session.withSeed(async () => 0), /released/);
+  await assert.rejects(() => session.xpubMl('testnet'), /released/);
+  await assert.rejects(() => session.xpubBtc('testnet'), /released/);
+
+  // A fresh session still works after another one was released.
+  const second = await openKeySession();
+  assert.ok((await second.xpubBtc('mainnet')).startsWith('xpub'));
+  second.release();
+
   await walletVault.wipe();
-  console.log('session.test.ts: closure isolation and xpub parity pass');
+  console.log('session.test.ts: closure isolation, release and xpub parity pass');
 }
 
 main().catch((e) => {

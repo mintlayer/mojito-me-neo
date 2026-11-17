@@ -106,14 +106,24 @@ function entropyToMnemonic(entropy: Uint8Array): string[] {
 
 /**
  * Generate a mnemonic from secure entropy. 128 bits yield 12 words, 256 bits
- * 24 words; the onboarding default is 24 words.
+ * 24 words; the onboarding default is 24 words. When `entropy` is supplied
+ * (the drawn-entropy flow hands in bytes already mixed with secure random
+ * and truncated to the strength's byte length) it is used verbatim, so the
+ * drawing genuinely feeds the phrase; without it the entropy comes from the
+ * native core's secure random.
  */
-export async function generateMnemonic(strength: MnemonicStrength = 256): Promise<string[]> {
+export async function generateMnemonic(strength: MnemonicStrength = 256, entropy?: Uint8Array): Promise<string[]> {
   if (strength !== 128 && strength !== 256) {
     throw new Bip39Error('entropy', 'strength must be 128 or 256 bits');
   }
-  const entropy = await secureEntropy(strength / 8);
-  return entropyToMnemonic(entropy);
+  if (entropy) {
+    const bytes = strength / 8;
+    if (entropy.length !== bytes) {
+      throw new Bip39Error('entropy', `supplied entropy must be exactly ${bytes} bytes`);
+    }
+    return entropyToMnemonic(entropy);
+  }
+  return entropyToMnemonic(await secureEntropy(strength / 8));
 }
 
 /** Mix externally collected entropy (for example the drawn-entropy pool)
