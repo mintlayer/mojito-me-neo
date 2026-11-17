@@ -48,6 +48,7 @@ export function Onboarding({
    *  layer, and the stored phrase must not decrypt until the user has
    *  re-unlocked. */
   locked = false,
+  onEraseWallet,
   onDone,
 }: {
   /** 'seed' re-enters just the backup flow from the deferred-backup banner. */
@@ -59,6 +60,9 @@ export function Onboarding({
   backup?: boolean;
   /** Lock layer state; Seed defers the stored-phrase decrypt until false. */
   locked?: boolean;
+  /** Erase the wallet and return to a fresh onboarding; Seed surfaces it as
+   *  the invalidated-key remedy in backup re-entry. */
+  onEraseWallet?: () => void;
   onDone: (r: OnboardingResult) => void;
 }) {
   const [stack, setStack] = useState<ScreenId[]>([initial]);
@@ -167,6 +171,7 @@ export function Onboarding({
     seedEntropy,
     setSeedEntropy,
     pinOnly,
+    eraseWallet: onEraseWallet,
   };
 
   const Current = SCREENS[screen];

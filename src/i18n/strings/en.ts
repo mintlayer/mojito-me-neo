@@ -25,6 +25,7 @@ export const en = {
   'common.approxUsd': '≈ {usd}',
   'common.devClientRequired': 'Expo Go cannot run this build. Install the Mojito development build to launch the app.',
   'common.error.generic': 'Something went wrong. Try again.',
+  'common.retry': 'Try again',
 
   // tabs
   'tabs.wallet': 'Wallet',

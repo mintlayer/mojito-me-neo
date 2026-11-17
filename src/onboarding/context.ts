@@ -40,6 +40,9 @@ export type Ctx = {
   setSeedEntropy: (bytes: Uint8Array | null) => void;
   /** Change-PIN reuse: verify the old PIN, stop after confirming the new. */
   pinOnly: boolean;
+  /** Backup re-entry only: erase the wallet and return to a fresh
+   *  onboarding (Seed's invalidated-key guidance). */
+  eraseWallet?: () => void;
 };
 
 export { LOCK_ATTEMPTS, LOCK_SECONDS } from '../storage/pinStore';

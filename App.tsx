@@ -368,6 +368,7 @@ function Shell() {
             backup
             bio={session.bio}
             locked={locked}
+            onEraseWallet={signOut}
             onDone={(r) => {
               setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
               setBackup(false);

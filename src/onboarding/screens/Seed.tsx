@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../../i18n';
 import { generateMnemonic, mixEntropy } from '../../keys/bip39';
+import { VaultKeyInvalidatedError } from '../../../modules/mojito-core';
 import { walletVault } from '../../storage/walletVault';
 import { C, alpha, white } from '../../theme';
 import { Btn, Card, Chip, Enter, Icon, ListRow, Sheet, Txt, tint } from '../../ui';
@@ -23,6 +24,10 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
   const [count, setCount] = useState<12 | 24>(24);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Why the stored-phrase decrypt failed; drives the recovery card. */
+  const [loadFailure, setLoadFailure] = useState<'invalidated' | 'retryable' | null>(null);
+  /** Retry bump for the backup load effect. */
+  const [loadTick, setLoadTick] = useState(0);
 
   // Backup re-entry: show the stored phrase, never generate or re-seal. One
   // load per mount: the effect waits for the lock layer to clear (the backup
@@ -38,15 +43,25 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
     walletVault
       .openWords()
       .then((words) => {
-        if (alive) ctx.setSeedWords(words);
+        if (!alive) return;
+        ctx.setSeedWords(words);
+        setLoadFailure(null);
       })
-      .catch(() => alive && setError(t('onboarding.seed.loadError')));
+      .catch((e) => {
+        if (!alive) return;
+        // Terminal vs retryable: a VaultKeyInvalidatedError means the key
+        // can never be authorized again (biometrics re-enrolled mid
+        // session), so unlock is not a way back in and the only remedy is
+        // the erase-and-restore path. Everything else (a declined prompt,
+        // a read error) retries in place.
+        setLoadFailure(e instanceof VaultKeyInvalidatedError ? 'invalidated' : 'retryable');
+      });
     return () => {
       alive = false;
     };
-    // setSeedWords is a stable state setter; only the value gates the load.
+    // setSeedWords is a stable state setter; only the values gate the load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backup, locked, ctx.seedWords]);
+  }, [backup, locked, ctx.seedWords, loadTick]);
 
   // Create mode: generate once on entry, and again whenever the word count
   // changes or the Entropy screen hands back mixed entropy.
@@ -166,6 +181,39 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
           <LinkBtn className="mt-2" onPress={regenerate}>
             {t('onboarding.seed.regenerate')}
           </LinkBtn>
+        )}
+
+        {/* Backup load failure: the stored phrase could not be decrypted.
+            Terminal key state gets the same erase-and-restore guidance the
+            unlock path shows; retryable failures get an in-place retry. */}
+        {backup && loadFailure && (
+          <Card variant="inset" accent={C.red} className="mt-2.5 p-4 rounded-2xl">
+            {loadFailure === 'invalidated' ? (
+              <>
+                <Txt className="text-[14px] font-semibold" style={{ color: C.red }}>
+                  {t('onboarding.unlock.invalidatedTitle')}
+                </Txt>
+                <Txt className="text-[12px] text-text2 mt-1.5 leading-[17px]">
+                  {t('onboarding.unlock.invalidatedBody')}
+                </Txt>
+                <Btn tone="red" className="mt-3.5" onPress={() => ctx.eraseWallet?.()}>
+                  {t('onboarding.unlock.invalidatedErase')}
+                </Btn>
+              </>
+            ) : (
+              <>
+                <Txt className="text-[12px] text-text2 leading-[17px]">{t('onboarding.seed.loadError')}</Txt>
+                <LinkBtn
+                  className="mt-2.5"
+                  onPress={() => {
+                    setLoadFailure(null);
+                    setLoadTick((n) => n + 1);
+                  }}>
+                  {t('common.retry')}
+                </LinkBtn>
+              </>
+            )}
+          </Card>
         )}
 
         {/* The button carries the commitment instead of a separate tick-box:
