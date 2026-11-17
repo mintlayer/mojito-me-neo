@@ -64,6 +64,7 @@ export const en = {
   'home.networks.title': 'Connected networks',
   'home.networks.active': '{count} active',
   'home.assets.title': 'Assets',
+  'home.tokens.unknown': 'Unknown token',
   'home.tabs.tokens': 'Tokens',
   'home.tabs.nfts': 'NFTs',
   'home.tabs.defi': 'DeFi',

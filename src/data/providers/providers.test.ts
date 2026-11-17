@@ -4,6 +4,7 @@
 import { strict as assert } from 'node:assert/strict';
 
 import { createProviders, readDataMode } from './index';
+import { setNetwork } from '../../config/endpoints';
 import { BALANCE } from '../../data';
 
 async function main() {
@@ -30,6 +31,11 @@ async function main() {
   assert.equal(snapshots.length, 1);
   assert.equal(snapshots[0].tokenId, 'ML');
 
+  // Mock mode: an empty NFT gallery until real holdings exist, prices are
+  // mock per R1, and the demo-data chip stays honest.
+  assert.deepEqual(await providers.data.getNfts(), []);
+  assert.equal(providers.pricesAreMock, true);
+
   const history = await providers.price.getHistory('ML', '1D');
   assert.ok(history.length > 10);
   const candles = await providers.price.getCandles('ML/USDT', '1h');
@@ -54,8 +60,19 @@ async function main() {
   });
   assert.equal(await providers.bridge.status(handle), 'awaiting-deposit');
 
-  // real mode is gated until M2
-  assert.throws(() => createProviders('real'), /not-implemented/);
+  // Real mode constructs lazily (no network, no vault access until a data
+  // call), keeps the R1 mock price source and the fixture seams for later
+  // milestones; the data calls themselves are covered by the service gates.
+  const real = createProviders('real');
+  assert.equal(real.mode, 'real');
+  assert.equal(real.pricesAreMock, true);
+  assert.deepEqual(await real.data.getNetworks(), ['Bitcoin', 'Mintlayer']);
+  assert.equal((await real.data.getMarket('ML/USDT')).pair, 'ML/USDT');
+  // Unconfigured testnet base (action item A2): typed offline, no fetch.
+  setNetwork('testnet');
+  const offline = createProviders('real');
+  await assert.rejects(() => offline.data.getPortfolio(), /transport/);
+  setNetwork('mainnet');
 
   console.log('providers: ok');
 }

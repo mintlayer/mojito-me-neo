@@ -50,6 +50,7 @@ export function createFixtureWalletData(): WalletData {
     getAssetSymbols: async () => ASSET_SYMBOLS,
     getAssetBalances: async () => ASSET_BALANCES,
     getActivity: async (limit) => ACTIVITY.slice(0, limit),
+    getNfts: async () => [],
     getNetworks: async () => [...NETWORKS],
     getRanges: async () => [...RANGES],
     getProfile: async () => PROFILE,

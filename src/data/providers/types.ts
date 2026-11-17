@@ -18,6 +18,19 @@ export type AssetRow = {
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };
 
+/** NFT gallery row (Home NFTs tab, real mode via NftService; mock mode ships
+ *  an empty gallery until an account holds NFTs). */
+export type NftRow = {
+  id: string;
+  name: string | null;
+  ticker: string | null;
+  owner: string | null;
+  mediaUri: string | null;
+  iconUri: string | null;
+  /** True when the metadata lookup failed; drives the metadataMissing copy. */
+  metadataMissing: boolean;
+};
+
 // DEX market
 export type MarketSummary = {
   pair: string; last: string; change: number; btc: string;
@@ -106,6 +119,7 @@ export interface WalletData {
   getAssetSymbols(): Promise<string[]>;
   getAssetBalances(): Promise<Record<string, string>>;
   getActivity(limit: number): Promise<ActivityRow[]>;
+  getNfts(): Promise<NftRow[]>;
   getNetworks(): Promise<ChainName[]>;
   getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;
@@ -141,4 +155,7 @@ export interface Providers {
   waitlist: WaitlistProvider;
   bridge: BridgeProvider;
   mode: ProviderMode;
+  /** True while USD figures come from the mock price provider (R1): the UI
+   *  labels them as indicative mock data instead of presenting real prices. */
+  pricesAreMock: boolean;
 }
