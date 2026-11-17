@@ -4,7 +4,14 @@
     "strict": true,
     "jsx": "react-jsx",
     "jsxImportSource": "nativewind",
-    "types": ["node"]
+    "types": ["node"],
+    "paths": {
+      "@mojito/core": ["./modules/mojito-core/index.ts"],
+      "@config/*": ["./src/config/*"],
+      "@i18n/*": ["./src/i18n/*"],
+      "@storage/*": ["./src/storage/*"],
+      "@providers/*": ["./src/data/providers/*"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"],
   "exclude": [
