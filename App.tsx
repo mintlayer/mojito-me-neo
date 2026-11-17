@@ -305,6 +305,15 @@ function Shell() {
     })();
   };
 
+  /** Backup re-entry invalidated card: the erase destroys the sealed phrase
+   *  and the PIN verifier, so it must not run on a single tap. Same
+   *  cancel-or-destructive confirm as the Settings sign-out. */
+  const confirmSignOut = () =>
+    Alert.alert(t('settings.signout.title'), t('settings.signout.body'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('settings.signout.cta'), style: 'destructive', onPress: () => signOut() },
+    ]);
+
   const Active = SCREENS[tab];
   const Sheet = overlay ? OVERLAYS[overlay] : null;
 
@@ -370,7 +379,7 @@ function Shell() {
             backup
             bio={session.bio}
             locked={locked}
-            onEraseWallet={signOut}
+            onEraseWallet={confirmSignOut}
             onDone={(r) => {
               setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
               setBackup(false);
