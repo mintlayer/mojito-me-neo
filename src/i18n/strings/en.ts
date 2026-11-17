@@ -163,6 +163,8 @@ export const en = {
   'card.waitlist.email.placeholder': 'you@email.com',
   'card.waitlist.email.a11y': 'Email address for the card waitlist',
   'card.waitlist.submit': 'Pre-register · Get card #{position}',
+  'card.waitlist.invalid': "That email doesn't look right. Check it and try again.",
+  'card.waitlist.duplicate': "That email is already on the list.",
   'card.waitlist.perk1': '✓ Priority issuance',
   'card.waitlist.perk2': '✓ Founder rate · 0% FX',
   'card.features.title': "What's included",

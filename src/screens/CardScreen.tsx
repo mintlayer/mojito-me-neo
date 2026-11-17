@@ -6,7 +6,7 @@ import { t } from '../i18n';
 import { useData, useProviders } from '../data/providers/context';
 import type { WaitlistResult } from '../data/providers';
 import { C, G, alpha, black } from '../theme';
-import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
+import { Btn, Callout, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
 
 export function CardScreen() {
   const providers = useProviders();
@@ -15,6 +15,7 @@ export function CardScreen() {
   const cardTiers = useData((d) => d.getCardTiers());
   const [email, setEmail] = useState('');
   const [result, setResult] = useState<WaitlistResult | null>(null);
+  const [joinError, setJoinError] = useState<'invalid' | 'duplicate' | null>(null);
 
   if (!waitlist || !cardFeatures || !cardTiers) return <Screen />;
   const pct = (waitlist.taken / waitlist.total) * 100;
@@ -90,11 +91,21 @@ export function CardScreen() {
               disabled={!email.trim()}
               onPress={() => {
                 void providers.waitlist.join(email).then((r) => {
-                  if (r.ok) setResult(r);
+                  if (r.ok) {
+                    setResult(r);
+                    setJoinError(null);
+                  } else if (r.reason === 'invalid' || r.reason === 'duplicate') {
+                    setJoinError(r.reason);
+                  }
                 });
               }}>
               {t('card.waitlist.submit', { position: (waitlist.taken + 1).toLocaleString() })}
             </Btn>
+            {joinError && (
+              <Callout tone={C.red} icon="close" className="mt-3">
+                {joinError === 'invalid' ? t('card.waitlist.invalid') : t('card.waitlist.duplicate')}
+              </Callout>
+            )}
             <View className="flex-row justify-between mt-2.5">
               <Txt mono className="text-[10px] text-text3">
                 {t('card.waitlist.perk1')}
