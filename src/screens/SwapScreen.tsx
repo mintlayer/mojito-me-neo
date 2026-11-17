@@ -53,7 +53,7 @@ export function SwapScreen() {
     return (
       <SuccessScreen
         title={t('swap.success.title')}
-        summary={`${fromPanel.amt} ${fromPanel.sym} → ${toPanel.amt} ${toPanel.sym}`}
+        summary={t('swap.success.pending', { from: fromPanel.amt, fromSym: fromPanel.sym, toSym: toPanel.sym })}
         description={t('swap.success.desc', { chain: fromPanel.chain })}
         onDone={() => setSubmitted(false)}
       />
@@ -143,12 +143,16 @@ function SwapPanel({
             instead of mirroring the sent amount. */}
         <AmountRow symbol={data.sym} chain={data.chain} value={onChange ? data.amt : '-'} onChangeText={onChange} onPickToken={onPickToken} accessibilityLabel={amountLabel ?? label} />
       </View>
-      <View className="flex-row justify-between items-center mt-2">
-        <Txt mono className="text-[11px] text-text2">
-          {t('common.approxUsd', { usd: `$${usdValue}` })}
-        </Txt>
-        <PctButtons compact onPick={(f) => onChange(quantizeAmount(data.bal * f))} />
-      </View>
+      {/* The receive side has no quote until M2 wires rates: show a dash
+          instead of mirroring the sent amount, and no approx row under it. */}
+      {onChange && (
+        <View className="flex-row justify-between items-center mt-2">
+          <Txt mono className="text-[11px] text-text2">
+            {t('common.approxUsd', { usd: `$${usdValue}` })}
+          </Txt>
+          <PctButtons compact onPick={(f) => onChange(quantizeAmount(data.bal * f))} />
+        </View>
+      )}
     </Card>
   );
 }

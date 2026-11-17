@@ -131,6 +131,7 @@ export const en = {
   'swap.chip': 'HTLC',
   'swap.blurb': 'Trustless cross-chain swap. No bridge, no custodian.',
   'swap.success.title': 'Swap initiated',
+  'swap.success.pending': '{from} {fromSym} → - {toSym}',
   'swap.success.desc': 'The HTLC is locked on {chain}. Settlement completes once the counterparty reveals the preimage.',
   'swap.protocol': 'Swap protocol · HTLC',
   'swap.flip': 'Flip swap direction',

@@ -34,7 +34,9 @@ export function IconBtn({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label ?? name}
+      // An absent label stays absent: falling back to the icon name leaks
+      // internal names like "chevron_r" to screen readers.
+      accessibilityLabel={label}
       className="items-center justify-center"
       style={[tile(), { width: size, height: size, borderRadius: radius }]}>
       <Icon name={name} size={iconSize} color={color} stroke={stroke} />
