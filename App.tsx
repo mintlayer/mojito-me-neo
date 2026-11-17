@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Alert, AppState, Pressable, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Constants from 'expo-constants';
 import { StatusBar } from 'expo-status-bar';
@@ -12,6 +12,7 @@ import { ProvidersProvider } from './src/data/providers/context';
 import { VaultAuthRequiredError } from './modules/mojito-core';
 import { walletVault, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
+import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { detectBio, stepUpDeviceAuth } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
@@ -94,7 +95,7 @@ type AppSession = {
   vault: WalletVaultHandle | null;
   deferred: boolean;
   bio: Bio;
-  settings: { biometrics: boolean; testnet: boolean };
+  settings: { biometrics: boolean; autoLock: boolean; testnet: boolean };
 };
 
 function Shell() {
@@ -113,21 +114,37 @@ function Shell() {
 
   // Cold start: does this device already hold a sealed wallet? Existence is
   // checked without decrypting; unlock happens only after PIN or biometrics.
+  // The persisted biometrics choice (Secure screen enrolment, Settings
+  // toggle) gates the bio unlock: a "Use PIN instead" onboarding choice or a
+  // disabled toggle keeps the PIN-only lock even on capable hardware.
   useEffect(() => {
     void (async () => {
       if (await walletVault.exists()) {
-        const detected = await detectBio();
+        const [detected, saved] = await Promise.all([detectBio(), loadAppSettings().catch(() => ({ biometrics: null, autoLock: true }))]);
+        const wantBio = (saved.biometrics ?? detected !== null) && detected !== null;
         setSession({
           vault: null,
           deferred: false,
           bio: detected ?? 'face',
-          settings: { biometrics: detected !== null, testnet: false },
+          settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
         });
         setLocked(true);
       }
       setReady(true);
     })();
   }, []);
+
+  // Auto-lock: leaving the app (home button, app switcher) re-locks the
+  // session when the persisted auto-lock setting is on (default on). A lock
+  // above an open backup or change-PIN layer is harmless: unlocking simply
+  // returns to where the user was.
+  useEffect(() => {
+    if (!session?.settings.autoLock) return;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background') setLocked(true);
+    });
+    return () => sub.remove();
+  }, [session?.settings.autoLock]);
 
   const unlock = () => {
     void (async () => {
@@ -154,28 +171,51 @@ function Shell() {
   };
 
   const finishOnboarding = (r: OnboardingResult) => {
-    void walletVault
-      .meta()
-      .then((meta) => {
-        setSession({
-          vault: meta ? { meta } : null,
-          deferred: r.deferred,
-          bio: r.bio,
-          settings: { biometrics: r.biometrics, testnet: false },
-        });
-      })
-      .catch(() => undefined);
+    void (async () => {
+      // Persist the Secure-screen choice so cold start respects "Use PIN
+      // instead"; a failure must not block an otherwise complete onboarding.
+      await saveAppSettings({ biometrics: r.biometrics }).catch(() => undefined);
+      const meta = await walletVault.meta().catch(() => null);
+      setSession({
+        vault: meta ? { meta } : null,
+        deferred: r.deferred,
+        bio: r.bio,
+        settings: { biometrics: r.biometrics, autoLock: true, testnet: false },
+      });
+    })();
   };
 
-  /** Settings sign-out: the device forgets the keys, per its own copy. */
+  /** Recovery-phrase reveal is a step-up boundary: entering the backup flow
+   *  re-locks the session, so the phrase is only reachable through the PIN or
+   *  biometric unlock screen, never straight from an unlocked session. */
+  const revealBackup = () => {
+    setOverlay(null);
+    setBackup(true);
+    setLocked(true);
+  };
+
+  /** Settings sign-out: the device forgets the keys, per its own copy. A
+   *  failed wipe must not drop the session state: the vault is re-verified
+   *  gone before the app returns to onboarding, and the error surfaces. */
   const signOut = () => {
-    void Promise.all([walletVault.wipe(), pinStore.wipe()]).then(() => {
+    void (async () => {
+      let gone = false;
+      try {
+        await Promise.all([walletVault.wipe(), pinStore.wipe()]);
+        gone = !(await walletVault.exists());
+      } catch {
+        gone = false;
+      }
+      if (!gone) {
+        Alert.alert(t('settings.signout.wipeErrorTitle'), t('settings.signout.wipeErrorBody'));
+        return;
+      }
       setSession(null);
       setLocked(false);
       setBackup(false);
       setChangePin(false);
       setOverlay(null);
-    });
+    })();
   };
 
   const Active = SCREENS[tab];
@@ -193,7 +233,7 @@ function Shell() {
             onOpenSettings={() => setOverlay('settings')}
             onGoto={(t: string) => setTab(t as TabId)}
             deferred={session.deferred}
-            onBackUp={() => setBackup(true)}
+            onBackUp={revealBackup}
             onLock={() => setLocked(true)}
           />
 
@@ -204,7 +244,7 @@ function Shell() {
                 bio={session.bio}
                 onBackup={() => {
                   setOverlay(null);
-                  setBackup(true);
+                  revealBackup();
                 }}
                 onChangePin={() => {
                   setOverlay(null);

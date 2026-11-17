@@ -189,7 +189,7 @@ export const en = {
   'settings.security.biometrics': 'Face ID',
   'settings.security.biometricsSub': 'Unlock + sign transactions',
   'settings.security.autolock': 'Auto-lock',
-  'settings.security.autolockSub': 'After 1 minute of inactivity',
+  'settings.security.autolockSub': 'Locks the app when you leave it',
   'settings.backup.reveal': 'Recovery phrase',
   'settings.backup.revealSub': 'Back up your 24 words',
   'settings.changePin': 'Change PIN',
@@ -219,6 +219,8 @@ export const en = {
   'settings.signout.title': 'Sign out of this wallet?',
   'settings.signout.body': 'This device forgets your keys. You can only get back in with your 24-word recovery phrase - make sure you have it written down.',
   'settings.signout.cta': 'Sign out',
+  'settings.signout.wipeErrorTitle': 'Sign out failed',
+  'settings.signout.wipeErrorBody': "The keys could not be erased. Nothing was signed out - try again, and check the device's secure storage if it keeps failing.",
   'settings.version': 'mojito · v{version} · build {build}',
 
   // onboarding

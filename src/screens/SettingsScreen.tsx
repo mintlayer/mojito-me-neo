@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Sheet } from './types';
 import Constants from 'expo-constants';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
+import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { C, G } from '../theme';
 import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
@@ -11,12 +12,33 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
   const dapps = useData((d) => d.getDapps());
-  const [flags, setFlags] = useState({ biometric: true, autoLock: true, testnet: false, notifs: true, hideBal: false });
+  // Security toggles are persisted (storage/appSettings); the other flags
+  // stay local until their features ship.
+  const [security, setSecurity] = useState({ biometric: true, autoLock: true });
+  const [flags, setFlags] = useState({ testnet: false, notifs: true, hideBal: false });
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
   const [appearance, setAppearance] = useState<AppearanceId>('dark');
   const [dex, setDex] = useState<DexId>('mintlayer');
   const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
   const set = (k: keyof typeof flags) => (v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
+
+  // Load the persisted toggles once; every change writes straight through.
+  useEffect(() => {
+    let alive = true;
+    void loadAppSettings()
+      .then((s) => {
+        if (alive) setSecurity({ biometric: s.biometrics ?? true, autoLock: s.autoLock });
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const setSecurityFlag = (k: 'biometric' | 'autoLock') => (v: boolean) => {
+    setSecurity((s) => ({ ...s, [k]: v }));
+    void saveAppSettings(k === 'biometric' ? { biometrics: v } : { autoLock: v }).catch(() => undefined);
+  };
 
   // Self-custody: signing out destroys local state, so the phrase is the only
   // way back. Confirm destructively rather than on a single tap.
@@ -54,10 +76,10 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
 
       <Section title={t('settings.section.security')}>
         <ListRow icon="fingerprint" iconColor={C.amber} label={t('settings.security.biometrics')} sub={t('settings.security.biometricsSub')}>
-          <Toggle on={flags.biometric} onChange={set('biometric')} />
+          <Toggle on={security.biometric} onChange={setSecurityFlag('biometric')} />
         </ListRow>
         <ListRow icon="lock" label={t('settings.security.autolock')} sub={t('settings.security.autolockSub')} divider>
-          <Toggle on={flags.autoLock} onChange={set('autoLock')} />
+          <Toggle on={security.autoLock} onChange={setSecurityFlag('autoLock')} />
         </ListRow>
         <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub')} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
