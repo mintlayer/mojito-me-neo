@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { Sheet } from './types';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { PROFILE } from '../data';
+import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
 import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
@@ -14,6 +14,7 @@ type SettingsNav = Sheet & {
 };
 
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: SettingsNav) {
+  const profile = useData((d) => d.getProfile());
   const [flags, setFlags] = useState({ biometric: true, autoLock: true, testnet: false, notifs: true, hideBal: false });
   const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
   const [appearance, setAppearance] = useState<AppearanceId>('dark');
@@ -33,6 +34,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
       ],
     );
 
+  if (!profile) return <Screen />;
+
   return (
     <Screen>
       <SheetHeader title={t('settings.title')} onClose={onClose} />
@@ -40,11 +43,11 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock }: Setti
       {/* Profile */}
       <View className="px-5 pt-3">
         <Card grad={G.raised} className="p-4 rounded-[18px] flex-row items-center gap-3">
-          <Avatar letter={PROFILE.initial} size={48} radius={14} colors={G.avatar} />
+          <Avatar letter={profile.initial} size={48} radius={14} colors={G.avatar} />
           <View className="flex-1">
-            <Txt className="text-[14px] font-semibold">{PROFILE.name}</Txt>
+            <Txt className="text-[14px] font-semibold">{profile.name}</Txt>
             <Txt mono className="text-[11px] text-text2">
-              {PROFILE.address} · {PROFILE.chains} chains
+              {profile.address} · {profile.chains} chains
             </Txt>
           </View>
           <Pressable className="px-2.5 py-1.5 rounded-lg" style={tile(0.05, C.line)}>

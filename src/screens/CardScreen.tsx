@@ -3,21 +3,27 @@ import { TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { t } from '../i18n';
-import { CARD_FEATURES, CARD_TIERS, WAITLIST } from '../data';
+import { useData } from '../data/providers/context';
 import { C, G, alpha, black } from '../theme';
 import { Btn, Card, Chip, Divider, Enter, Float, Icon, IconTile, Label, ProgressBar, Screen, ScreenIntro, Txt, gradColors, toneColor } from '../ui';
 
 export function CardScreen() {
+  const waitlist = useData((d) => d.getWaitlist());
+  const cardFeatures = useData((d) => d.getCardFeatures());
+  const cardTiers = useData((d) => d.getCardTiers());
   const [email, setEmail] = useState('');
   const [registered, setRegistered] = useState(false);
-  const pct = (WAITLIST.taken / WAITLIST.total) * 100;
+
+  if (!waitlist || !cardFeatures || !cardTiers) return <Screen />;
+  const pct = (waitlist.taken / waitlist.total) * 100;
+  const blackTier = cardTiers.find((tier) => tier.name === 'Black');
 
   return (
     <Screen>
       <ScreenIntro title={t('card.title')} chip={t('card.chip')} tone={C.amber} blurb={t('card.blurb')} />
 
       <View className="px-5 pt-8">
-        <CardHero />
+        <CardHero tierName={blackTier?.name ?? ''} />
       </View>
 
       {/* Waitlist */}
@@ -25,9 +31,9 @@ export function CardScreen() {
         <Label>{t('card.waitlist.title')}</Label>
         <View className="flex-row items-baseline gap-1.5 mt-1">
           <Txt mono className="text-[28px] font-bold tracking-tightest" style={{ color: C.amber }}>
-            {WAITLIST.taken.toLocaleString()}
+            {waitlist.taken.toLocaleString()}
           </Txt>
-          <Txt className="text-[12px] text-text2">{t('card.waitlist.spots', { total: WAITLIST.total.toLocaleString() })}</Txt>
+          <Txt className="text-[12px] text-text2">{t('card.waitlist.spots', { total: waitlist.total.toLocaleString() })}</Txt>
         </View>
         <View className="w-full mt-2.5">
           <ProgressBar pct={pct} />
@@ -46,7 +52,7 @@ export function CardScreen() {
               </View>
               <Txt className="text-[16px] font-semibold mt-3">{t('card.waitlist.successTitle')}</Txt>
               <Txt className="text-[12px] text-text2 mt-1 text-center">
-                {t('card.waitlist.successBody', { position: (WAITLIST.taken + 1).toLocaleString(), email })}
+                {t('card.waitlist.successBody', { position: (waitlist.taken + 1).toLocaleString(), email })}
               </Txt>
               <View className="mt-3.5">
                 <Chip tone={C.amber} dot={false}>
@@ -77,7 +83,7 @@ export function CardScreen() {
               </Txt>
             </View>
             <Btn tone="primary" className="mt-3" disabled={!email.trim()} onPress={() => setRegistered(true)}>
-              {t('card.waitlist.submit', { position: (WAITLIST.taken + 1).toLocaleString() })}
+              {t('card.waitlist.submit', { position: (waitlist.taken + 1).toLocaleString() })}
             </Btn>
             <View className="flex-row justify-between mt-2.5">
               <Txt mono className="text-[10px] text-text3">
@@ -95,7 +101,7 @@ export function CardScreen() {
       <View className="px-5 pt-5">
         <Label className="mb-2.5">{t('card.features.title')}</Label>
         <View className="flex-row flex-wrap -m-1">
-          {CARD_FEATURES.map((f, i) => (
+          {cardFeatures.map((f, i) => (
             <Enter key={f.title} delay={i * 70} style={{ width: '50%' }}>
               <Card className="m-1 p-3.5 rounded-[14px]">
                 <IconTile name={f.icon} color={toneColor(f.tone)} size={30} />
@@ -111,7 +117,7 @@ export function CardScreen() {
       <View className="px-5 pt-5">
         <Label className="mb-2.5">{t('card.tiers.title')}</Label>
         <Card className="p-1 rounded-2xl">
-          {CARD_TIERS.map((tier, i) => {
+          {cardTiers.map((tier, i) => {
             const tone = tier.name === 'Black' ? C.cream : tier.name === 'Gold' ? C.amber : C.text1;
             const swatch = tier.name === 'Black' ? G.cardBlack.slice(1) : tier.name === 'Gold' ? G.chipGold : G.chipSteel;
             return (
@@ -153,7 +159,7 @@ export function CardScreen() {
 /** The physical card mock. ponytail: floats instead of pointer-tilting, since
  *  tilt needs a gesture handler and reads as noise on touch. */
 
-function CardHero() {
+function CardHero({ tierName }: { tierName: string }) {
   return (
     <Float duration={5000} amount={5}>
       <LinearGradient
@@ -194,7 +200,7 @@ function CardHero() {
               MOJITO
             </Txt>
             <Txt className="text-[22px] font-extrabold tracking-tightest mt-0.5" style={{ color: C.cream }}>
-              Black
+              {tierName}
             </Txt>
           </View>
           <LinearGradient

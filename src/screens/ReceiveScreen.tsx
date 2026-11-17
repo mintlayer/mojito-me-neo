@@ -3,14 +3,16 @@ import * as Clipboard from 'expo-clipboard';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
 import { t } from '../i18n';
-import { ADDRESSES, CHAIN_GLYPH } from '../data';
-import { C, CHAINS } from '../theme';
+import { useData } from '../data/providers/context';
+import { C, CHAINS, type ChainName } from '../theme';
 import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
 export function ReceiveScreen({ onClose }: Sheet) {
-  const [chain, setChain] = useState<(typeof CHAIN_KEYS)[number]>('Mintlayer');
+  const addresses = useData((d) => d.getAddresses());
+  const chainGlyphs = useData((d) => d.getChainGlyphs());
+  const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
-  const addr = ADDRESSES[chain];
+  const addr = addresses?.[chain] ?? '';
   const accent = CHAINS[chain];
 
   // Write first, confirm second: the label must never claim a copy that failed.
@@ -30,17 +32,20 @@ export function ReceiveScreen({ onClose }: Sheet) {
     });
   };
 
+  if (!addresses || !chainGlyphs || !addr) return <Screen />;
+  const chainKeys = Object.keys(addresses) as ChainName[];
+
   return (
     <Screen>
       <SheetHeader title={t('receive.title')} onClose={onClose} />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8 }}>
         <Segmented
-          options={CHAIN_KEYS}
+          options={chainKeys}
           value={chain}
           onChange={setChain}
           variant="pill"
-          accents={Object.fromEntries(CHAIN_KEYS.map((k) => [k, CHAINS[k]]))}
+          accents={Object.fromEntries(chainKeys.map((k) => [k, CHAINS[k]]))}
         />
       </ScrollView>
 
@@ -52,7 +57,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
             className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
             style={{ backgroundColor: accent }}>
             <Txt className="text-[18px] font-extrabold" style={{ color: C.ink }}>
-              {CHAIN_GLYPH[chain]}
+              {chainGlyphs[chain]}
             </Txt>
           </View>
         </View>
@@ -107,6 +112,4 @@ export function ReceiveScreen({ onClose }: Sheet) {
   );
 }
 
-/* ══ Settings ═══════════════════════════════════════════════ */
-
-const CHAIN_KEYS = Object.keys(ADDRESSES) as (keyof typeof ADDRESSES)[];
+/** Chain picker segment keys. */

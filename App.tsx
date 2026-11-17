@@ -8,6 +8,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import './global.css';
 
 import { t } from './src/i18n';
+import { ProvidersProvider } from './src/data/providers/context';
 import { C, alpha } from './src/theme';
 import { AppBackground, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, OnboardingResult, UnlockScreen } from './src/onboarding';
@@ -59,8 +60,10 @@ export default function App() {
   }
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
-      <Shell />
+      <ProvidersProvider>
+        <StatusBar style="light" />
+        <Shell />
+      </ProvidersProvider>
     </SafeAreaProvider>
   );
 }

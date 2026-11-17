@@ -2,18 +2,27 @@ import React, { useState } from 'react';
 import type { Sheet } from './types';
 import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, CONTACTS, FEES } from '../data';
+import { useData } from '../data/providers/context';
+import type { FeeTierId } from '../data/providers';
 import { C, G } from '../theme';
 import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop } from '../ui';
 
 export function SendScreen({ onClose }: Sheet) {
+  const assets = useData((d) => d.getAssets());
+  const assetBalances = useData((d) => d.getAssetBalances());
+  const assetSymbols = useData((d) => d.getAssetSymbols());
+  const contacts = useData((d) => d.getContacts());
+  const fees = useData((d) => d.getFees());
   const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [token, setToken] = useState(ASSETS.find((a) => a.sym === 'ML') ?? ASSETS[0]);
+  const [tokenSym, setTokenSym] = useState('ML');
   const [picker, setPicker] = useState(false);
   const [address, setAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [feeTier, setFeeTier] = useState<keyof typeof FEES>('standard');
-  const fee = FEES[feeTier];
+  const [feeTier, setFeeTier] = useState<FeeTierId>('standard');
+  const token = assets?.find((a) => a.sym === tokenSym) ?? assets?.[0];
+
+  if (!assets || !assetBalances || !assetSymbols || !contacts || !fees || !token) return <Screen />;
+  const fee = fees[feeTier];
 
   if (step === 2) {
     return (
@@ -111,13 +120,12 @@ export function SendScreen({ onClose }: Sheet) {
       <TokenPicker
         open={picker}
         onClose={() => setPicker(false)}
-        symbols={ASSET_SYMBOLS}
+        symbols={assetSymbols}
         value={token.sym}
-        balances={ASSET_BALANCES}
+        balances={assetBalances}
         onSelect={(s) => {
-          const next = ASSETS.find((a) => a.sym === s);
-          if (next) {
-            setToken(next);
+          if (assets.some((a) => a.sym === s)) {
+            setTokenSym(s);
             setAmount('');
           }
         }}
@@ -168,7 +176,7 @@ export function SendScreen({ onClose }: Sheet) {
         </Card>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
-          {CONTACTS.map((c) => (
+          {contacts.map((c) => (
             <Pressable
               key={c.name}
               onPress={() => setAddress(c.address)}
@@ -185,7 +193,7 @@ export function SendScreen({ onClose }: Sheet) {
       <View className="px-6 pt-5">
         <Label className="mb-2">{t('common.networkFee')}</Label>
         <View className="flex-row gap-1.5">
-          {(Object.keys(FEES) as (keyof typeof FEES)[]).map((k) => {
+          {(Object.keys(fees) as FeeTierId[]).map((k) => {
             const on = feeTier === k;
             return (
               <Pressable
@@ -200,7 +208,7 @@ export function SendScreen({ onClose }: Sheet) {
                   {t(`send.fee.eta.${k}` as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
-                  {FEES[k].cost} {token.sym}
+                  {fees[k].cost} {token.sym}
                 </Txt>
               </Pressable>
             );

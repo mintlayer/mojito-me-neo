@@ -2,11 +2,17 @@ import React, { useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { ACTIVITY, ASSETS, BALANCE, NETWORKS, RANGES } from '../data';
+import { useData } from '../data/providers/context';
+import type { AssetRow } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
 import { AreaChart, Avatar, Callout, Card, ChainBadge, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
+  const balance = useData((d) => d.getPortfolio());
+  const assets = useData((d) => d.getAssets());
+  const activity = useData((d) => d.getActivity(20));
+  const networks = useData((d) => d.getNetworks());
+  const ranges = useData((d) => d.getRanges());
   const [hidden, setHidden] = useState(false);
   const [range, setRange] = useState('1D');
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
@@ -23,6 +29,8 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
     { icon: 'swap', labelKey: 'home.actions.swap', color: C.amber, press: () => onGoto?.('swap') },
     { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
   ];
+
+  if (!balance || !assets || !activity || !networks || !ranges) return <Screen />;
 
   return (
     <Screen>
@@ -82,24 +90,24 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             ) : (
               <Txt className="text-[38px] font-bold tracking-tightest">
                 <Txt className="text-[38px] font-medium text-text2">$</Txt>
-                {BALANCE.total}
+                {balance.total}
               </Txt>
             )}
           </View>
 
           <View className="flex-row items-center gap-2 mt-2">
-            <LivePill value={BALANCE.change} />
+            <LivePill value={balance.change} />
             <Txt mono className="text-[12px] text-text2">
-              {BALANCE.delta}
+              {balance.delta}
             </Txt>
           </View>
 
           <View className="mt-3.5">
-            <AreaChart data={BALANCE.spark} />
+            <AreaChart data={balance.spark} />
           </View>
 
           <View className="flex-row justify-between mt-1">
-            {RANGES.map((r) => (
+            {ranges.map((r) => (
               <Pressable key={r} onPress={() => setRange(r)}>
                 <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
                   {t(`home.ranges.${r}` as I18nKey)}
@@ -130,11 +138,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
         <View className="px-5 flex-row items-center justify-between mb-2.5">
           <Label>{t('home.networks.title')}</Label>
           <Txt mono className="text-[11px] text-text2">
-            {t('home.networks.active', { count: NETWORKS.length })}
+            {t('home.networks.active', { count: networks.length })}
           </Txt>
         </View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
-          {NETWORKS.map((n, i) => (
+          {networks.map((n, i) => (
             <Enter key={n} delay={300 + i * 60}>
               <View
                 className="flex-row items-center gap-2 px-3 py-2 rounded-xl"
@@ -159,7 +167,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           />
         </View>
 
-        {ASSETS.map((a, i) => (
+        {assets.map((a, i) => (
           <Enter key={a.sym} delay={400 + i * 70}>
             <TokenRow asset={a} />
           </Enter>
@@ -173,7 +181,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           <Txt className="text-[11px] text-text2">{t('common.seeAll')}</Txt>
         </View>
         <Card variant="glass" className="p-1">
-          {ACTIVITY.map((r, i) => (
+          {activity.map((r, i) => (
             <ListRow
               key={r.title}
               icon={r.icon}
@@ -203,7 +211,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
 /* ══ Home ═══════════════════════════════════════════════════ */
 
-function TokenRow({ asset }: { asset: (typeof ASSETS)[number] }) {
+function TokenRow({ asset }: { asset: AssetRow }) {
   return (
     <View className="flex-row items-center gap-3 py-3">
       <TokenIcon symbol={asset.sym} size={38} />

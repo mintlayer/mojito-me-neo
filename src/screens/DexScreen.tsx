@@ -1,33 +1,37 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../i18n';
-import { ASKS, BIDS, MARKET, TIMEFRAMES } from '../data';
+import { useData } from '../data/providers/context';
 import { C, G, alpha, black } from '../theme';
 import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile } from '../ui';
 
 export function DexScreen() {
+  const market = useData((d) => d.getMarket('ML/USDT'));
+  const orderBook = useData((d) => d.getOrderBook('ML/USDT'));
+  const timeframes = useData((d) => d.getTimeframes());
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [book, setBook] = useState<'book' | 'trades' | 'depth'>('book');
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
   const [tf, setTf] = useState('1h');
   const [amount, setAmount] = useState('250');
 
-  const maxAsk = Math.max(...ASKS.map((r) => r.t));
-  const maxBid = Math.max(...BIDS.map((r) => r.t));
-  const total = (parseFloat(amount || '0') * MARKET.price).toFixed(4);
+  if (!market || !orderBook || !timeframes) return <Screen />;
+  const maxAsk = Math.max(...orderBook.asks.map((r) => r.t));
+  const maxBid = Math.max(...orderBook.bids.map((r) => r.t));
+  const total = (parseFloat(amount || '0') * market.price).toFixed(4);
 
   return (
     <Screen>
       <View className="px-5 flex-row items-center justify-between">
         <View>
           <View className="flex-row items-center gap-2">
-            <Txt className="text-[18px] font-bold">{MARKET.pair}</Txt>
+            <Txt className="text-[18px] font-bold">{market.pair}</Txt>
             <Chip tone={C.teal} dot={false}>
               {t('dex.badge')}
             </Chip>
           </View>
           <Txt mono className="text-[11px] text-text2 mt-0.5">
-            {MARKET.volume}
+            {market.volume}
           </Txt>
         </View>
         <IconBtn name="chart" label={t('dex.fullChart')} />
@@ -41,22 +45,22 @@ export function DexScreen() {
               <Label>{t('dex.lastPrice')}</Label>
               <View className="flex-row items-baseline gap-2 mt-0.5">
                 <Txt mono className="text-[28px] font-bold">
-                  ${MARKET.last}
+                  ${market.last}
                 </Txt>
-                <LivePill value={MARKET.change} />
+                <LivePill value={market.change} />
               </View>
               <Txt mono className="text-[11px] text-text2 mt-0.5">
-                {MARKET.btc}
+                {market.btc}
               </Txt>
             </View>
             <View className="items-end">
               <Txt className="text-[10px] text-text3">{t('dex.high24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.green }}>
-                {MARKET.high}
+                {market.high}
               </Txt>
               <Txt className="text-[10px] text-text3 mt-1">{t('dex.low24h')}</Txt>
               <Txt mono className="text-[12px]" style={{ color: C.red }}>
-                {MARKET.low}
+                {market.low}
               </Txt>
             </View>
           </View>
@@ -64,7 +68,7 @@ export function DexScreen() {
           <View className="mt-3">
             <Candles />
           </View>
-          <Segmented options={TIMEFRAMES} value={tf} onChange={setTf} variant="ghost" accent={C.teal} className="mt-2" />
+          <Segmented options={timeframes} value={tf} onChange={setTf} variant="ghost" accent={C.teal} className="mt-2" />
         </Card>
       </View>
 
@@ -86,7 +90,7 @@ export function DexScreen() {
           <Txt className="flex-1 text-[10px] text-text3 tracking-label text-right">{t('dex.col.total')}</Txt>
         </View>
 
-        {ASKS.map((r, i) => (
+        {orderBook.asks.map((r, i) => (
           <BookRow key={`a${i}`} row={r} max={maxAsk} tone={C.red} delay={i * 30} />
         ))}
 
@@ -104,7 +108,7 @@ export function DexScreen() {
           </Txt>
         </View>
 
-        {BIDS.map((r, i) => (
+        {orderBook.bids.map((r, i) => (
           <BookRow key={`b${i}`} row={r} max={maxBid} tone={C.green} delay={200 + i * 30} />
         ))}
       </View>
@@ -144,7 +148,7 @@ export function DexScreen() {
           />
 
           <View className="gap-2">
-            <Field label={t('dex.price')} value={MARKET.price.toFixed(4)} unit="USDT" />
+            <Field label={t('dex.price')} value={market.price.toFixed(4)} unit="USDT" />
             <Field label={t('common.amount')} value={amount} unit="ML" onChangeText={setAmount} />
             <PctButtons onPick={(f) => setAmount(String(Math.round(12480.5 * f)))} />
             <Field label={t('common.total')} value={total} unit="USDT" tone={C.text1} />

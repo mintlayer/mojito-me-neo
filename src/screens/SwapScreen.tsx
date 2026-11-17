@@ -3,11 +3,16 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { t } from '../i18n';
-import { ASSETS, ASSET_BALANCES, ASSET_SYMBOLS, HTLC_STEPS, SWAP_STATS } from '../data';
+import { useData } from '../data/providers/context';
 import { C, G } from '../theme';
 import { AmountRow, Btn, Card, FlowX, Icon, KV, Label, PctButtons, Screen, ScreenIntro, Steps, SuccessScreen, TokenPicker, Txt, gradColors } from '../ui';
 
 export function SwapScreen() {
+  const assets = useData((d) => d.getAssets());
+  const assetBalances = useData((d) => d.getAssetBalances());
+  const assetSymbols = useData((d) => d.getAssetSymbols());
+  const htlcSteps = useData((d) => d.getHtlcSteps());
+  const swapStats = useData((d) => d.getSwapStats());
   const [from, setFrom] = useState({ sym: 'BTC', chain: 'Bitcoin', amt: '0.025', bal: '0.4821' });
   const [to, setTo] = useState({ sym: 'ML', chain: 'Mintlayer', amt: '7012.45', bal: '12,480.50' });
   /** Which panel the picker is editing, or null when closed. */
@@ -20,12 +25,14 @@ export function SwapScreen() {
   };
 
   const pick = (sym: string) => {
-    const asset = ASSETS.find((a) => a.sym === sym);
+    const asset = assets?.find((a) => a.sym === sym);
     if (!asset) return;
     const next = { sym: asset.sym, chain: asset.chain, amt: '0', bal: asset.amt.toLocaleString() };
     if (picking === 'from') setFrom(next);
     else setTo(next);
   };
+
+  if (!assets || !assetBalances || !assetSymbols || !htlcSteps || !swapStats) return <Screen />;
 
   if (submitted) {
     return (
@@ -45,9 +52,9 @@ export function SwapScreen() {
       <TokenPicker
         open={picking !== null}
         onClose={() => setPicking(null)}
-        symbols={ASSET_SYMBOLS}
+        symbols={assetSymbols}
         value={picking === 'from' ? from.sym : to.sym}
-        balances={ASSET_BALANCES}
+        balances={assetBalances}
         onSelect={pick}
       />
 
@@ -67,7 +74,7 @@ export function SwapScreen() {
 
       <View className="px-5 pt-3">
         <Card className="px-3.5 py-2.5 flex-row flex-wrap">
-          {SWAP_STATS.map(([k, v], i) => (
+          {swapStats.map(([k, v], i) => (
             <View key={k} className="w-1/2 py-1">
               <KV k={k} v={v} right={i % 2 === 1} tone={i === 1 ? C.green : i === 3 ? C.amber : C.text0} />
             </View>
@@ -80,7 +87,7 @@ export function SwapScreen() {
         <Label className="mb-3">{t('swap.protocol')}</Label>
         <Card grad={G.raisedAmber} className="p-4">
           <HtlcRail />
-          <Steps steps={HTLC_STEPS} />
+          <Steps steps={htlcSteps} />
         </Card>
       </View>
 

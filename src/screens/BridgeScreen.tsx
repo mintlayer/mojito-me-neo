@@ -2,12 +2,17 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { t } from '../i18n';
-import { ASSET_BALANCES, ASSET_SYMBOLS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE } from '../data';
+import { useData } from '../data/providers/context';
 import { C, CHAINS, G, alpha } from '../theme';
 import type { ChainName } from '../theme';
 import { AmountRow, Btn, Card, ChainGlyph, FlowX, Icon, KV, Label, ListRow, PickerSheet, Screen, ScreenIntro, SuccessScreen, TokenPicker, Txt, hairlineTop, tile } from '../ui';
 
 export function BridgeScreen() {
+  const assetBalances = useData((d) => d.getAssetBalances());
+  const assetSymbols = useData((d) => d.getAssetSymbols());
+  const bridgeChains = useData((d) => d.getBridgeChains());
+  const bridgeQuote = useData((d) => d.getBridgeQuote());
+  const bridgeRoute = useData((d) => d.getBridgeRoute());
   const [src, setSrc] = useState<ChainName>('Mintlayer');
   const [dst, setDst] = useState<ChainName>('Arbitrum');
   const [amount, setAmount] = useState('500.00');
@@ -18,6 +23,9 @@ export function BridgeScreen() {
 
   // The picked chain always lands on whichever side isn't Mintlayer.
   const pickChain = (name: ChainName) => (src === HOME_CHAIN ? setDst(name) : setSrc(name));
+
+  if (!assetBalances || !assetSymbols || !bridgeChains || !bridgeQuote || !bridgeRoute) return <Screen />;
+  const counterpartyChains = bridgeChains.map((c) => c.name).filter((n) => n !== HOME_CHAIN);
 
   if (submitted) {
     return (
@@ -40,19 +48,19 @@ export function BridgeScreen() {
         open={chainPicker}
         onClose={() => setChainPicker(false)}
         title={src === HOME_CHAIN ? t('bridge.to') : t('bridge.from')}
-        options={COUNTERPARTY_CHAINS}
+        options={counterpartyChains}
         value={src === HOME_CHAIN ? dst : src}
         onSelect={pickChain}
         renderLeading={(n) => <ChainGlyph chain={n} size={28} />}
-        subtitleFor={(n) => BRIDGE_CHAINS.find((c) => c.name === n)?.sym}
+        subtitleFor={(n) => bridgeChains.find((c) => c.name === n)?.sym}
       />
 
       <TokenPicker
         open={tokenPicker}
         onClose={() => setTokenPicker(false)}
-        symbols={ASSET_SYMBOLS}
+        symbols={assetSymbols}
         value={token}
-        balances={ASSET_BALANCES}
+        balances={assetBalances}
         onSelect={setToken}
       />
 
@@ -142,7 +150,7 @@ export function BridgeScreen() {
       <View className="px-5 pt-4">
         <Label className="mb-2">{t('bridge.route')}</Label>
         <Card className="p-3.5 rounded-2xl">
-          {BRIDGE_ROUTE.map((r, i) => (
+          {bridgeRoute.map((r, i) => (
             <ListRow
               key={r.label}
               icon={r.icon}
@@ -158,12 +166,12 @@ export function BridgeScreen() {
                   {r.eta}
                 </Txt>
               }
-              connector={i < BRIDGE_ROUTE.length - 1}
+              connector={i < bridgeRoute.length - 1}
               compact
             />
           ))}
           <View className="mt-2.5 pt-2.5 flex-row flex-wrap" style={hairlineTop}>
-            {BRIDGE_QUOTE.map(([k, v], i) => (
+            {bridgeQuote.map(([k, v], i) => (
               <View key={k} className="w-1/2 py-1">
                 <KV k={k} v={v} right={i % 2 === 1} tone={i === 1 ? C.violet : C.text0} />
               </View>
@@ -183,10 +191,9 @@ export function BridgeScreen() {
 
 const HOME_CHAIN = 'Mintlayer';
 
-const COUNTERPARTY_CHAINS = BRIDGE_CHAINS.map((c) => c.name).filter((n) => n !== HOME_CHAIN);
-
 function ChainCard({ name, side, onPress }: { name: ChainName; side: string; onPress?: () => void }) {
-  const chain = BRIDGE_CHAINS.find((c) => c.name === name);
+  const bridgeChains = useData((d) => d.getBridgeChains());
+  const chain = bridgeChains?.find((c) => c.name === name);
   const c = CHAINS[name];
   if (!chain) return <View className="flex-1" />;
   return (
