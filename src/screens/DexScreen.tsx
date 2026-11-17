@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../i18n';
-import { useData } from '../data/providers/context';
+import { useData, useProviders } from '../data/providers/context';
+import type { Candle, CandleInterval } from '../data/providers';
 import { C, G, alpha, black } from '../theme';
 import { Btn, Candles, Card, Chip, Enter, Field, IconBtn, KVRow, Label, LivePill, PctButtons, Screen, Segmented, Txt, tile } from '../ui';
 
@@ -14,8 +15,20 @@ export function DexScreen() {
   const [orderType, setOrderType] = useState<'Limit' | 'Market' | 'Stop'>('Limit');
   const [tf, setTf] = useState('1h');
   const [amount, setAmount] = useState('250');
+  const { price } = useProviders();
+  const [candles, setCandles] = useState<Candle[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    // timeframes come from the provider as strings; the fixture set is the interval union.
+    price.getCandles('ML/USDT', tf as CandleInterval).then((rows) => {
+      if (live) setCandles(rows);
+    });
+    return () => {
+      live = false;
+    };
+  }, [price, tf]);
 
-  if (!market || !orderBook || !timeframes) return <Screen />;
+  if (!market || !orderBook || !timeframes || !candles) return <Screen />;
   const maxAsk = Math.max(...orderBook.asks.map((r) => r.t));
   const maxBid = Math.max(...orderBook.bids.map((r) => r.t));
   const total = (parseFloat(amount || '0') * market.price).toFixed(4);
@@ -66,7 +79,7 @@ export function DexScreen() {
           </View>
 
           <View className="mt-3">
-            <Candles />
+            <Candles candles={candles} />
           </View>
           <Segmented options={timeframes} value={tf} onChange={setTf} variant="ghost" accent={C.teal} className="mt-2" />
         </Card>

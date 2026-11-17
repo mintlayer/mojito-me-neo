@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData, useProviders } from '../data/providers/context';
-import type { AssetRow } from '../data/providers';
+import type { AssetRow, PriceRange } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
 import { AreaChart, Avatar, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock }: Nav) {
-  const { mode } = useProviders();
+  const { mode, price } = useProviders();
   const balance = useData((d) => d.getPortfolio());
   const assets = useData((d) => d.getAssets());
   const activity = useData((d) => d.getActivity(20));
@@ -16,8 +16,19 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const ranges = useData((d) => d.getRanges());
   const profile = useData((d) => d.getProfile());
   const [hidden, setHidden] = useState(false);
-  const [range, setRange] = useState('1D');
+  const [range, setRange] = useState<PriceRange>('1D');
+  const [series, setSeries] = useState<number[] | null>(null);
   const [tab, setTab] = useState<'Tokens' | 'NFTs' | 'DeFi'>('Tokens');
+
+  useEffect(() => {
+    let live = true;
+    price.getHistory('PORTFOLIO', range).then((points) => {
+      if (live) setSeries(points.map((p) => p.p));
+    });
+    return () => {
+      live = false;
+    };
+  }, [price, range]);
 
   const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean }[] = [
     { icon: 'arrow_up', labelKey: 'home.actions.send', color: C.text0, press: onOpenSend },
@@ -111,12 +122,13 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           </View>
 
           <View className="mt-3.5">
-            <AreaChart data={balance.spark} />
+            {/* Provider history for the picked range; static spark until it lands. */}
+            <AreaChart data={series ?? balance.spark} />
           </View>
 
           <View className="flex-row justify-between mt-1">
             {ranges.map((r) => (
-              <Pressable key={r} onPress={() => setRange(r)}>
+              <Pressable key={r} onPress={() => setRange(r as PriceRange)}>
                 <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
                   {t(`home.ranges.${r}` as I18nKey)}
                 </Txt>

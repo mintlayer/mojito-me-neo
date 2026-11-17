@@ -57,11 +57,12 @@ export type PriceSnapshot = {
   updatedAt: number;
 };
 export type Candle = { t: number; o: number; h: number; l: number; c: number; v: number };
+export type CandleInterval = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
 
 export interface PriceProvider {
   getSnapshots(tokenIds: string[]): Promise<PriceSnapshot[]>;
   getHistory(tokenId: string, range: PriceRange): Promise<PricePoint[]>;
-  getCandles(pair: string, interval: '1m' | '5m' | '15m' | '1h' | '4h' | '1d'): Promise<Candle[]>;
+  getCandles(pair: string, interval: CandleInterval): Promise<Candle[]>;
 }
 
 // Broadcast (missing-architecture gap 3, R3: testnet-only mock in v1)
