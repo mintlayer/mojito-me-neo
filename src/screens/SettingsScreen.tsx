@@ -10,7 +10,7 @@ import { detectBio } from '../onboarding/ui/useBioScan';
 import { C, G } from '../theme';
 import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
-export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut }: Sheet) {
+export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
   const dapps = useData((d) => d.getDapps());
@@ -82,12 +82,14 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   };
 
   // The step-up itself: the in-app PIN against the persisted verifier, with
-  // the same lockout bookkeeping as the app lock (shared pinEntryCheck).
+  // the same lockout bookkeeping as the app lock (shared pinEntryCheck). The
+  // failure copy is context-neutral: the user is entering their PIN.
   const confirmLock = usePinEntry({
     target: null,
     settle: 200,
     resetKey: confirm ?? '',
-    check: confirm ? pinEntryCheck() : undefined,
+    check: confirm ? pinEntryCheck({ unsetCopy: t('onboarding.pin.verifyFailed') }) : undefined,
+    checkFailureCopy: t('onboarding.pin.verifyFailed'),
     onMatch: () => {
       if (confirm) applySecurityFlag(confirm, false);
     },
@@ -143,7 +145,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         <ListRow icon="lock" label={t('settings.security.autolock')} sub={t('settings.security.autolockSub')} divider>
           <Toggle on={security.autoLock} onChange={setSecurityFlag('autoLock')} />
         </ListRow>
-        <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub')} trailing="→" divider onPress={onBackup} />
+        <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub', { count: wordCount ?? 24 })} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
         <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub', { count: dapps.active })} trailing="→" divider />
         {confirm && (

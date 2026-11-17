@@ -43,7 +43,7 @@ export function Secure({ ctx }: { ctx: Ctx }) {
       <View className="flex-1 px-6 pt-6">
         <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.secure.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[20px]">
-          {t('onboarding.secure.body', { bio: name })}
+          {ctx.bioAvailable ? t('onboarding.secure.body', { bio: name }) : t('onboarding.secure.bodyPinOnly')}
         </Txt>
 
         <View className="flex-1 items-center justify-center gap-3.5">

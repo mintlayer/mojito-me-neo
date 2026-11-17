@@ -28,6 +28,9 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
   const [loadFailure, setLoadFailure] = useState<'invalidated' | 'retryable' | null>(null);
   /** Retry bump for the backup load effect. */
   const [loadTick, setLoadTick] = useState(0);
+  /** A return from Entropy regenerated the phrase: say so, or a user who
+   *  already wrote words down transcribes a stale phrase. */
+  const [regenerated, setRegenerated] = useState(false);
 
   // Backup re-entry: show the stored phrase, never generate or re-seal. One
   // load per mount: the effect waits for the lock layer to clear (the backup
@@ -82,6 +85,7 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
       if (!alive) return;
       ctx.setSeedEntropy(null);
       ctx.setSeedWords(words);
+      setRegenerated(entropy !== undefined);
     })()
       .catch(() => alive && setError(t('onboarding.seed.generateError')))
       .finally(() => alive && setBusy(false));
@@ -96,6 +100,7 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
   const regenerate = () => {
     ctx.setSeedWords(null);
     setRevealed(false);
+    setRegenerated(false);
   };
 
   return (
@@ -105,7 +110,9 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
       <Body className="px-[22px] pt-4 pb-7">
         <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.seed.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-1.5 leading-[19px]">
-          {t('onboarding.seed.sub')}
+          {t('onboarding.seed.sub', {
+            count: backup ? ctx.seedWords?.length ?? 24 : count,
+          })}
         </Txt>
 
         {/* Only Android can actually enforce this, so only Android claims it. */}
@@ -181,6 +188,11 @@ export function Seed({ ctx, backup, locked = false }: { ctx: Ctx; backup?: boole
           <LinkBtn className="mt-2" onPress={regenerate}>
             {t('onboarding.seed.regenerate')}
           </LinkBtn>
+        )}
+        {!backup && regenerated && words.length > 0 && (
+          <Txt className="text-[11.5px] mt-2" style={{ color: C.amber }}>
+            {t('onboarding.seed.regeneratedNote')}
+          </Txt>
         )}
 
         {/* Backup load failure: the stored phrase could not be decrypted.

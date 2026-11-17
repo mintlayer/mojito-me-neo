@@ -55,6 +55,7 @@ export function usePinEntry({
   maxAttempts = LOCK_ATTEMPTS,
   lockSeconds = LOCK_SECONDS,
   check,
+  checkFailureCopy,
   resetKey,
 }: {
   /** Expected PIN. null collects six digits and always matches (PIN set).
@@ -75,6 +76,9 @@ export function usePinEntry({
     message?: string;
     lockSeconds?: number;
   }>;
+  /** Copy for a thrown check (storage failure). Defaults to the unlock
+   *  failure line; non-unlock contexts pass the neutral verify copy. */
+  checkFailureCopy?: string;
   /** Changing this value clears the entry: used when one screen runs two
    *  entry phases back to back (change-PIN old verify, then new collect). */
   resetKey?: string;
@@ -89,9 +93,9 @@ export function usePinEntry({
   // The callbacks close over the caller's current state, so their identity
   // changes every render. Keeping them in a ref lets the effects below depend
   // on values only, same reason PinSet used a ctxRef.
-  const cbs = useRef({ onMatch, onMismatch, check });
+  const cbs = useRef({ onMatch, onMismatch, check, checkFailureCopy });
   useEffect(() => {
-    cbs.current = { onMatch, onMismatch, check };
+    cbs.current = { onMatch, onMismatch, check, checkFailureCopy };
   });
 
   // Lockout countdown; hitting zero also restores the attempt budget.
@@ -145,7 +149,7 @@ export function usePinEntry({
         .catch(() => {
           if (!cancelled) {
             setErr(true);
-            setMsg(t('onboarding.unlock.failed'));
+            setMsg(cbs.current.checkFailureCopy ?? t('onboarding.unlock.failed'));
           }
         });
       return () => {

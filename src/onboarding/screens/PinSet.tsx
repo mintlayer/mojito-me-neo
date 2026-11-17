@@ -17,10 +17,12 @@ export function PinSet({ ctx }: { ctx: Ctx }) {
   const { val, setValue, err, msg, lockLeft, locked } = usePinEntry({
     // In verify-old mode the verdict comes from the persisted verifier,
     // through the shared store-backed check so the lockout bookkeeping is
-    // identical everywhere.
+    // identical everywhere. The failure copy is context-neutral: the user is
+    // entering their PIN, not unlocking.
     target: null,
     resetKey: phase,
-    check: phase === 'verify-old' ? pinEntryCheck() : undefined,
+    check: phase === 'verify-old' ? pinEntryCheck({ unsetCopy: t('onboarding.pin.verifyFailed') }) : undefined,
+    checkFailureCopy: t('onboarding.pin.verifyFailed'),
     onMatch: (pin) => {
       if (phase === 'verify-old') {
         setPhase('collect');
@@ -39,7 +41,9 @@ export function PinSet({ ctx }: { ctx: Ctx }) {
       subtitle={
         verifying
           ? t('settings.changePin.verifyOldSub')
-          : t('onboarding.pin.setSub', { bio: bioName(ctx.bio) })
+          : ctx.bioAvailable
+            ? t('onboarding.pin.setSub', { bio: bioName(ctx.bio) })
+            : t('onboarding.pin.setSubPinOnly')
       }
       value={val}
       setValue={setValue}

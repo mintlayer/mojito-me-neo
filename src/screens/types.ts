@@ -13,6 +13,8 @@ export type Sheet = {
   onSignOut?: () => void;
   /** Session biometric mode; SendScreen reads it for the auth copy. */
   bio?: Bio;
+  /** Recovery-phrase length from the vault meta (Settings only). */
+  wordCount?: number;
 };
 
 /** Props the tab screens receive from App. Only Home consumes them all. */

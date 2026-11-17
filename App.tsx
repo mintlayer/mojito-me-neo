@@ -329,6 +329,7 @@ function Shell() {
               <Sheet
                 onClose={() => setOverlay(null)}
                 bio={session.bio}
+                wordCount={session.vault?.meta.wordCount}
                 onBackup={() => {
                   setOverlay(null);
                   revealBackup();
