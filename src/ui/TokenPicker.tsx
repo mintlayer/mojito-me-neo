@@ -34,4 +34,4 @@ export function TokenPicker({
 
 /* ── Chrome ─────────────────────────────────────────────────── */
 
-/** Radial wash behind the whole app — the `.app` background in styles.css. */
+/** Radial wash behind the whole app, the `.app` background in styles.css. */

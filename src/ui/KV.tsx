@@ -14,4 +14,4 @@ export function KV({ k, v, tone = C.text0, right }: { k: string; v: React.ReactN
   );
 }
 
-/** Single-line `label ....... value` row — dex footer, send review. */
+/** Single-line `label ....... value` row: dex footer, send review. */

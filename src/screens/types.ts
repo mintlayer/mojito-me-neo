@@ -7,7 +7,7 @@ export type Nav = {
   onOpenReceive?: () => void;
   onOpenSettings?: () => void;
   onGoto?: (tab: string) => void;
-  /** Onboarding finished without verifying the phrase — Receive stays locked. */
+  /** Onboarding finished without verifying the phrase, so Receive stays locked. */
   deferred?: boolean;
   onBackUp?: () => void;
   /** Locks the app and shows the unlock screen. */

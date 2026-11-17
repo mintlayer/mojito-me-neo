@@ -17,7 +17,7 @@ export function Sheet({
 }) {
   const insets = useSafeAreaInsets();
   return (
-    // No statusBarTranslucent — with app.json's edgeToEdgeEnabled on Android 15
+    // No statusBarTranslucent: with app.json's edgeToEdgeEnabled on Android 15
     // it swallows every touch inside the modal.
     <Modal visible={open} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable className="flex-1" style={{ backgroundColor: black(0.55) }} onPress={onClose} />

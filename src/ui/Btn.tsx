@@ -65,4 +65,4 @@ export function Btn({
   );
 }
 
-/** 36x36 rounded-square action — header settings/bell, sheet close. */
+/** 36x36 rounded-square action: header settings/bell, sheet close. */

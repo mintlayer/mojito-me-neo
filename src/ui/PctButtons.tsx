@@ -32,4 +32,4 @@ export function PctButtons({ onPick, compact }: { onPick: (fraction: number) => 
   );
 }
 
-/** Inset `LABEL [value] UNIT` row — the dex order ticket fields. */
+/** Inset `LABEL [value] UNIT` row: the dex order ticket fields. */

@@ -24,7 +24,7 @@ export function oklch(L: number, c: number, h: number, a = 1): string {
   return a === 1 ? `rgb(${r}, ${g}, ${b})` : `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-/** Re-tint an existing token at a new alpha — the RN stand-in for `oklch(from X l c h / a)`. */
+/** Re-tint an existing token at a new alpha, the RN stand-in for `oklch(from X l c h / a)`. */
 export const alpha = (rgb: string, a: number): string =>
   rgb.replace(/^rgba?\(\s*([\d.]+,\s*[\d.]+,\s*[\d.]+)(?:,\s*[\d.]+)?\s*\)$/, (_, ch) => `rgba(${ch}, ${a})`);
 
