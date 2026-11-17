@@ -73,8 +73,9 @@ export function Onboarding({
         // Deviation from spec M1-keys (recorded in decisions.md): the PIN
         // change flow swaps only the verifier; it does not re-key or re-seal
         // the vault. The vault key is independent of the PIN, so re-sealing
-        // on a PIN change adds no security; the seed.v2 re-key stays
-        // specified for future portability (export/migration).
+        // on a PIN change adds no security; the seed.v2 slot exists for the
+        // biometrics gating flip at unlock (walletVault slot lifecycle),
+        // not for PIN changes.
         //
         // Fresh flows seal the phrase before the session exists; the backup
         // and change-PIN re-entries must not touch the stored wallet. A

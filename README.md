@@ -99,7 +99,7 @@ src/data/providers/         provider interfaces, mock implementations, mode swit
 src/storage/                the persistence seam
   secureStore.ts            seal/open/wipe over the native crypto (test double in dev/node)
   blobStore.ts              persists sealed blobs across restarts (AsyncStorage)
-  walletVault.ts            the sealed recovery phrase under seed.v1
+  walletVault.ts            the sealed recovery phrase over the seed.v1 / seed.v2 slots
   pinStore.ts               PBKDF2 PIN verifier with persisted lockout (pin.meta.v1)
   appSettings.ts            plain security toggles (biometrics, auto-lock)
 
@@ -179,8 +179,10 @@ phrase is on screen, and released on unmount.
   recovers only via phrase restore). `keyExists` is an attribute-level query and never prompts.
   PIN-only wallets are never created gated, so their vault operations never show a biometric prompt.
 - `src/storage/blobStore.ts` persists the sealed ciphertext (AsyncStorage); `walletVault.ts` keeps
-  the phrase under `seed.v1`, `pinStore.ts` keeps the PIN verifier and lockout under `pin.meta.v1`,
-  `appSettings.ts` keeps the plain security toggles.
+  the phrase across two fixed slots, `seed.v1` and `seed.v2`: exactly one is live, and the unlock-time
+  gating upgrade re-seals into the other slot and deletes the old one only after the new blob reads
+  back byte-equal (a failed upgrade leaves the old vault intact and retryable). `pinStore.ts` keeps
+  the PIN verifier and lockout under `pin.meta.v1`, `appSettings.ts` keeps the plain security toggles.
 - The memory store in `secureStore`/`blobStore` exists **only** for dev builds, Expo Go and Node
   tooling; it is a non-cryptographic test double, and a release build without the native core
   **throws** instead of falling back. Dev-only quirk: a wallet sealed under the memory double is
