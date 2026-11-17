@@ -60,6 +60,10 @@ async function secureEntropy(bytes: number): Promise<Uint8Array> {
   throw new Bip39Error('entropy', 'no secure random source available');
 }
 
+/** Shared secure-bytes helper for salts and nonces outside BIP39 itself.
+ *  Same source policy: native core first, gated WebCrypto in dev and tests. */
+export const secureBytes = secureEntropy;
+
 /** NFKD-normalized, lowercased, whitespace-split words. */
 export function normalizeWords(raw: string): string[] {
   return raw
