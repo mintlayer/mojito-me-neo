@@ -76,6 +76,13 @@ async function main() {
   await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/84'/0'"), /shape/);
   await assert.rejects(() => deriveCustomScan(VECTOR_12, "m/84'/0'/0'/0"), /shape/);
 
+  // The master token is asserted, not dropped: a bare leading slash, an
+  // uppercase master or any other first token must never derive as if it
+  // said m/.
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "/84'/0'/0'"), /shape/);
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "M/84'/0'/0'"), /shape/);
+  await assert.rejects(() => deriveCustomScan(VECTOR_12, "n/84'/0'/0'"), /shape/);
+
   console.log('BtcKeyring.test.ts: BIP84 vectors match');
 }
 

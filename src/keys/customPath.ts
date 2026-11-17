@@ -23,9 +23,15 @@ export type CustomScan = {
 
 const LEVEL_SHAPE = /^\d+'$/;
 
-/** Parse m/44'/19788'/0' style account paths into plain hardened indices. */
+/** Parse m/44'/19788'/0' style account paths into plain hardened indices.
+ *  The master token is asserted, not dropped: a bare "/84'/0'/0'" or a
+ *  typo'd "n/..." must be rejected, never derived as if it said m/. */
 function parseAccountPath(path: string): number[] {
-  const levels = path.trim().split('/').slice(1);
+  const tokens = path.trim().split('/');
+  if (tokens[0] !== 'm') {
+    throw new CustomPathError('shape');
+  }
+  const levels = tokens.slice(1);
   if (levels.length !== 3 || !levels.every((l) => LEVEL_SHAPE.test(l))) {
     throw new CustomPathError('shape');
   }
