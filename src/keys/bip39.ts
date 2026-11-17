@@ -150,14 +150,20 @@ export async function validateMnemonic(words: string[]): Promise<boolean> {
 
 /** PBKDF2-HMAC-SHA512 over the NFKD-normalized phrase, 2048 rounds, salt
  *  'mnemonic' plus the optional passphrase. Returns the 64-byte BIP32 seed. */
-export async function mnemonicToSeed(words: string[], passphrase?: string): Promise<Uint8Array> {
-  await validateMnemonic(words);
+export function mnemonicToSeedSync(words: string[], passphrase?: string): Uint8Array {
   const phrase = words.join(' ').normalize('NFKD');
   const salt = `mnemonic${passphrase ?? ''}`;
   return pbkdf2(sha512, utf8ToBytes(phrase), utf8ToBytes(salt), {
     c: PBKDF2_ROUNDS,
     dkLen: SEED_BYTES,
   });
+}
+
+/** Async twin of mnemonicToSeedSync: validates before deriving so callers
+ *  never seed from an unverified phrase. */
+export async function mnemonicToSeed(words: string[], passphrase?: string): Promise<Uint8Array> {
+  await validateMnemonic(words);
+  return mnemonicToSeedSync(words, passphrase);
 }
 
 /** 256-bit checksum over the bundled wordlist; asserted in bip39.test.ts so
