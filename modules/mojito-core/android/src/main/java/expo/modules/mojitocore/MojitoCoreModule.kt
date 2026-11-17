@@ -380,8 +380,13 @@ class MojitoCoreModule : Module() {
         },
       )
       val info = BiometricPrompt.PromptInfo.Builder()
+        // i18n exception (plans/ux-deferred.md): these strings are hardcoded
+        // English inside the module; there is no app-locale channel across
+        // the bridge yet, so the full plumb is deferred. The wording mirrors
+        // the in-app copy (onboarding.unlock.bioReason) so the vault prompt
+        // and the unlock screen do not diverge.
         .setTitle("Unlock the wallet")
-        .setSubtitle("Verify it is you to open the encrypted vault")
+        .setSubtitle("Verify it is you to unlock")
         .setNegativeButtonText("Cancel")
         .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
         .build()

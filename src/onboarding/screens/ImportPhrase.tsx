@@ -101,10 +101,10 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
       })
       .catch((e: { kind?: string; message?: string }) => {
         if (e.kind === 'length') {
-          setSubmitError(t('onboarding.import.wrongcount', { counts: PHRASE_LENGTHS.join(', ') }));
+          setSubmitError(t('onboarding.import.wrongCount', { counts: PHRASE_LENGTHS.join(', ') }));
         } else if (e.kind === 'word') {
           const word = (e.message ?? '').split(': ')[1] ?? '';
-          setSubmitError(t('onboarding.import.badword', { word }));
+          setSubmitError(t('onboarding.import.badWord', { word }));
         } else {
           setSubmitError(t('onboarding.import.sumError'));
         }
@@ -165,14 +165,14 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
           </Callout>
         )}
         {badWords && (
-          <Txt className="text-[11.5px] mt-2" style={{ color: C.red }}>
+          <Callout tone={C.red} className="mt-2.5">
             {t('onboarding.import.badWords')}
-          </Txt>
+          </Callout>
         )}
         {submitError && (
-          <Txt className="text-[11.5px] mt-2" style={{ color: C.red }}>
+          <Callout tone={C.red} className="mt-2.5">
             {submitError}
-          </Txt>
+          </Callout>
         )}
       </Body>
 
