@@ -2,8 +2,22 @@
 // in Keychain or Keystore (never returned to JS), plus wipe and keyExists.
 // The native path runs through the MojitoCore module. The memory-only
 // fallback is a test double for unit tests and tooling: it is deliberately
-// NOT cryptography, just an authenticated roundtrip with the same shape.
+// NOT cryptography, just an authenticated roundtrip with the same shape. It
+// is gated to dev/test runtimes: a release build without the native core
+// fails loudly instead of sealing secrets with a fake cipher.
 import type { SealedBlob } from '../../modules/mojito-core';
+
+/** Which implementation getSecureStore() handed out. */
+export type SecureStoreKind = 'native' | 'memory';
+
+declare const __DEV__: boolean | undefined;
+
+/** Memory fallback is allowed only in dev/test runtimes: React Native dev
+ *  builds (__DEV__), Expo Go, and non-RN tooling (Node tests, tsx). A release
+ *  build must never silently fall back. */
+function memoryFallbackAllowed(): boolean {
+  return typeof __DEV__ === 'undefined' || __DEV__ === true;
+}
 
 export interface SecureStore {
   seal(keyId: string, plaintext: Uint8Array): Promise<SealedBlob>;
@@ -35,15 +49,18 @@ async function getCore(): Promise<CoreModule | null> {
 let sharedMemory: SecureStore | null = null;
 
 /**
- * The app-level store. Native-backed on dev builds; memory fallback elsewhere
- * (unit tests, Expo Go) so nothing crashes before M1 wires persistence.
+ * The app-level store plus the kind it resolved to. Native-backed on dev
+ * builds; memory fallback (unit tests, Expo Go, tooling) only where
+ * memoryFallbackAllowed() holds. Release builds without the native core throw
+ * so persistence can never degrade to the test double.
  */
-export async function getSecureStore(): Promise<SecureStore> {
+export async function getSecureStore(): Promise<{ kind: SecureStoreKind; store: SecureStore }> {
   if (await getCore()) {
-    return nativeStore;
+    return { kind: 'native', store: nativeStore };
   }
+  if (!memoryFallbackAllowed()) throw new Error('native core unavailable');
   if (!sharedMemory) sharedMemory = createMemorySecureStore();
-  return sharedMemory;
+  return { kind: 'memory', store: sharedMemory };
 }
 
 const nativeStore: SecureStore = {
