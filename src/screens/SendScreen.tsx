@@ -4,10 +4,11 @@ import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
 import type { FeeTierId } from '../data/providers';
+import { bioName } from '../onboarding/context';
 import { C, G } from '../theme';
 import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, tile, hairlineTop, usd } from '../ui';
 
-export function SendScreen({ onClose }: Sheet) {
+export function SendScreen({ onClose, bio = 'face' }: Sheet) {
   const assets = useData((d) => d.getAssets());
   const assetBalances = useData((d) => d.getAssetBalances());
   const assetSymbols = useData((d) => d.getAssetSymbols());
@@ -25,6 +26,8 @@ export function SendScreen({ onClose }: Sheet) {
   const fee = fees[feeTier];
 
   if (step === 2) {
+    // ponytail: fixture tx hash and explorer link; M3 wires the real
+    // BroadcastProvider.broadcastMl result and status polling in their place.
     return (
       <SuccessScreen
         title={t('send.step.sent')}
@@ -51,7 +54,7 @@ export function SendScreen({ onClose }: Sheet) {
     const rows: [string, React.ReactNode][] = [
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{address}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
-      [t('common.networkFee'), `${fee.cost} ${token.sym} · ~$0.00`],
+      [t('common.networkFee'), t('send.feeValue', { fee: String(fee.cost), sym: token.sym, usd: `$${usd(fee.cost, token.price)}` })],
       [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(`send.fee.eta.${feeTier}` as I18nKey)}</Txt>],
       [t('common.total'), `${(parseFloat(amount || '0') + fee.cost).toFixed(5)} ${token.sym}`],
     ];
@@ -81,7 +84,7 @@ export function SendScreen({ onClose }: Sheet) {
           </Card>
 
           <Callout icon="fingerprint" className="mt-3.5">
-            <Txt className="text-[12px]">{t('send.authBio', { bio: t('onboarding.bio.face') })}</Txt>
+            <Txt className="text-[12px]">{t('send.authBio', { bio: bioName(bio) })}</Txt>
           </Callout>
 
           <Btn tone="primary" icon="lock" className="mt-4" onPress={() => setStep(2)}>

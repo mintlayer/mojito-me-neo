@@ -82,6 +82,7 @@ export const en = {
   'send.to.label': 'To',
   'send.network': 'Network',
   'send.arrival': 'Arrival',
+  'send.feeValue': '{fee} {sym} · ~{usd}',
   'send.authBio': 'Authenticate with {bio} to send',
   'send.confirm': 'Confirm · Send {amount} {token}',
   'send.step.sent': 'Sent',
