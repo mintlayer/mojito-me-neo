@@ -20,25 +20,30 @@ const SETTINGS_KEY = STORAGE_KEYS.settings;
 // Process-lifetime copy for the Node gate and other tooling runtimes.
 let memory: Partial<AppSettings> | null = null;
 
+// Ordering matches the blobStore and secureStore seams: the real store is
+// attempted first, so release builds with AsyncStorage keep persisting, and
+// the throw only fires when no store exists AND the memory double is not
+// allowed. Gating the whole read on devFallbackAllowed() would kill settings
+// persistence (and with it the vault key's gate decision) in every release.
 async function loadRaw(): Promise<Partial<AppSettings> | null> {
-  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   const api = await loadAsyncStorage();
   if (api) {
     const json = await api.getItem(SETTINGS_KEY);
     return json ? (JSON.parse(json) as Partial<AppSettings>) : null;
   }
+  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   if (memory === null) memory = {};
   return memory;
 }
 
 async function writeRaw(state: AppSettings): Promise<void> {
-  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   const json = JSON.stringify(state);
   const api = await loadAsyncStorage();
   if (api) {
     await api.setItem(SETTINGS_KEY, json);
     return;
   }
+  if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   if (memory === null) memory = {};
   memory = state;
 }

@@ -36,3 +36,10 @@ export async function loadAsyncStorage(): Promise<AsyncStorageApi | null> {
   }
   return asyncStorage;
 }
+
+/** Node-gate only: pins the probe result so the storage tests can exercise
+ *  both the backed path and the missing-store path of the consumers.
+ *  undefined clears the pin and re-arms the real probe. */
+export function overrideAsyncStorageForTest(api: AsyncStorageApi | null | undefined): void {
+  asyncStorage = api;
+}
