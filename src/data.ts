@@ -48,10 +48,10 @@ export const ASSET_SYMBOLS = ASSETS.map((a) => a.sym);
 export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer', 'Ethereum', 'Arbitrum', 'Polygon'];
 
 export const ACTIVITY = [
-  { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12' },
-  { icon: 'swap', title: 'Swap on Mintlayer DEX', sub: '0.012 BTC → 3,420 ML', tone: 'amber', time: '14m', state: 'Filled · +0.4%' },
-  { icon: 'arrow_dn', title: 'Atomic swap received', sub: '+ 0.0184 BTC', tone: 'green', time: '1h', state: 'Settled' },
-] satisfies { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string }[];
+  { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
+  { icon: 'swap', title: 'Swap on Mintlayer DEX', sub: '0.012 BTC → 3,420 ML', tone: 'amber', time: '14m', state: 'Filled · +0.4%', live: false },
+  { icon: 'arrow_dn', title: 'Atomic swap received', sub: '+ 0.0184 BTC', tone: 'green', time: '1h', state: 'Settled', live: false },
+] satisfies { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; live: boolean }[];
 
 /* ── DEX ─────────────────────────────────────────────────── */
 

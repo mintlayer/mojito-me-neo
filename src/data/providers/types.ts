@@ -16,7 +16,7 @@ export type AssetRow = {
   amt: number; price: number; change: number; value: number; spark: number[];
 };
 
-export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string };
+export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };
 
 // DEX market
 export type MarketSummary = {
