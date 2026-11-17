@@ -1,6 +1,7 @@
 // Mock fixtures for the demo UI. Lifted out of the per-screen JSX in the source
 // design so screens stay presentational and nothing is declared twice.
 
+import type { ActivityRow, AssetRow } from './data/providers/types';
 import type { IconName } from './ui/icons';
 import type { StepState } from './ui/StepState';
 import type { ChainName, Tone } from './theme';
@@ -21,24 +22,13 @@ export const BALANCE = {
 
 export const RANGES = ['1H', '4H', '1D', '1W', '1M', '1Y', 'ALL'];
 
-export type Asset = {
-  sym: string;
-  name: string;
-  chain: ChainName;
-  amt: number;
-  price: number;
-  change: number;
-  value: number;
-  spark: number[];
-};
-
-export const ASSETS = [
+export const ASSETS: AssetRow[] = [
   { sym: 'BTC', name: 'Bitcoin', chain: 'Bitcoin', amt: 0.4821, price: 96420.32, change: 2.18, value: 46485.57, spark: [100, 102, 99, 105, 108, 106, 112, 110, 115] },
   { sym: 'ML', name: 'Mintlayer', chain: 'Mintlayer', amt: 12480.5, price: 0.342, change: 8.42, value: 4268.33, spark: [80, 82, 78, 85, 90, 95, 92, 98, 105] },
   { sym: 'USDT', name: 'Tether (ML)', chain: 'Mintlayer', amt: 1240.0, price: 1.0, change: 0.01, value: 1240.0, spark: [100, 100, 100, 100, 100, 100, 100, 100, 100] },
   { sym: 'ETH', name: 'Ethereum', chain: 'Ethereum', amt: 1.847, price: 3284.1, change: -1.24, value: 6065.74, spark: [100, 105, 102, 98, 95, 96, 92, 94, 90] },
   { sym: 'USDC', name: 'USD Coin', chain: 'Arbitrum', amt: 820.4, price: 1.0, change: 0.0, value: 820.4, spark: [100, 100, 100, 100, 100, 100, 100, 100, 100] },
-] satisfies readonly Asset[];
+];
 
 /** Picker subtitles. Declared once so the format can't drift per screen. */
 export const ASSET_BALANCES = Object.fromEntries(ASSETS.map((a) => [a.sym, `${a.amt.toLocaleString()} ${a.sym}`]));
@@ -47,11 +37,11 @@ export const ASSET_SYMBOLS = ASSETS.map((a) => a.sym);
 
 export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer', 'Ethereum', 'Arbitrum', 'Polygon'];
 
-export const ACTIVITY = [
+export const ACTIVITY: ActivityRow[] = [
   { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
   { icon: 'swap', title: 'Swap on Mintlayer DEX', sub: '0.012 BTC → 3,420 ML', tone: 'amber', time: '14m', state: 'Filled · +0.4%', live: false },
   { icon: 'arrow_dn', title: 'Atomic swap received', sub: '+ 0.0184 BTC', tone: 'green', time: '1h', state: 'Settled', live: false },
-] satisfies { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; live: boolean }[];
+];
 
 /* ── DEX ─────────────────────────────────────────────────── */
 

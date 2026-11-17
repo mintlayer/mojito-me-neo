@@ -3,6 +3,7 @@
 // derived from a mulberry32 PRNG seeded per token or pair.
 import { ASSETS, BALANCE, MARKET } from '../../data';
 import type { Candle, PricePoint, PriceProvider, PriceRange, PriceSnapshot } from '../providers/types';
+import { fnv1a } from './hash';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -16,12 +17,7 @@ function mulberry32(seed: number): () => number {
 }
 
 function seedFrom(text: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h;
+  return fnv1a(text);
 }
 
 /** Point counts per range (missing-architecture gap 1 data contract). */

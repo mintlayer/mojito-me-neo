@@ -29,7 +29,6 @@ import {
   WAITLIST,
 } from '../../data';
 import type {
-  ActivityRow,
   BridgeHandle,
   BridgeProvider,
   BridgeQuote,
@@ -48,7 +47,7 @@ export function createFixtureWalletData(): WalletData {
     getAssets: async () => ASSETS,
     getAssetSymbols: async () => ASSET_SYMBOLS,
     getAssetBalances: async () => ASSET_BALANCES,
-    getActivity: async (limit) => ACTIVITY.slice(0, limit) as ActivityRow[],
+    getActivity: async (limit) => ACTIVITY.slice(0, limit),
     getNetworks: async () => [...NETWORKS],
     getRanges: async () => [...RANGES],
     getProfile: async () => PROFILE,
