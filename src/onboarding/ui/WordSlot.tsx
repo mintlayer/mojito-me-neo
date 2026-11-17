@@ -54,4 +54,4 @@ export const WordSlot = forwardRef<
   );
 });
 
-/** Large icon badge — the discovery scanner and its empty state. */
+/** Large icon badge: the discovery scanner and its empty state. */

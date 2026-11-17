@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { t } from '../../i18n';
 import { SEED } from '../data';
 import { C, alpha } from '../../theme';
 import { Btn, Card, Chip, Enter, Icon, ListRow, Sheet, Txt, tint } from '../../ui';
@@ -17,16 +18,16 @@ export function Seed({ ctx }: { ctx: Ctx }) {
       {/* Backing out of the backup is the decision the sheet exists for. */}
       <StepHeader onBack={() => setSkipSheet(true)} step={3} />
       <Body className="px-[22px] pt-4 pb-7">
-        <Txt className="text-[24px] font-bold tracking-tightest">Your recovery phrase</Txt>
+        <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.seed.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-1.5 leading-[19px]">
-          24 words, one secret. It backs up every account in this wallet.
+          {t('onboarding.seed.sub')}
         </Txt>
 
         {/* Only Android can actually enforce this, so only Android claims it. */}
         {SCREENSHOT_BLOCKING && (
           <View className="self-start mt-3">
             <Chip tone={C.teal} icon="lock">
-              Screenshots are blocked on this screen
+              {t('onboarding.seed.screenshotBlocked')}
             </Chip>
           </View>
         )}
@@ -43,27 +44,27 @@ export function Seed({ ctx }: { ctx: Ctx }) {
                 style={tint(C.amber, 0.14, 0.4)}>
                 <Icon name="eye" size={19} color={C.amber} />
               </View>
-              <Txt className="text-[13px] font-semibold mt-2.5">Tap to reveal</Txt>
-              <Txt className="text-[11px] text-text2 mt-1">Make sure no one's watching</Txt>
+              <Txt className="text-[13px] font-semibold mt-2.5">{t('onboarding.seed.reveal')}</Txt>
+              <Txt className="text-[11px] text-text2 mt-1">{t('onboarding.seed.revealHint')}</Txt>
             </Pressable>
           )}
         </Card>
 
         {/* The button carries the commitment instead of a separate tick-box:
             the verify quiz on the next step is the real check, so a checkbox
-            would only add a tap and a dead button. Still gated on `revealed`
-            — you can't have written down words you haven't seen. */}
+            would only add a tap and a dead button. Still gated on `revealed`:
+            you can't have written down words you haven't seen. */}
         <Btn tone="primary" className="mt-5" disabled={!revealed} onPress={() => ctx.push('verify')}>
-          I've written it down
+          {t('onboarding.seed.writtenCta')}
         </Btn>
         <LinkBtn className="mt-4" onPress={() => setSkipSheet(true)}>
-          I'll back up later
+          {t('onboarding.seed.later')}
         </LinkBtn>
 
         {/* Progressive disclosure: collapsed by default so the device RNG reads
             as the answer, not as one of two choices the user must weigh. */}
         <LinkBtn className="mt-5" onPress={() => setAdvanced((a) => !a)}>
-          {advanced ? 'Hide advanced' : 'Advanced'}
+          {advanced ? t('onboarding.advanced.hide') : t('onboarding.advanced.show')}
         </LinkBtn>
 
         {advanced && (
@@ -72,8 +73,8 @@ export function Seed({ ctx }: { ctx: Ctx }) {
               <ListRow
                 icon="flash"
                 iconColor={C.text2}
-                label="Bring your own entropy"
-                sub="Draw a picture to add your own randomness to the phrase"
+                label={t('onboarding.entropy.row')}
+                sub={t('onboarding.entropy.rowSub')}
                 trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
                 onPress={() => ctx.push('entropy')}
               />
@@ -83,16 +84,16 @@ export function Seed({ ctx }: { ctx: Ctx }) {
       </Body>
 
       <Sheet open={skipSheet} onClose={() => setSkipSheet(false)}>
-        <Txt className="text-[18px] font-bold tracking-tightest">Skip backup for now?</Txt>
+        <Txt className="text-[18px] font-bold tracking-tightest">{t('onboarding.seed.skipTitle')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[20px]">
-          <Txt className="text-[13px] font-semibold">Receive stays locked</Txt> until your phrase is verified — so funds can't
-          land in a wallet you could lose. If this phone breaks before you back up, the wallet is unrecoverable.
+          <Txt className="text-[13px] font-semibold">{t('onboarding.seed.skipBold')}</Txt>
+          {t('onboarding.seed.skipBody')}
         </Txt>
         <Btn tone="primary" className="mt-[18px]" onPress={() => setSkipSheet(false)}>
-          Back up now
+          {t('onboarding.seed.skipCta')}
         </Btn>
         <Btn className="mt-2.5" onPress={() => ctx.finish(true)}>
-          Continue without backup
+          {t('onboarding.seed.skipContinue')}
         </Btn>
       </Sheet>
     </Column>

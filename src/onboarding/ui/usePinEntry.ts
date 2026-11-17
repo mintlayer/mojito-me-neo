@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { t } from '../../i18n';
 import { LOCK_ATTEMPTS, LOCK_SECONDS } from '../context';
 
 /**
@@ -80,7 +81,7 @@ export function usePinEntry({
     // Only the visual clear is deferred, and it lives in the effect below.
     const left = attempts - 1;
     setErr(true);
-    setMsg(cbs.current.onMismatch ? cbs.current.onMismatch(left) : "PINs don't match. Try again");
+    setMsg(cbs.current.onMismatch ? cbs.current.onMismatch(left) : t('onboarding.pin.mismatch'));
     setAttempts(left);
     if (left <= 0) setLockLeft(lockSeconds);
   }, [val, locked, err, target, attempts, settle, lockSeconds]);

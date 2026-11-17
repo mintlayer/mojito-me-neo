@@ -29,7 +29,7 @@ export function Keypad({
 }: {
   onKey: (k: string) => void;
   onDelete: () => void;
-  /** Bottom-left slot — the biometric shortcut on the unlock screen. */
+  /** Bottom-left slot: the biometric shortcut on the unlock screen. */
   corner?: React.ReactNode;
   disabled?: boolean;
 }) {

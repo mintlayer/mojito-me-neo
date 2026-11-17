@@ -20,6 +20,6 @@ export function BioCircle({ bio, phase, onPress }: { bio: Bio; phase: ScanPhase;
   );
 }
 
-// Sheet now lives in src/ui — the wallet pickers use it too.
+// Sheet now lives in src/ui; the wallet pickers use it too.
 
 /* ── Checkbox ───────────────────────────────────────────────── */

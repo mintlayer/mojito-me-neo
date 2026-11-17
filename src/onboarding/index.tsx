@@ -29,7 +29,7 @@ const SCREENS: Record<ScreenId, React.ComponentType<{ ctx: Ctx }>> = {
   entropy: Entropy,
 };
 
-/* ══ Unlock — the app lock, reached after onboarding ════════ */
+/* Unlock: the app lock, reached after onboarding */
 
 export function Onboarding({
   initial = 'welcome',

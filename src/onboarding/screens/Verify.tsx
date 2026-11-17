@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
+import { t } from '../../i18n';
 import { BIP39, SEED } from '../data';
 import { C, alpha, white } from '../../theme';
 import { Btn, Icon, Txt } from '../../ui';
@@ -7,7 +8,7 @@ import { Body, Column, StepHeader, WordChip, useSeedProtection } from '../ui';
 import type { Ctx } from '../context';
 
 export function Verify({ ctx }: { ctx: Ctx }) {
-  // The chips and filled slots expose 3 of the 24 words — protect it too.
+  // The chips and filled slots expose 3 of the 24 words, so protect it too.
   useSeedProtection();
   // Lazy useState, not useMemo: React treats useMemo as a performance hint it
   // may discard, which would reshuffle the answer key mid-quiz. useState's
@@ -35,7 +36,7 @@ export function Verify({ ctx }: { ctx: Ctx }) {
       setErr(null);
       return;
     }
-    setErr(`That's not word ${active + 1} — check your written backup`);
+    setErr(t('onboarding.verify.wrong', { position: active + 1 }));
     setWrongChip(w);
     setTimeout(() => setWrongChip(null), 500);
   };
@@ -44,8 +45,8 @@ export function Verify({ ctx }: { ctx: Ctx }) {
     <Column>
       <StepHeader onBack={ctx.pop} step={4} />
       <Body className="px-[22px] pt-4 pb-7">
-        <Txt className="text-[24px] font-bold tracking-tightest">Verify your backup</Txt>
-        <Txt className="text-[13px] text-text2 mt-1.5">Pick the right word for each position.</Txt>
+        <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.verify.title')}</Txt>
+        <Txt className="text-[13px] text-text2 mt-1.5">{t('onboarding.verify.sub')}</Txt>
 
         <View className="gap-2.5 mt-5">
           {quiz.idx.map((i) => {
@@ -61,7 +62,7 @@ export function Verify({ ctx }: { ctx: Ctx }) {
                   borderColor: filled ? alpha(C.green, 0.4) : isActive ? (err ? C.red : C.amber) : C.lineSoft,
                 }}>
                 <Txt mono className="text-[11px] text-text3 min-w-[52px]">
-                  Word {i + 1}
+                  {t('onboarding.verify.word', { n: i + 1 })}
                 </Txt>
                 <Txt mono className="flex-1 text-[14px] font-medium" style={{ color: filled ? C.text0 : C.text3 }}>
                   {fills[i] ?? '· · ·'}
@@ -95,7 +96,7 @@ export function Verify({ ctx }: { ctx: Ctx }) {
         </View>
 
         <Btn tone="primary" className="mt-6" disabled={!done} onPress={() => ctx.finish(false)}>
-          {done ? 'Backup verified · Continue' : 'Continue'}
+          {done ? t('onboarding.verify.doneCta') : t('common.continue')}
         </Btn>
       </Body>
     </Column>

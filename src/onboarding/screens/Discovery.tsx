@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
+import { t } from '../../i18n';
 import { ACCOUNTS } from '../data';
 import { C, alpha, black, white } from '../../theme';
 import { Btn, Sheet, Ticker, Txt } from '../../ui';
@@ -28,9 +29,9 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
       {phase === 'scan' ? (
         <View className="flex-1 items-center justify-center px-6">
           <BigBadge icon="scan" pulsing />
-          <Txt className="text-[20px] font-bold tracking-tightest mt-6">Scanning your accounts</Txt>
+          <Txt className="text-[20px] font-bold tracking-tightest mt-6">{t('onboarding.discovery.scanning')}</Txt>
           <Txt className="text-[13px] text-text2 mt-2 text-center leading-[19px]">
-            Checking BTC and ML derivation paths{'\n'}for balances and history…
+            {t('onboarding.discovery.scanningSub')}
           </Txt>
           <Ticker>
             <Txt mono className="text-[11px] text-text3 mt-[18px]">
@@ -40,8 +41,8 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
         </View>
       ) : found ? (
         <Body className="px-[22px] pt-4 pb-7">
-          <Txt className="text-[24px] font-bold tracking-tightest">Accounts found</Txt>
-          <Txt className="text-[13px] text-text2 mt-1.5">These accounts have on-chain history. Pick the ones to restore.</Txt>
+          <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.discovery.title')}</Txt>
+          <Txt className="text-[13px] text-text2 mt-1.5">{t('onboarding.discovery.sub')}</Txt>
 
           <View className="gap-2.5 mt-[18px]">
             {ACCOUNTS.map((a, i) => (
@@ -81,39 +82,39 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
           </View>
 
           <Btn tone="primary" className="mt-5" disabled={selected === 0} onPress={() => ctx.finish(false)}>
-            {`Restore ${selected} account${selected === 1 ? '' : 's'}`}
+            {t('onboarding.discovery.restore', { count: selected, plural: selected === 1 ? '' : 's' })}
           </Btn>
           <LinkBtn className="mt-3.5" onPress={() => setSheet(true)}>
-            Use a custom derivation path
+            {t('onboarding.discovery.custom')}
           </LinkBtn>
         </Body>
       ) : (
         <View className="flex-1 px-6 pt-4 pb-7">
           <View className="flex-1 items-center justify-center">
             <BigBadge icon="history" size={72} square />
-            <Txt className="text-[20px] font-bold tracking-tightest mt-5">No extra accounts found</Txt>
+            <Txt className="text-[20px] font-bold tracking-tightest mt-5">{t('onboarding.discovery.none')}</Txt>
             <Txt className="text-[13px] text-text2 mt-2 text-center leading-[20px] max-w-[270px]">
-              Only the first account has history. Account 1 will be restored — you can add more accounts any time.
+              {t('onboarding.discovery.noneSub')}
             </Txt>
           </View>
           <Btn tone="primary" onPress={() => ctx.finish(false)}>
-            Continue
+            {t('common.continue')}
           </Btn>
           <LinkBtn className="mt-3.5" onPress={() => setSheet(true)}>
-            Use a custom derivation path
+            {t('onboarding.discovery.custom')}
           </LinkBtn>
         </View>
       )}
 
       <Sheet open={sheet} onClose={() => setSheet(false)}>
-        <Txt className="text-[18px] font-bold tracking-tightest">Custom derivation path</Txt>
+        <Txt className="text-[18px] font-bold tracking-tightest">{t('onboarding.discovery.customTitle')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[19px]">
-          Scan a specific path if your accounts were created by another wallet.
+          {t('onboarding.discovery.customSub')}
         </Txt>
         <TextInput
           value={path}
           onChangeText={setPath}
-          accessibilityLabel="Derivation path"
+          accessibilityLabel={t('onboarding.discovery.pathA11y')}
           autoCapitalize="none"
           autoCorrect={false}
           className="font-mono text-[13px] text-text0 h-[46px] rounded-xl px-3.5 mt-4"
@@ -126,7 +127,7 @@ export function Discovery({ ctx }: { ctx: Ctx }) {
             setSheet(false);
             setPhase('scan');
           }}>
-          Scan this path
+          {t('onboarding.discovery.scanCta')}
         </Btn>
       </Sheet>
     </Column>

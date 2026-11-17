@@ -1,23 +1,24 @@
 import React from 'react';
 import { View } from 'react-native';
+import { t } from '../../i18n';
 import { Btn, Txt } from '../../ui';
 import { BioCircle, Column, LinkBtn, StepHeader, useBioScan } from '../ui';
-import { bioName } from '../context';
+import { bioGuard, bioName } from '../context';
 import type { Ctx } from '../context';
 
 export function Secure({ ctx }: { ctx: Ctx }) {
   const scan = useBioScan(() => ctx.push('pin-set'));
-  const name = bioName(ctx.bio);
-  const status = scan.phase === 'scan' ? 'Scanning…' : scan.phase === 'ok' ? 'Verified' : `Tap to enable ${name}`;
+  const name = bioGuard(ctx.bio);
+  const status = scan.phase === 'scan' ? t('onboarding.bio.scanning') : scan.phase === 'ok' ? t('onboarding.bio.verified') : t('onboarding.bio.tapToEnable', { bio: bioName(ctx.bio) });
 
   return (
     <Column>
       <StepHeader onBack={ctx.pop} step={1} />
       <View className="flex-1 px-6 pt-6">
-        <Txt className="text-[24px] font-bold tracking-tightest">Secure your wallet</Txt>
+        <Txt className="text-[24px] font-bold tracking-tightest">{t('onboarding.secure.title')}</Txt>
         <Txt className="text-[13px] text-text2 mt-2 leading-[20px]">
           Your recovery phrase is encrypted on this device the moment it exists.{' '}
-          {ctx.bio === 'face' ? 'Face ID' : 'Your fingerprint'} guards the key — nothing leaves the phone.
+          {name} guards the key - nothing leaves the phone.
         </Txt>
 
         <View className="flex-1 items-center justify-center gap-3.5">
@@ -26,10 +27,10 @@ export function Secure({ ctx }: { ctx: Ctx }) {
         </View>
 
         <Btn tone="primary" onPress={scan.start}>
-          {scan.phase === 'idle' ? `Enable ${name}` : scan.phase === 'scan' ? 'Scanning…' : 'Verified ✓'}
+          {scan.phase === 'idle' ? t('onboarding.bio.enable', { bio: bioName(ctx.bio) }) : scan.phase === 'scan' ? t('onboarding.bio.scanning') : t('onboarding.bio.verifiedCheck')}
         </Btn>
         <LinkBtn className="mt-3.5" onPress={() => ctx.push('pin-set')}>
-          Use PIN instead
+          {t('onboarding.secure.usePin')}
         </LinkBtn>
       </View>
     </Column>

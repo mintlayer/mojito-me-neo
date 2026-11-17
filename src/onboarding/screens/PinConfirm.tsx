@@ -1,4 +1,5 @@
 import React from 'react';
+import { t } from '../../i18n';
 import type { Ctx } from '../context';
 import { PinPad } from './PinPad';
 import { usePinEntry } from '../ui';
@@ -12,11 +13,11 @@ export function PinConfirm({ ctx }: { ctx: Ctx }) {
   return (
     <PinPad
       ctx={ctx}
-      title="Confirm your PIN"
-      subtitle="Re-enter the same 6 digits."
+      title={t('onboarding.pin.confirm')}
+      subtitle={t('onboarding.pin.confirmSub')}
       value={val}
       setValue={setValue}
-      message={locked ? `Too many attempts. Try again in ${lockLeft}s` : msg}
+      message={locked ? t('onboarding.pin.locked', { seconds: lockLeft }) : msg}
       error={err}
       disabled={locked}
     />

@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { TextInput, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { t } from '../../i18n';
 import { BIP39, PHRASE_LENGTHS, checksumOK } from '../data';
 import { C, alpha } from '../../theme';
 import { Btn, Callout, hairlineTop, Txt } from '../../ui';
@@ -59,7 +60,7 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
       <Body className="px-5 pt-4 pb-2.5">
         <Txt className="text-[24px] font-bold tracking-tightest">Import recovery phrase</Txt>
         <Txt className="text-[13px] text-text2 mt-1.5 leading-[19px]">
-          Type each word, or paste the whole phrase into any box — 12 to 24 words are detected automatically.
+
         </Txt>
 
         <View className="flex-row flex-wrap -m-[3px] mt-4">
@@ -90,21 +91,21 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
 
         <View className="flex-row justify-between mt-3">
           <Txt mono className="text-[11px] text-text3">
-            {filled} / {len} words
+            {t('onboarding.import.progress', { filled, len })}
           </Txt>
           <Txt mono className="text-[11px]" style={{ color: !complete ? C.text3 : sumOK ? C.green : C.red }}>
-            {!complete ? 'checksum —' : sumOK ? '✓ checksum valid' : '✗ invalid checksum'}
+            {!complete ? t('onboarding.import.checksumPending') : sumOK ? t('onboarding.import.checksumOk') : t('onboarding.import.checksumBad')}
           </Txt>
         </View>
 
         {complete && !sumOK && (
           <Callout tone={C.red} className="mt-2.5">
-            Every word is valid but the phrase doesn't check out. A word is likely swapped, mistyped, or out of order.
+            {t('onboarding.import.sumError')}
           </Callout>
         )}
         {badWords && (
           <Txt className="text-[11.5px] mt-2" style={{ color: C.red }}>
-            Highlighted words aren't in the BIP39 word list.
+            {t('onboarding.import.badWords')}
           </Txt>
         )}
       </Body>
@@ -125,12 +126,12 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
             ))
           ) : (
             <Txt mono className="text-[10px] text-text3">
-              {cur ? 'no BIP39 match' : 'suggestions appear as you type'}
+              {cur ? t('onboarding.import.noMatch') : t('onboarding.import.suggestHint')}
             </Txt>
           )}
         </View>
         <Btn tone="primary" disabled={!sumOK} onPress={() => ctx.push('discovery')}>
-          Continue
+          {t('common.continue')}
         </Btn>
       </View>
     </Column>
