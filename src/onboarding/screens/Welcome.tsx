@@ -14,6 +14,7 @@ export function Welcome({ ctx }: { ctx: Ctx }) {
     <Column className="px-6">
       <View className="flex-1 items-center justify-center">
         <MojitoLogo size={92} />
+        {/* Brand wordmark: deliberately untranslated (i18n exemption). */}
         <Txt className="text-[34px] font-bold tracking-tightest mt-6">mojito</Txt>
         <Txt className="text-[14px] text-text2 mt-2.5 text-center leading-[22px] max-w-[270px]">
           {t('onboarding.welcome.tagline')}
