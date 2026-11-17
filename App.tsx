@@ -113,20 +113,40 @@ function Shell() {
   const [overlay, setOverlay] = useState<Overlay>(null);
 
   // Cold start: does this device already hold a sealed wallet? Existence is
-  // checked without decrypting; unlock happens only after PIN or biometrics.
-  // The persisted biometrics choice (Secure screen enrolment, Settings
-  // toggle) gates the bio unlock: a "Use PIN instead" onboarding choice or a
-  // disabled toggle keeps the PIN-only lock even on capable hardware.
+  // checked without decrypting (the native query is attribute-level, so no
+  // biometric prompt can fire behind the splash); unlock happens only after
+  // PIN or biometrics. The persisted biometrics choice (Secure screen
+  // enrolment, Settings toggle) gates the bio unlock: a "Use PIN instead"
+  // onboarding choice or a disabled toggle keeps the PIN-only lock even on
+  // capable hardware.
   useEffect(() => {
     void (async () => {
-      if (await walletVault.exists()) {
-        const [detected, saved] = await Promise.all([detectBio(), loadAppSettings().catch(() => ({ biometrics: null, autoLock: true }))]);
-        const wantBio = (saved.biometrics ?? detected !== null) && detected !== null;
+      try {
+        if (await walletVault.exists()) {
+          const [detected, saved] = await Promise.all([
+            detectBio(),
+            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true })),
+          ]);
+          const wantBio = (saved.biometrics ?? detected !== null) && detected !== null;
+          setSession({
+            vault: null,
+            deferred: false,
+            bio: detected ?? 'face',
+            settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
+          });
+          setLocked(true);
+        }
+      } catch {
+        // The existence probe itself failed: degrade to the locked state so
+        // a cancelled prompt or a keychain hiccup can never wedge the app on
+        // the splash. Unlocking re-runs the real decrypt and surfaces the
+        // failure there.
+        const detected = await detectBio();
         setSession({
           vault: null,
           deferred: false,
           bio: detected ?? 'face',
-          settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
+          settings: { biometrics: detected !== null, autoLock: true, testnet: false },
         });
         setLocked(true);
       }
