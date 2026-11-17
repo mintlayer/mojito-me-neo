@@ -1,6 +1,42 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
 import { LOCK_ATTEMPTS, LOCK_SECONDS } from '../context';
+import { pinStore } from '../../storage/pinStore';
+
+export type PinVerdict = {
+  verdict: 'ok' | 'wrong' | 'locked';
+  message?: string;
+  lockSeconds?: number;
+};
+
+/**
+ * Store-backed verdict for usePinEntry's check, shared by the app lock and
+ * the Settings disable step-up so the lockout bookkeeping behaves
+ * identically in both. 'unset' (no PIN row) fails closed without feeding
+ * the lockout: there is no verifier the lockout could ever be cleared
+ * against.
+ */
+export function pinEntryCheck(): (pin: string) => Promise<PinVerdict> {
+  return async (pin) => {
+    const verdict = await pinStore.verify(pin);
+    if (verdict === 'ok') return { verdict: 'ok' };
+    if (verdict === 'locked') {
+      const seconds = await pinStore.lockSecondsLeft();
+      return { verdict: 'locked', message: t('onboarding.pin.locked', { seconds }), lockSeconds: seconds };
+    }
+    if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
+    await pinStore.registerFailure();
+    const seconds = await pinStore.lockSecondsLeft();
+    if (seconds > 0) {
+      return { verdict: 'locked', message: t('onboarding.pin.locked', { seconds }), lockSeconds: seconds };
+    }
+    const left = LOCK_ATTEMPTS - ((await pinStore.attempts()) % LOCK_ATTEMPTS);
+    return {
+      verdict: 'wrong',
+      message: t('onboarding.unlock.wrongPin', { attempts: left, plural: left === 1 ? '' : 's' }),
+    };
+  };
+}
 
 /**
  * Shared PIN-entry sequencing: collect six digits, settle briefly, then fire

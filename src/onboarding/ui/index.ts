@@ -16,4 +16,4 @@ export { Striped } from './Striped';
 export { WordChip } from './WordChip';
 export { WordSlot } from './WordSlot';
 export { useBioScan } from './useBioScan';
-export { usePinEntry } from './usePinEntry';
+export { pinEntryCheck, usePinEntry, type PinVerdict } from './usePinEntry';

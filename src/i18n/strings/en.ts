@@ -190,6 +190,8 @@ export const en = {
   'settings.security.biometricsSub': 'Unlock + sign transactions',
   'settings.security.autolock': 'Auto-lock',
   'settings.security.autolockSub': 'Locks the app when you leave it',
+  'settings.security.confirmTitle': 'Confirm your PIN',
+  'settings.security.confirmBody': 'Turning {feature} off weakens the wallet lock. Enter your PIN to continue.',
   'settings.backup.reveal': 'Recovery phrase',
   'settings.backup.revealSub': 'Back up your 24 words',
   'settings.changePin': 'Change PIN',

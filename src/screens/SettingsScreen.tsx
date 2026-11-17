@@ -5,8 +5,9 @@ import { Alert, Linking, Pressable, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData } from '../data/providers/context';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
+import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
 import { C, G } from '../theme';
-import { Avatar, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
+import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
 
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut }: Sheet) {
   const profile = useData((d) => d.getProfile());
@@ -20,6 +21,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   const [appearance, setAppearance] = useState<AppearanceId>('dark');
   const [dex, setDex] = useState<DexId>('mintlayer');
   const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
+  /** Which security control is waiting for its disable step-up. */
+  const [confirm, setConfirm] = useState<'biometric' | 'autoLock' | null>(null);
   const set = (k: keyof typeof flags) => (v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
 
   // Load the persisted toggles once; every change writes straight through.
@@ -35,10 +38,38 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
     };
   }, []);
 
-  const setSecurityFlag = (k: 'biometric' | 'autoLock') => (v: boolean) => {
+  /** Persist a toggle change. Disabling a security control is a step-up
+   *  boundary: someone holding the unlocked phone must not be able to
+   *  switch auto-lock or biometrics off without proving knowledge of the
+   *  PIN. Enabling needs no step-up; it only adds a control. */
+  const applySecurityFlag = (k: 'biometric' | 'autoLock', v: boolean) => {
+    setConfirm(null);
     setSecurity((s) => ({ ...s, [k]: v }));
     void saveAppSettings(k === 'biometric' ? { biometrics: v } : { autoLock: v }).catch(() => undefined);
+    // Turning auto-lock off re-locks immediately: the session must not ride
+    // on a control that was just switched away.
+    if (k === 'autoLock' && !v) onLock?.();
   };
+
+  const setSecurityFlag = (k: 'biometric' | 'autoLock') => (v: boolean) => {
+    if (v) {
+      applySecurityFlag(k, v);
+      return;
+    }
+    setConfirm(k);
+  };
+
+  // The step-up itself: the in-app PIN against the persisted verifier, with
+  // the same lockout bookkeeping as the app lock (shared pinEntryCheck).
+  const confirmLock = usePinEntry({
+    target: null,
+    settle: 200,
+    resetKey: confirm ?? '',
+    check: confirm ? pinEntryCheck() : undefined,
+    onMatch: () => {
+      if (confirm) applySecurityFlag(confirm, false);
+    },
+  });
 
   // Self-custody: signing out destroys local state, so the phrase is the only
   // way back. Confirm destructively rather than on a single tap.
@@ -84,6 +115,38 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub')} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
         <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub', { count: dapps.active })} trailing="→" divider />
+        {confirm && (
+          <Card variant="inset" accent={C.amber} className="mt-2.5 p-4 rounded-[16px]">
+            <Txt className="text-[14px] font-semibold">{t('settings.security.confirmTitle')}</Txt>
+            <Txt className="text-[12px] text-text2 mt-1 leading-[17px]">
+              {t('settings.security.confirmBody', {
+                feature: t(confirm === 'autoLock' ? 'settings.security.autolock' : 'settings.security.biometrics'),
+              })}
+            </Txt>
+            <View className="items-center mt-5">
+              <PinDots value={confirmLock.val} error={confirmLock.err} />
+            </View>
+            <Txt
+              className="text-[12px] text-center mt-3 h-4"
+              style={{ color: confirmLock.err || confirmLock.locked ? C.red : C.text3 }}>
+              {confirmLock.locked
+                ? t('onboarding.pin.locked', { seconds: confirmLock.lockLeft })
+                : confirmLock.msg}
+            </Txt>
+            <View className="mt-2">
+              <Keypad
+                disabled={confirmLock.locked}
+                onKey={(k) => {
+                  if (confirmLock.val.length < 6) confirmLock.setValue(confirmLock.val + k);
+                }}
+                onDelete={() => confirmLock.setValue(confirmLock.val.slice(0, -1))}
+              />
+            </View>
+            <Btn tone="ghost" className="mt-2" onPress={() => setConfirm(null)}>
+              {t('common.cancel')}
+            </Btn>
+          </Card>
+        )}
       </Section>
 
       <Section title={t('settings.section.networks')}>

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { t } from '../i18n';
-import { pinStore, LOCK_ATTEMPTS } from '../storage/pinStore';
+import { pinStore } from '../storage/pinStore';
 import { C } from '../theme';
 import { Btn, MojitoLogo, Txt } from '../ui';
-import { Bio, BioCircle, BioGlyph, Column, Keypad, PinDots, useBioScan, usePinEntry } from './ui';
+import { Bio, BioCircle, BioGlyph, Column, Keypad, PinDots, useBioScan, usePinEntry, pinEntryCheck } from './ui';
 import { bioName } from './context';
 
 /**
@@ -36,35 +36,9 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
       void pinStore.resetAttempts();
       onUnlockRef.current();
     },
-    check: async (pin) => {
-      const verdict = await pinStore.verify(pin);
-      if (verdict === 'ok') return { verdict: 'ok' };
-      if (verdict === 'locked') {
-        const seconds = await pinStore.lockSecondsLeft();
-        return {
-          verdict: 'locked',
-          message: t('onboarding.pin.locked', { seconds }),
-          lockSeconds: seconds,
-        };
-      }
-      // 'unset' (no PIN row) fails closed without feeding the lockout: there
-      // is no verifier the lockout could ever be cleared against.
-      if (verdict === 'unset') return { verdict: 'wrong', message: t('onboarding.unlock.failed') };
-      await pinStore.registerFailure();
-      const seconds = await pinStore.lockSecondsLeft();
-      if (seconds > 0) {
-        return {
-          verdict: 'locked',
-          message: t('onboarding.pin.locked', { seconds }),
-          lockSeconds: seconds,
-        };
-      }
-      const left = LOCK_ATTEMPTS - ((await pinStore.attempts()) % LOCK_ATTEMPTS);
-      return {
-        verdict: 'wrong',
-        message: t('onboarding.unlock.wrongPin', { attempts: left, plural: left === 1 ? '' : 's' }),
-      };
-    },
+    // Store-backed verdict shared with the Settings disable step-up; the
+    // lockout bookkeeping (registerFailure, escalation) lives in one place.
+    check: pinEntryCheck(),
   });
   const { val, setValue, err, msg, lockLeft, locked } = pinLock;
 
