@@ -24,6 +24,11 @@ export type AssetRow = {
   decimals?: number;
   /** On-chain token id for MLS-01 sends; absent for coin rows. */
   tokenId?: string;
+  /** Exact decimal string of the unconfirmed balance included in `amt`
+   *  (BTC row): the send path refuses unconfirmed external receipts, so
+   *  the row discloses the pending share instead of presenting the whole
+   *  amount as spendable. */
+  pending?: string;
 };
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };

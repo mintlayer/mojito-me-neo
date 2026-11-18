@@ -75,6 +75,7 @@ export const en = {
   'home.assets.title': 'Assets',
   'home.tokens.unknown': 'Unknown token',
   'home.tokens.btcUnavailable': 'Bitcoin balance unavailable, backend not connected yet',
+  'home.tokens.pendingBalance': 'Includes {pending} BTC pending',
   'home.tabs.tokens': 'Tokens',
   'home.tabs.nfts': 'NFTs',
   'home.tabs.defi': 'DeFi',

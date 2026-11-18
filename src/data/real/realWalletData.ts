@@ -86,6 +86,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
     pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML'), false, { decimals: ML_DECIMALS }), mlDecimal);
 
     let btcDecimal = '0';
+    let btcPending: string | undefined;
     // Unconfigured btc-api base (F13): the BTC amount is unknown, not zero,
     // so the row renders an explicit unavailable state and the total stays
     // honest about what it excludes. A configured backend that fails keeps
@@ -97,14 +98,21 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
         // Sum confirmed and unconfirmed sats over every derived address
         // (receiving and change), mirroring the ML BalanceService: the
         // current receiving address is the first unused one, so funds on
-        // earlier addresses would otherwise read as zero.
+        // earlier addresses would otherwise read as zero. The unconfirmed
+        // share is surfaced separately: the send path refuses unconfirmed
+        // external receipts, so the row must not read as spendable.
         const addresses = await acct.manager.allAddresses('btc');
         let sat = 0n;
+        let pendingSat = 0n;
         for (const address of addresses) {
           const btcBalance = await acct.btc.balance(address);
           sat += BigInt(btcBalance.confirmedSat) + BigInt(btcBalance.unconfirmedSat);
+          pendingSat += BigInt(btcBalance.unconfirmedSat);
         }
         btcDecimal = atomsToDecimal(sat.toString(), 8);
+        // Esplora serves a negative unconfirmed figure while an outgoing
+        // mempool spend nets against it: only an inflight receipt is copy.
+        btcPending = pendingSat > 0n ? atomsToDecimal(pendingSat.toString(), 8) : undefined;
       } catch (e) {
         // Any configured-backend failure (transport, http after retries, a
         // parse rule) degrades to the zero BTC row while the ML surfaces
@@ -113,7 +121,13 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
         if (!(e instanceof IndexerError)) throw e;
       }
     }
-    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable, { decimals: 8 }), btcDecimal);
+    pushAsset(
+      assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable, {
+        decimals: 8,
+        pending: btcPending,
+      }),
+      btcDecimal,
+    );
 
     for (const entry of portfolio.tokens) {
       if (nftIds.has(entry.tokenId)) continue; // NFT units live on the NFTs tab.
@@ -242,7 +256,7 @@ function assetRow(
   snapshot: PriceSnapshot | null,
   spark: number[],
   unavailable = false,
-  extra?: { decimals: number; tokenId?: string },
+  extra?: { decimals: number; tokenId?: string; pending?: string },
 ): AssetRow {
   const amt = Number(decimal);
   const price = snapshot ? Number(snapshot.usd) : 0;
@@ -258,6 +272,7 @@ function assetRow(
     unavailable: unavailable || undefined,
     decimals: extra?.decimals,
     tokenId: extra?.tokenId,
+    pending: extra?.pending,
   };
 }
 

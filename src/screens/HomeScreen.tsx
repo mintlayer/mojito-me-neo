@@ -442,9 +442,17 @@ function TokenRow({ asset }: { asset: AssetRow }) {
         {unavailable ? (
           <Txt className="text-[11px] text-text2 mt-0.5">{t('home.tokens.btcUnavailable')}</Txt>
         ) : (
-          <Txt mono className="text-[11px] text-text2 mt-0.5">
-            {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
-          </Txt>
+          <>
+            <Txt mono className="text-[11px] text-text2 mt-0.5">
+              {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
+            </Txt>
+            {/* Pending-aware copy (send honesty): the send path refuses
+                unconfirmed external receipts, so an amount that includes a
+                pending receipt says so instead of reading as spendable. */}
+            {asset.pending !== undefined && asset.pending !== '0' ? (
+              <Txt className="text-[10.5px] text-text2 mt-0.5">{t('home.tokens.pendingBalance', { pending: asset.pending })}</Txt>
+            ) : null}
+          </>
         )}
       </View>
       <Sparkline data={asset.spark} color={asset.change >= 0 ? C.green : C.red} width={48} height={22} />

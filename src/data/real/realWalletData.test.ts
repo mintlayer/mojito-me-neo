@@ -100,6 +100,10 @@ async function main() {
     assert.ok(btcRow, 'btc asset row missing');
     assert.equal(btcRow.amt, 2.500025);
     assert.equal(btcRow.value, 2.500025 * 96420.32);
+    // The unconfirmed 2500 sat receipt rides the row as pending disclosure:
+    // the send path refuses unconfirmed external receipts, so the amount
+    // must not read as fully spendable.
+    assert.equal(btcRow.pending, '0.000025');
     const mlRow = assets.find((row) => row.sym === 'ML');
     assert.ok(mlRow, 'ml asset row missing');
     assert.equal(mlRow.amt, 1.23);
