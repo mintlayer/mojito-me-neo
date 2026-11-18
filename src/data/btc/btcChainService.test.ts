@@ -28,9 +28,9 @@ async function main() {
       {
         status: 200,
         body: {
+          // Esplora serves only confirmed and unconfirmed; no total key.
           confirmed: 5438795679,
           unconfirmed: 2500,
-          total: 5438798179,
         },
       },
       {
@@ -80,6 +80,7 @@ async function main() {
   });
 
   const balance = await client.balance('bc1qtest');
+  // The total is client-side: confirmed + unconfirmed on BigInt strings.
   assert.deepEqual(balance, { confirmedSat: '5438795679', unconfirmedSat: '2500', totalSat: '5438798179' });
 
   const utxos = await client.utxos('bc1qtest');

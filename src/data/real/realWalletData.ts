@@ -167,9 +167,17 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     let btcDecimal = '0';
     if (acct.btc) {
       try {
-        const address = await acct.manager.currentReceivingAddress('btc');
-        const btcBalance = await acct.btc.balance(address);
-        btcDecimal = atomsToDecimal(btcBalance.totalSat, 8);
+        // Sum confirmed and unconfirmed sats over every derived address
+        // (receiving and change), mirroring the ML BalanceService: the
+        // current receiving address is the first unused one, so funds on
+        // earlier addresses would otherwise read as zero.
+        const addresses = await acct.manager.allAddresses('btc');
+        let sat = 0n;
+        for (const address of addresses) {
+          const btcBalance = await acct.btc.balance(address);
+          sat += BigInt(btcBalance.confirmedSat) + BigInt(btcBalance.unconfirmedSat);
+        }
+        btcDecimal = atomsToDecimal(sat.toString(), 8);
       } catch (e) {
         // BTC backend configured but unreachable: the row shows zero and the
         // transport failure surfaces through the offline banner, not a crash.

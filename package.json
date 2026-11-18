@@ -9,11 +9,15 @@
     "ios:dev": "expo run:ios",
     "android:dev": "expo run:android",
     "prebuild": "expo prebuild",
-    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/money.test.ts && tsx src/data/polling.test.ts && tsx src/data/ml/indexerClient.test.ts && tsx src/data/btc/btcChainService.test.ts && tsx src/data/addresses/addressManager.test.ts && tsx src/data/activity/activityService.test.ts && tsx src/storage/secureStore.test.ts && tsx src/storage/walletVault.test.ts && tsx src/storage/pinStore.test.ts && tsx src/storage/appSettings.test.ts && tsx src/data/providers/providers.test.ts && tsx src/keys/bip39.test.ts && tsx src/keys/mlAccounts.test.ts && tsx src/keys/BtcKeyring.test.ts && tsx src/keys/session.test.ts && tsx scripts/no-console.ts && tsx scripts/no-em-dash.ts && tsc --noEmit && eslint .",
+    "check": "tsx src/theme.test.ts && tsx src/i18n/strings.test.ts && tsx src/money.test.ts && tsx src/data/polling.test.ts && tsx src/data/ml/indexerClient.test.ts && tsx src/data/btc/btcChainService.test.ts && tsx src/data/addresses/addressManager.test.ts && tsx src/data/activity/activityService.test.ts && tsx src/storage/secureStore.test.ts && tsx src/storage/walletVault.test.ts && tsx src/storage/pinStore.test.ts && tsx src/storage/appSettings.test.ts && tsx src/data/real/realWalletData.test.ts && tsx src/data/providers/providers.test.ts && tsx src/keys/bip39.test.ts && tsx src/keys/mlAccounts.test.ts && tsx src/keys/BtcKeyring.test.ts && tsx src/keys/session.test.ts && tsx scripts/no-console.ts && tsx scripts/no-em-dash.ts && tsc --noEmit && eslint .",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/btc-signer": "^2.4.1",
     "expo": "^57.0.15",
     "expo-blur": "~57.0.2",
     "expo-build-properties": "~57.0.23",
@@ -27,14 +31,11 @@
     "nativewind": "^4.2.6",
     "react": "19.2.3",
     "react-native": "0.86.2",
+    "react-native-qrcode-svg": "^6.3.54",
     "react-native-reanimated": "4.5.1",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",
-    "react-native-worklets": "0.10.1",
-    "@noble/curves": "^2.4.0",
-    "@noble/hashes": "^2.4.0",
-    "@scure/bip32": "^2.4.0",
-    "@scure/btc-signer": "^2.4.1"
+    "react-native-worklets": "0.10.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

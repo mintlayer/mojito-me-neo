@@ -85,14 +85,15 @@ export class BtcChainService {
     return { chain: parseStats(raw.chain_stats), mempool: parseStats(raw.mempool_stats) };
   }
 
-  /** GET address/:address/balance: confirmed, unconfirmed and total sats. */
+  /** GET address/:address/balance. Esplora-shaped backends serve only
+   *  {confirmed, unconfirmed}; the total is computed client-side on BigInt
+   *  strings, so a missing total key is tolerated, never a parse error. */
   async balance(address: string): Promise<BtcBalance> {
     const raw = asRecord(await this.request(`/address/${encodeURIComponent(address)}/balance`));
-    return {
-      confirmedSat: asSatString(raw.confirmed),
-      unconfirmedSat: asSatString(raw.unconfirmed),
-      totalSat: asSatString(raw.total),
-    };
+    const confirmedSat = asSatString(raw.confirmed);
+    const unconfirmedSat = asSatString(raw.unconfirmed);
+    const totalSat = (BigInt(confirmedSat) + BigInt(unconfirmedSat)).toString();
+    return { confirmedSat, unconfirmedSat, totalSat };
   }
 
   /** GET address/:address/utxo. */
