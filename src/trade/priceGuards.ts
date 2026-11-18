@@ -38,6 +38,11 @@ export function checkAmounts(params: { giveDecimal: string; askDecimal: string }
  *  limit must sit within maxSlippagePct of the mid in either direction; a
  *  crossed or far-off price rejects before any transaction is built. */
 export function checkSlippage(params: { limitDecimal: string; midDecimal: string; maxSlippagePct: number }): GuardResult {
+  // NaN maxSlippagePct would crash BigInt(Math.round(NaN)) with a
+  // RangeError below; the guard contract is a typed result, never a throw.
+  if (!Number.isFinite(params.maxSlippagePct)) {
+    return { ok: false, reason: 'slippage', detail: 'the slippage band is not a finite number' };
+  }
   let limit: bigint;
   let mid: bigint;
   try {

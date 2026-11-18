@@ -117,7 +117,10 @@ function fakeBindings(): MintlayerBindings & {
     },
     async encodeWitnessNoSignature() {
       noSignatureCalls += 1;
-      return u8(0x00);
+      // Text marker like the other fake witnesses, so the echo broadcaster
+      // can find the witness boundary (a bare 0x00 byte would be ambiguous
+      // with the u32 index bytes inside the inputs).
+      return utf8('N:0');
     },
     async encodeSignedTransaction(transaction: Uint8Array, txWitnesses: Uint8Array[]) {
       return cat(transaction, ...txWitnesses);
@@ -196,15 +199,19 @@ function harness(opts?: { orders?: OrderRow[]; detail?: OrderRow; utxos?: MlUtxo
   };
   /** Echo broadcaster: answers the locally computed id like a well-behaved
    *  backend. The fake signed layout is transaction bytes followed by the
-   *  utf8 witness blobs, so the first 'W:' run marks the boundary. */
+   *  utf8 witness blobs ('N:0' for the unsigned order input, 'W:i' for
+   *  payer inputs), and the transaction body never contains 'W:' or 'N:',
+   *  so the first occurrence of either marks the boundary. */
   const localIdOf = (signedHex: string): string => {
     const bytes = Buffer.from(signedHex, 'hex');
-    const marker = Buffer.from('W:');
+    const markers = [Buffer.from('W:'), Buffer.from('N:')];
     let end = bytes.length;
-    for (let i = 0; i + 1 < bytes.length; i++) {
-      if (bytes[i] === marker[0] && bytes[i + 1] === marker[1] && bytes[i + 2] === 0x30) {
-        end = i;
-        break;
+    for (const marker of markers) {
+      for (let i = 0; i + 1 < bytes.length; i++) {
+        if (bytes[i] === marker[0] && bytes[i + 1] === marker[1]) {
+          end = Math.min(end, i);
+          break;
+        }
       }
     }
     return bytesToHex(sha256(new Uint8Array(bytes.subarray(0, end))));

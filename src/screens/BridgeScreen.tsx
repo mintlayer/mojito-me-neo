@@ -43,8 +43,11 @@ export function BridgeScreen() {
     }
   }, [bridge, token, amount]);
 
+  // Debounced quote refresh: /fees and /agents-config must not refetch on
+  // every keystroke of the amount row.
   useEffect(() => {
-    void loadQuote();
+    const timer = setTimeout(() => void loadQuote(), 500);
+    return () => clearTimeout(timer);
   }, [loadQuote]);
 
   useEffect(() => {

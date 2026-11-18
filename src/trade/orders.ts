@@ -461,9 +461,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
           }
 
           const noSignature = await b().encodeWitnessNoSignature();
-          const signedHex = await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]]));
-          const result = await cfg.broadcast.broadcastMl(signedHex);
-          return { txId: result.txId };
+          return { txId: await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]])) };
         } catch (e) {
           await cfg.releaseFailedChange();
           throw e;
@@ -533,9 +531,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
           }
 
           const noSignature = await b().encodeWitnessNoSignature();
-          const signedHex = await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]]));
-          const result = await cfg.broadcast.broadcastMl(signedHex);
-          return { txId: result.txId };
+          return { txId: await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]])) };
         } catch (e) {
           await cfg.releaseFailedChange();
           throw e;
@@ -555,8 +551,9 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     },
   };
 
-  /** Sign-and-broadcast variant returning only the signed hex (fill and
-   *  conclude carry no bindings id extraction). */
+  /** Sign-and-broadcast variant for fill and conclude: same broadcast-id
+   *  honesty contract as finish (a lying backend must not hand back an id
+   *  that does not match the locally signed transaction). */
   async function finishTx(
     inputs: Uint8Array[],
     outputs: Uint8Array[],
@@ -564,8 +561,19 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     prebuiltWitnesses: Map<number, Uint8Array>,
   ): Promise<string> {
     const transaction = await b().encodeTransaction(inputs, outputs, 0);
+    const localTxId = await b().getTransactionId(transaction, false);
     const tip = await cfg.indexer.tip();
-    return cfg.withSession((session) => sign(transaction, payerInputs, prebuiltWitnesses, session, tip.blockHeight + 1));
+    const signedHex = await cfg.withSession((session) => sign(transaction, payerInputs, prebuiltWitnesses, session, tip.blockHeight + 1));
+    const result = await cfg.broadcast.broadcastMl(signedHex).catch((e: unknown) => {
+      if (e instanceof BroadcastError && e.failure === 'disabled') {
+        throw new OrderFlowError('broadcast-disabled');
+      }
+      throw e;
+    });
+    if (result.txId.toLowerCase() !== localTxId.toLowerCase()) {
+      throw new OrderFlowError('rejected', `broadcast answered ${result.txId}, locally signed ${localTxId}`);
+    }
+    return localTxId;
   }
 }
 

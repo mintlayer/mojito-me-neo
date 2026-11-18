@@ -21,7 +21,7 @@ import {
   TransportError as IndexerError, type FetchLike,
 } from '../transport';
 import type {
-  AmountJson, CoinStats, MlAddressInfo, MlNftInfo, MlOrderCurrency, MlOrderInfo, MlOutput, MlOutpoint,
+  AmountJson, MlAddressInfo, MlNftInfo, MlOrderCurrency, MlOrderInfo, MlOutput, MlOutpoint,
   MlTokenInfo, MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
 } from './types';
 
@@ -101,6 +101,10 @@ export function parseAmount(raw: unknown): AmountJson {
         if (!Number.isSafeInteger(record.atoms) || record.atoms < 0) throw new IndexerError('parse', 'amount', undefined);
         out.atoms = String(record.atoms);
       } else if (typeof record.atoms === 'string') {
+        // Deliberately no digit validation here, unlike the bare-string
+        // form above: the book and order routes serve rational atom
+        // strings like '34/100' for prices, which must survive parsing
+        // (the money services handle the rational form downstream).
         out.atoms = record.atoms;
       } else {
         throw new IndexerError('parse', 'amount', undefined);
@@ -288,10 +292,6 @@ export class IndexerClient {
     return asArray(await this.request(`/address/${encodeURIComponent(address)}/spendable-utxos`)).map(parseUtxo);
   }
 
-  async allUtxos(address: string): Promise<MlUtxo[]> {
-    return asArray(await this.request(`/address/${encodeURIComponent(address)}/all-utxos`)).map(parseUtxo);
-  }
-
   async transaction(id: string): Promise<MlTransaction> {
     return parseTransaction(await this.request(`/transaction/${encodeURIComponent(id)}`));
   }
@@ -352,16 +352,6 @@ export class IndexerClient {
     const raw = await this.request('/feerate', query);
     if (typeof raw !== 'string' || !/^\d+$/.test(raw)) throw new IndexerError('parse', '/feerate', undefined);
     return raw;
-  }
-
-  async coinStatistics(): Promise<CoinStats> {
-    const raw = asRecord(await this.request('/statistics/coin'));
-    return {
-      preminted: parseAmount(raw.preminted),
-      staked: parseAmount(raw.staked),
-      circulatingSupply: parseAmount(raw.circulating_supply),
-      burned: parseAmount(raw.burned),
-    };
   }
 
   async orderBook(base: string, quote: string, side: OrderBookSide, cursor?: string): Promise<OrderBookPage> {

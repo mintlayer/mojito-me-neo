@@ -83,13 +83,6 @@ export type MlNftInfo = {
 };
 
 /** GET /statistics/coin. */
-export type CoinStats = {
-  preminted: AmountJson;
-  staked: AmountJson;
-  circulatingSupply: AmountJson;
-  burned: AmountJson;
-};
-
 /** One currency side of an order: the base coin or a token id (F11). */
 export type MlOrderCurrency = { type: 'Coin' | 'Token' | (string & {}); tokenId?: string };
 

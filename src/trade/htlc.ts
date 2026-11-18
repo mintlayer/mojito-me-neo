@@ -142,7 +142,6 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     spentOutputs: Uint8Array[],
     session: KeySession,
     inclusionHeight: number,
-    secret?: Uint8Array,
   ): Promise<string> {
     return session.withSeed(async (seed) => {
       const { xpub } = mlXpubFromSeed(seed, cfg.network as 'mainnet' | 'testnet');
@@ -150,21 +149,17 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       for (let inputIndex = 0; inputIndex < inputs.length; inputIndex++) {
         const origin = await resolveOrigin(xpub, inputs[inputIndex].address);
         const privateKey = mlPrivateKeyFromSeed(seed, cfg.network as 'mainnet' | 'testnet', origin.branch, origin.index);
-        const params = {
-          sighashType: 'all' as const,
-          privateKey,
-          address: inputs[inputIndex].address,
-          transaction,
-          inputUtxos: spentOutputs,
-          inputIndex,
-          inclusionHeight,
-          network: cfg.network,
-          ...(secret !== undefined && inputs.length === 1 ? { secret } : {}),
-        };
         witnesses.push(
-          inputs.length === 1 && secret !== undefined
-            ? await b().encodeWitnessHtlcSpend(params)
-            : await b().encodeWitness(params),
+          await b().encodeWitness({
+            sighashType: 'all' as const,
+            privateKey,
+            address: inputs[inputIndex].address,
+            transaction,
+            inputUtxos: spentOutputs,
+            inputIndex,
+            inclusionHeight,
+            network: cfg.network,
+          }),
         );
       }
       const signed = await b().encodeSignedTransaction(transaction, witnesses);
@@ -183,10 +178,16 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     throw new HtlcError('rejected', 'input address does not derive from this wallet');
   }
 
-  async function broadcast(signedHex: string): Promise<string> {
+  /** Broadcast with the M3 id-match contract: a lying backend must not
+   *  hand back an id that does not match the locally signed transaction. */
+  async function broadcast(transaction: Uint8Array, signedHex: string): Promise<string> {
+    const localTxId = await b().getTransactionId(transaction, false);
     try {
       const result = await cfg.broadcast.broadcastMl(signedHex);
-      return result.txId;
+      if (result.txId.toLowerCase() !== localTxId.toLowerCase()) {
+        throw new HtlcError('rejected', `broadcast answered ${result.txId}, locally signed ${localTxId}`);
+      }
+      return localTxId;
     } catch (e) {
       if (e instanceof BroadcastError && e.failure === 'disabled') throw new HtlcError('broadcast-disabled');
       throw e;
@@ -295,9 +296,10 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
           const transaction = await b().encodeTransaction(inputs, outputs, 0);
           const tip = await cfg.indexer.tip();
           const signedHex = await cfg.withSession((session) => sign(transaction, selection.selection, spentOutputs, session, tip.blockHeight + 1));
-          const txId = await broadcast(signedHex);
-          // The HTLC outpoint rides the lock tx id and its output index
-          // (the HTLC output is assembled at index 0 of this flow).
+          const txId = await broadcast(transaction, signedHex);
+          // The HTLC outpoint rides the locally verified lock tx id and its
+          // output index (the HTLC output is assembled at index 0 of this
+          // flow), never the backend's answer.
           return { txId, lockTx: transaction, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
         } catch (e) {
           await cfg.releaseFailedChange();
@@ -310,7 +312,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       return serialize(async () => {
         if (secret.length !== 32) throw new HtlcError('rejected', 'the preimage must be 32 bytes');
         const descriptor = await describeHtlc(lockTx);
-        const fee = await claimFee(descriptor.txId, spend.address);
+        const fee = await claimFee(descriptor.txId, descriptor.outputIndex, spend.address);
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the claim fee');
         const htlcInput = await utxoInput(descriptor.txId, descriptor.outputIndex);
@@ -326,7 +328,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         const signedHex = await cfg.withSession((session) =>
           signWithKey(transaction, spend.address, [htlcOutputBytes], session, tip.blockHeight + 1, secret, 'htlc-spend'),
         );
-        return { txId: await broadcast(signedHex) };
+        return { txId: await broadcast(transaction, signedHex) };
       });
     },
 
@@ -341,7 +343,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         if (lockedAt + descriptor.refundTimelock > Math.floor(Date.now() / 1000)) {
           throw new HtlcError('not-expired', 'the refund unlocks after the timelock expiry');
         }
-        const fee = await claimFee(descriptor.txId, descriptor.refundAddress);
+        const fee = await claimFee(descriptor.txId, descriptor.outputIndex, descriptor.refundAddress);
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the refund fee');
         const htlcInput = await utxoInput(descriptor.txId, descriptor.outputIndex);
@@ -355,23 +357,28 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         const signedHex = await cfg.withSession((session) =>
           signWithKey(transaction, descriptor.refundAddress, [htlcOutputBytes], session, tip.blockHeight + 1, undefined, 'htlc-refund'),
         );
-        return { txId: await broadcast(signedHex) };
+        return { txId: await broadcast(transaction, signedHex) };
       });
     },
 
     async extractSecret(rawSignedTx, htlcOutpoint) {
+      if (rawSignedTx.length === 0) throw new HtlcError('rejected', 'the signed claim transaction bytes are empty');
       // The extraction consumes the encodeOutpointSourceId blob for the
       // HTLC output (the vendored docs), not the bare 32-byte id.
       const outpointSourceId = await b().encodeOutpointSourceId(htlcOutpoint.id, 'transaction');
+      // strictByteSize=false: the input is a signed transaction whose
+      // witness list trails the transaction body, which strict decoding
+      // rejects (the vendored getTransactionId/extractHtlcSecret docs).
       return b().extractHtlcSecret(rawSignedTx, false, outpointSourceId, htlcOutpoint.index);
     },
   };
 
   /** Claim and refund build against a fee estimate of the same shape: one
-   *  HTLC input, one payout output, standard tier rate. */
-  async function claimFee(htlcTxId: string, destination: string): Promise<bigint> {
+   *  HTLC input, one payout output, standard tier rate. The estimate uses
+   *  the real HTLC output index, not a guessed slot. */
+  async function claimFee(htlcTxId: string, outputIndex: number, destination: string): Promise<bigint> {
     const rate = await cfg.indexer.feerate(STANDARD_TIER_IN_TOP_MB);
-    const input = await utxoInput(htlcTxId, 0);
+    const input = await utxoInput(htlcTxId, outputIndex);
     const output = await b().encodeOutputTransfer('0', destination, cfg.network);
     const size = await b().estimateTransactionSize([input], [destination], [output], cfg.network);
     const kbCeil = BigInt(Math.max(1, Math.ceil(size / 1000)));

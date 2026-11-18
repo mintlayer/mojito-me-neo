@@ -201,7 +201,7 @@ export const en = {
   'dex.order.signingPending': 'Signing runs on the device bindings, which are pending on this build. Nothing was sent.',
   'dex.order.broadcastOff': 'Order placement needs the Mintlayer submission route, which is not configured for this network (R3). Nothing was sent.',
   'dex.fill.slippageWarn': 'This price has drifted {drift}% from the book mid. Review before continuing.',
-  'dex.conclude.confirm': 'Conclude closes the order and returns every remaining balance to your conclude address.',
+  'dex.conclude.cta': 'Conclude',
   'dex.priceIndicative': 'Indicative price source (mock). Verify before trading.',
   'dex.book.error': 'The live book is unreachable right now.',
   'dex.order.demo': 'Demo order placed. This is simulated data, not a chain order.',

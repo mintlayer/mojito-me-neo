@@ -25,6 +25,10 @@ async function main() {
   assert.deepEqual(checkSlippage({ limitDecimal: '0.3622', midDecimal: '0.3450', maxSlippagePct: 5 }), { ok: true });
   assert.equal(reason(checkSlippage({ limitDecimal: 'x', midDecimal: '0.345', maxSlippagePct: 1 })), 'slippage');
   assert.equal(reason(checkSlippage({ limitDecimal: '1', midDecimal: '0', maxSlippagePct: 1 })), 'slippage');
+  // A NaN band answers the typed guard result instead of crashing on
+  // BigInt(Math.round(NaN)).
+  assert.equal(reason(checkSlippage({ limitDecimal: '0.345', midDecimal: '0.345', maxSlippagePct: Number.NaN })), 'slippage');
+  assert.deepEqual(checkSlippage({ limitDecimal: '0.345', midDecimal: '0.345', maxSlippagePct: Number.NaN }).ok, false);
 
   // Minimum fill: below the floor rejects, at the floor passes.
   assert.deepEqual(checkMinFill({ amountDecimal: '10', minDecimal: '5' }), { ok: true });

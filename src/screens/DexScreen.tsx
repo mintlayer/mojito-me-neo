@@ -517,7 +517,7 @@ function MyOrderRow({ order, onDone, onError, onFill }: { order: OrderData; onDo
             className="flex-1"
             disabled={busy}
             onPress={() => void run(() => orders.concludeOrder({ orderId: order.orderId }))}>
-            {t('dex.conclude.confirm').split(' ')[0]}
+            {t('dex.conclude.cta')}
           </Btn>
         </View>
       )}

@@ -55,6 +55,16 @@ with the M4 market and activity paging. The client module headers cite this
 entry instead of narrating callers that do not exist, and M3/M4 must consume
 or trim these methods when their consumers land.
 
+M4 outcome (reconciliation): consumed in production are `feerate`,
+`spendableUtxos`, `tip`, the BTC set, `orderBook` (OrderBookService),
+`tokensByTicker` (ticker disambiguation) and `walkOffset` (orders and
+ordersByPair). Trimmed with the M4 fix pass: `allUtxos` and `coinStatistics`
+(production-dead, untested, and no remaining milestone consumer). Deferred:
+`walkCursor`, the only survivor, because M4's cursor walking lives inside
+OrderBookService with restart semantics of its own; the generic walker stays
+test-only until a second cursor endpoint needs it, and a later milestone must
+consume or delete it like the rest of this ledger.
+
 ## D14. QR encoding uses react-native-qrcode-svg, not the spec's pure-TS encoder
 
 The M3 spec's deliverable 1 asked for a hand-rolled pure TypeScript QR encoder
@@ -113,3 +123,37 @@ the account nonce with its state before the native call-through goes live
 on real funds, otherwise the first order transaction after a restart can
 sit at the wrong nonce. Recorded here as a gate condition for the
 call-through landing.
+
+### Deviations reviewed and kept (M4 change log consolidation)
+
+The three M4 deviations the review flagged as sound stay, consolidated
+here so the code comments can cite one entry:
+
+- Raw claim bytes on `extractSecret`: the public Mintlayer indexer serves
+  no raw-transaction route, so a txId-only signature cannot honestly fetch
+  what the bindings extraction consumes. The lock transaction bytes are
+  now captured at initiate (before the broadcast) and persisted with the
+  swap session (`lockTxHex`); claim and refund take those bytes and feed
+  them to `decodeTransactionToJson`, which consumes serialized transaction
+  bytes, never a tx id.
+- Optional `secret` on the shared `WitnessParams`: localizes the pinned
+  htlc-spend-only reveal field at the seam level; `encodeWitnessHtlcSpend`
+  is the only consumer (the M4 fix pass removed the dead secret parameter
+  and the unreachable spend branch from the multi-input order/HTLC signer,
+  so the field now rides the dedicated single-input witness paths only).
+- Optional `BridgeQuote.minAmount/etaSeconds/confirmationsRequired`:
+  encodes the fixture-vs-bridge_v2 API divergence; the screen honors each
+  (null hides the row, the eta derives from confirmations).
+
+### Swap initiate gated in real mode (M4 change log)
+
+The M4 demo locked Mintlayer against the public BIP39 test vector as both
+counterparty spend path and refund path. The fix pass gates real-mode
+initiation with a typed unsupported error (mirroring
+`BridgeProvider.initiate`) until an offer entry supplies the counterparty
+spend address and key; the refund address comes from the wallet's own
+address allocation; mock mode keeps the scripted demo flow with the demo
+callout. The tautological timelock guard (a fabricated BTC leg derived
+from the ML value) was removed from the entry path;
+`checkTimelockRule` returns with real offers, taking `btcSeconds` from
+the offer instead of the scripted half.
