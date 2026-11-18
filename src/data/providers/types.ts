@@ -58,8 +58,14 @@ export type MarketSummary = {
 // Card
 export type WaitlistStatus = { taken: number; total: number };
 export type DappsSummary = { active: number };
-export type CardFeature = { icon: IconName; title: string; detail: string; tone: Tone };
-export type CardTier = { name: string; stake: string; cashback: string; active?: boolean };
+/** Marketing feature ids (spec M5): copy is i18n-driven via the
+ *  card.features.<id>.* keys, so fixtures carry only the visual. */
+export type CardFeatureId = 'spend' | 'route' | 'custody' | 'cashback';
+export type CardFeature = { id: CardFeatureId; icon: IconName; tone: Tone };
+/** Tier ids with marketing-static stake/cashback strings; no stake backend
+ *  exists (spec M5 keeps tiers a static visual with no join hook). */
+export type CardTierId = 'steel' | 'gold' | 'black';
+export type CardTier = { id: CardTierId; stake: string; cashback: string; active?: boolean };
 
 // Send and receive
 export type FeeTierId = 'economy' | 'standard' | 'fast';
