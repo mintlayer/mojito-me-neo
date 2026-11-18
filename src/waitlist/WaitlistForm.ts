@@ -6,8 +6,8 @@
 //
 // TODO (SHIP BLOCKER, decision R4, 2026-11-17): the waitlist backend does
 // not exist; v1 persistence is device-local. This MUST be replaced by a
-// real backend before any production ship (specs/M5-card.md,
-// decisions.md R4, missing-architecture gap 4).
+// real backend before any production ship (plans/mojito-neo/decisions.md
+// R4, missing-architecture gap 4).
 import type { WaitlistProvider, WaitlistResult } from '../data/providers/types';
 
 export type WaitlistPhase = 'idle' | 'invalid' | 'submitting' | 'duplicate' | 'done' | 'unavailable';
@@ -19,6 +19,9 @@ export const EMAIL_MAX_LENGTH = 254;
 
 /** RFC 5321 local-part cap. */
 const LOCAL_PART_MAX = 64;
+// PII-lite deviation (accepted): the caps count UTF-16 code units, not RFC 5321
+// octets, so a Unicode local part can pass while exceeding the octet budget;
+// injection-neutral.
 
 /** Whitespace, ASCII control characters and markup delimiters are refused:
  *  the email is personal data that must never carry HTML or control bytes

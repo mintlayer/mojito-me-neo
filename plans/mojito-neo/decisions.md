@@ -95,6 +95,30 @@ wired would be worse than an honest alert. The `scan.*` i18n keys land with
 the sheet, not before. Revisit when the milestone that owns scanning picks
 the camera library.
 
+## R4. The waitlist ships local-only in v1 (option C), real backend before ship
+
+2026-11-17. The M5 card screen needs an early-access waitlist, but no waitlist
+backend exists: missing-architecture gap 4 proposes the POST /v1/waitlist
+contract, with options A and B for the hosted or self-hosted backend. Decision:
+ship v1 as option C, the sealed device-local store
+(`src/data/mock/localWaitlist.ts`): one slot per install, the email sealed
+under the `waitlist.email.v1` key id, never logged, never sent anywhere. The
+HTTP provider (`src/data/providers/WaitlistProvider.ts`) is complete against
+the proposed contract and activates on a config flip only
+(`endpoints.waitlistBase`), so going real stays a URL change.
+
+This is a ship blocker: a production build must never run the local-only
+waitlist. The gate lives in `createWaitlistProvider` behind
+`FLAGS.localWaitlistOnly`: where dev fallbacks are not allowed (a release
+build), construction without a configured backend refuses with
+`LocalWaitlistShipBlockerError` instead of silently shipping the device-local
+store.
+
+Retention: the email is personal data, so it joins the destructive boundaries.
+Settings > Leave wipes the sealed entry (a failed wipe surfaces and the row
+stays joined), and wallet sign-out wipes it together with the vault and the
+PIN, verifying the blob is gone before the app returns to onboarding.
+
 ## M4 change log
 
 ### Bindings seam corrected to the vendored signatures (M4 review, critical)

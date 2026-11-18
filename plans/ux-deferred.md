@@ -36,3 +36,13 @@ The 240 px QR plus the card paddings clips on 320-class screens (224 pt
 inner width); every audited device width (360 to 430) is safe. Deferred
 because no supported target sits below 360 today. If one lands, scale the
 QR size from the measured inner width instead of shrinking the quiet zone.
+
+## Waitlist duplicate copy assumes the local store (revisit with the backend)
+
+`card.waitlist.duplicate.body` ("This device already holds a spot for {email}")
+hardcodes local semantics for a provider-agnostic machine: once the HTTP
+backend lands (missing-architecture gap 4), a duplicate may be server-side,
+meaning the address joined from another device, and the status-refusal
+fallback masks the typed address instead of a verified on-file one. The copy
+is accurate for the v1 local-only store (decision R4 in
+plans/mojito-neo/decisions.md); revisit it with that milestone.

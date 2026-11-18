@@ -7,8 +7,8 @@
 // LOCAL-ONLY. This MUST be replaced by a real backend (option A or B) before
 // any production ship; the build must not ship to production with the
 // local-only waitlist. Enforced in createWaitlistProvider: release
-// construction without a configured waitlistBase refuses. See specs/M5-card.md
-// and missing-architecture gap 4.
+// construction without a configured waitlistBase refuses. See
+// plans/mojito-neo/decisions.md R4 and missing-architecture gap 4.
 //
 // Security note (spec M5): the email is personal data. It is stored sealed
 // on device (src/data/mock/localWaitlist.ts), never logged, never sent

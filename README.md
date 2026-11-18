@@ -11,9 +11,13 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · M4 (trade)
+## ⚠️ Project status · M5 (card)
 
-**This repository is the trade milestone: everything M3 shipped (keys, vault, live chain data, the send pipeline) plus the three trade surfaces wired to real infrastructure where it exists - the DEX runs the live on-chain order book with order create/fill/conclude flows, the swap screen drives the ML-side HTLC session machine with persisted sessions, and the bridge reads the bridge_v2 api-server (M2E quotes, fees, status; the treasury deposit address). Signing still rides the device-pending bindings seam and ML broadcasting waits on infrastructure, so every trade action lands in an honest state instead of a fabricated success.**
+**This repository is the card milestone: everything M4 shipped (keys, vault, live chain data, the send pipeline, the trade surfaces) plus the card screen with its early-access waitlist. The join flow runs on a validated, normalized email through a sealed device-local store (one slot per install), the confirmation view masks the address, duplicates, transport failures and retries land in honest states, and both Leave and wallet sign-out wipe the sealed email from the device.**
+
+Real in M5:
+
+- **Card waitlist**: the form machine (RFC-validated input, no double submits, submit-time address freeze so a mid-flight edit cannot rename the confirmation), the masked confirmation and duplicate callouts, the provider-state counter, the Settings membership row with Leave, and the sign-out wipe. **R4 ship blocker (decision R4, 2026-11-17): the waitlist backend does not exist; v1 persistence is device-local only, and a production build must never ship it. `createWaitlistProvider` refuses release construction without a configured `waitlistBase` (plans/mojito-neo/decisions.md, missing-architecture gap 4).**
 
 Real in M4:
 
@@ -241,7 +245,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs thirty-seven things:
+`npm run check` runs forty things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -278,51 +282,65 @@ npx tsx src/theme.test.ts
 17. **`src/data/providers/bridge.test.ts`**: the bridge_v2 api provider: quote and fee parsing
     per direction, the treasury deposit address, status mapping and the E2M and initiation
     typed gates, all over a scripted transport.
-18. **`src/trade/orderBookService.test.ts`**: the live depth aggregation: cursor-paginated
+18. **`src/data/providers/WaitlistProvider.test.ts`**: the gap 4 waitlist contract over a
+    scripted transport: the 201 join and the idempotent 200 duplicate, the
+    invalid/unavailable mappings, transport failures and non-JSON bodies, the typed
+    member-status refusal, factory selection and the R4 ship-blocker refusal in a
+    release build.
+19. **`src/trade/orderBookService.test.ts`**: the live depth aggregation: cursor-paginated
     pages, the num/denom price rational, the invalid-cursor page-1 restart and the honest
     null last-fill.
-19. **`src/trade/orders.test.ts`**: order create/fill/conclude over the bindings double: the
+20. **`src/trade/orders.test.ts`**: order create/fill/conclude over the bindings double: the
     witness mix, order id extraction, nonce and height inputs, the fill guards (frozen,
     concluded, overbid, off-band price) and the lying-broadcast refusals.
-20. **`src/trade/htlc.test.ts`**: the HTLC flows: lock output parameters, the build/broadcast
+21. **`src/trade/htlc.test.ts`**: the HTLC flows: lock output parameters, the build/broadcast
     split (nothing broadcasts until the prepared lock is confirmed), the claim witness with
     the secret, the refund timelock refusal, lying-broadcast refusals and the secret
     extraction round-trip.
-21. **`src/trade/swapSession.test.ts`**: the swap session machine: transitions (including the
+22. **`src/trade/swapSession.test.ts`**: the swap session machine: transitions (including the
     offered -> locked broadcast step), persistence round-trip, corrupt-row dropping,
     legacy-column stripping and the no-preimage guarantee.
-22. **`src/trade/priceGuards.test.ts`**: the slippage band, minimum fill floor, amount sanity
+23. **`src/trade/priceGuards.test.ts`**: the slippage band, minimum fill floor, amount sanity
     and the swap timelock rule margin, with typed NaN results.
-23. **`src/trade/bindingsParity.test.ts`**: the vendored-signature parity pin: every seam
+24. **`src/trade/bindingsParity.test.ts`**: the vendored-signature parity pin: every seam
     function (including the privateKey and secret carriers) line-pinned against the vendored
     Swift plus the checksum that fails on any vendor upgrade.
-24. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+25. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
     NFKD normalization, wordlist integrity, supplied-entropy generation.
-25. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+26. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
     blobs, receiving blobs and addresses, plus the custom-path scan.
-26. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+27. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
     account paths.
-27. **`src/send/validation.test.ts`**: send address validation (mtc1/tmt1/bc1/tb1, wrong-network
+28. **`src/send/validation.test.ts`**: send address validation (mtc1/tmt1/bc1/tb1, wrong-network
     detection, non-standard HRP rejection) and exact amount parsing against published vectors.
-28. **`src/send/mlTxBuilder.test.ts`**: the ML planner and assembler: selection determinism, the
+29. **`src/send/mlTxBuilder.test.ts`**: the ML planner and assembler: selection determinism, the
     implicit-fee invariant, token-remainder sizing on the real output list, signer loopback.
-29. **`src/send/btcTxBuilder.test.ts`**: the BTC builder: plan-fee equals signed-fee on the BIP84
+30. **`src/send/btcTxBuilder.test.ts`**: the BTC builder: plan-fee equals signed-fee on the BIP84
     vectors, multi-origin signing, confirmed-input policy, typed dust and insufficient funds.
-30. **`src/send/TxTracker.test.ts`**: the pending-to-confirmed lifecycle with injected timers:
+31. **`src/send/TxTracker.test.ts`**: the pending-to-confirmed lifecycle with injected timers:
     poll cadence, attempt caps, terminal stop, flaky-read tolerance.
-31. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
+32. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
     funding across every managed address with fresh branch 1 change, typed busy refusal,
     broadcast-answer verification, fee pinning, quote purity, post-broadcast warning, the
     origin walk over long change histories and the failed-send change release.
-32. **`src/data/mock/mockSend.test.ts`**: the R3 demo send path: fixture fee tiers, the same
+33. **`src/data/mock/mockSend.test.ts`**: the R3 demo send path: fixture fee tiers, the same
     address and amount validation rejections and deterministic demo-labelled ids.
-33. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+34. **`src/data/mock/localWaitlist.test.ts`**: the sealed local waitlist store: the
+    ciphertext carries no plaintext bytes, one slot per install with duplicate
+    refusal, the idempotent rejoin, and leave wiping both the blob bytes and the
+    key.
+35. **`src/waitlist/waitlistForm.test.ts`**: the waitlist form machine: the validation
+    matrix (length caps, forbidden characters, unicode normalization), the phase
+    transitions, no double submits, the submit-time address freeze and retry
+    scoping.
+
+34. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
     release semantics, xpub parity.
-34. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
-    modules (keys, send, storage, data, onboarding, trade, screens).
-35. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-36. **`tsc --noEmit`**: strict TypeScript.
-37. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+37. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+    modules (keys, send, storage, data, onboarding, trade, screens, waitlist).
+38. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+39. **`tsc --noEmit`**: strict TypeScript.
+40. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
@@ -330,9 +348,10 @@ logic. Until then, changes touching navigation or gestures should be verified on
 simulator: a green `tsc` has repeatedly failed to catch runtime issues here (a modal that
 swallowed every touch typechecked and bundled perfectly).
 
-### Manual checks (device, gated-vault paths)
+### Manual checks (device, gated-vault and waitlist paths)
 
-The native auth gate cannot be exercised in Node; verify these by hand on a device build:
+The native auth gate cannot be exercised in Node; verify these by hand on a device build.
+The waitlist matrix (18 to 24) runs in mock mode on a dev build: it needs no backend.
 
 1. **Biometric choice gates the key.** Onboard with "Enable Face ID" (or fingerprint): the first
    seal at finish shows the OS biometric prompt from inside the module, and every unlock runs it.
@@ -392,6 +411,30 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
     #500+), a send drawing on that change address still succeeds. A failed send (underfunded
     amount or refused broadcast) leaves the change counter untouched, so the next successful
     send allocates exactly one change index.
+18. **Waitlist empty state.** On the card tab with no waitlist slot on the device: the form
+    is empty, the submit button is disabled, and (dev build, gauge visible) the counter shows
+    the fixture seed without this install's slot.
+19. **Waitlist invalid input.** Type an invalid address (double @, an empty local part or
+    domain, an over-254 address, control bytes or markup delimiters) and submit: the invalid
+    callout shows, the provider is never called, and nothing is persisted.
+20. **Waitlist success and counter.** Join with a valid mixed-case, padded address: the
+    confirmation screen names the masked address (first local-part character, domain), Done
+    returns to the card, and the gauge has incremented by exactly one.
+21. **Waitlist duplicate.** Join again with a different address: the amber duplicate callout
+    shows the masked on-file address and View confirmation opens the same masked
+    confirmation. Rejoining the address already on file succeeds idempotently with no new
+    position.
+22. **Waitlist offline submit.** Go offline and submit a fresh address: the unavailable
+    callout and retry button show. Back online, tap retry: the join completes with the
+    address currently in the field, and the confirmation names that same address. Editing
+    the draft while a live join is in flight never renames the confirmation (the submitted
+    address is frozen).
+23. **Waitlist leave and rejoin.** In Settings, Leave the waitlist: the row clears and the
+    gauge drops back to the seed; the app relaunch keeps it cleared (the wipe persists).
+    Join again afterwards: a fresh slot is allocated. A leave that fails (secure storage
+    unavailable) surfaces the leave-failed alert and the row stays joined.
+24. **Waitlist small-device keyboard.** On a 320-class screen with the keyboard open: the
+    email field, callouts and submit button stay reachable, and the return key submits.
 
 ---
 
