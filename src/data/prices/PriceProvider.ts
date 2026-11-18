@@ -1,4 +1,5 @@
-// Real price provider per missing-architecture gap 1 and decisions.md R1:
+// Real price provider per missing-architecture gap 1 and the project
+// decision log (R1):
 // the production direction is self-hosted Mintlayer-operated infrastructure
 // (direction chosen 2026-11-17, implementation pending). v1 always runs the
 // mock price provider; this stub exists so wiring a configured priceBase

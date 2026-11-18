@@ -11,7 +11,7 @@
 // SHA-256(secret) crosses the wire and storage. TIMELOCK_RULE records the
 // F10 ordering (the BTC timelock must be shorter than the ML one); the
 // guard call returns with real offer entry, which supplies the BTC leg
-// the demo path had to fabricate (plans/mojito-neo/decisions.md).
+// the demo path had to fabricate (project decision log).
 //
 // Honest states: every transaction assembles and signs through the
 // MintlayerBindings seam, so without the native call-through the flows

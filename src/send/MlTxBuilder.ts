@@ -1,8 +1,9 @@
 // Mintlayer transaction planner and assembler (spec M3 deliverable 4).
 //
-// Fee semantics follow the production pattern (decisions.md F8): there is no
-// explicit fee field, so fee = ceil(sizeBytes / 1000) * max(rate, 1) with the
-// rate from GET /feerate (atoms per kB, in_top_x_mb selected by tier:
+// Fee semantics follow the production pattern (project decision log F8):
+// there is no explicit fee field, so fee = ceil(sizeBytes / 1000) *
+// max(rate, 1) with the rate from GET /feerate (atoms per kB, in_top_x_mb
+// selected by tier:
 // economy 5, standard 1, fast 1; uplift multiplier 1 in v1). The size comes
 // from bindings.estimateTransactionSize with one destination per input, so
 // the implicit-fee invariant (sum inputs - sum outputs = fee) holds for

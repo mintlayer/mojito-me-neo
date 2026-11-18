@@ -1,12 +1,12 @@
 // Typed REST client for the public Mintlayer indexer under /api/v2
-// (decisions.md F6). Read-only and unauthenticated: no secrets ride in query
-// strings, and address scanning stays sequential one-request-per-address
-// (see BalanceService).
+// (project decision log F6). Read-only and unauthenticated: no secrets ride
+// in query strings, and address scanning stays sequential
+// one-request-per-address (see BalanceService).
 //
 // Methods with an M3/M4 consumer (`feerate`, the UTXO listings, the order
 // book, the statistics and cursor walkers) are a recorded deferral, not an
-// implied caller: decisions.md D13 lists each one with the milestone that
-// consumes it. Do not treat their presence as a caller claim.
+// implied caller: project decision log D13 lists each one with the
+// milestone that consumes it. Do not treat their presence as a caller claim.
 //
 // Failure policy: network failures, timeouts and non-JSON bodies map to
 // typed IndexerError values (transport, http, parse); raw server bodies
@@ -258,7 +258,7 @@ export class IndexerClient {
   /**
    * GET /address/{addr}. The documented 404 AddressNotFound (no history,
    * fresh wallet address) maps to the zero form: an unused address, never
-   * a user-facing error (api-coverage.md, finding 1).
+   * a user-facing error (api-coverage notes, finding 1).
    */
   async addressInfo(address: string): Promise<MlAddressInfo> {
     const path = `/address/${encodeURIComponent(address)}`;

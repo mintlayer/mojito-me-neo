@@ -8,8 +8,9 @@ import { bech32, bech32m } from '@scure/base';
 
 import { validateAddress, parseSendAmount, exceedsBalance } from './validation';
 
-// Parity vectors from decisions.md F5 (public test mnemonic, account 0
-// receiving index 0) and the BIP84 vector from src/keys/BtcKeyring.test.ts.
+// Parity vectors from project decision log F5 (public test mnemonic,
+// account 0, receiving index 0) and the BIP84 vector from
+// src/keys/BtcKeyring.test.ts.
 const ML_MAINNET = 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl';
 const ML_TESTNET = 'tmt1qyxqfq37rra32sq6zhayqcpjwh4trc07mcfardwt';
 const BTC_MAINNET = 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu';

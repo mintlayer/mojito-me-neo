@@ -1,7 +1,7 @@
 // Bitcoin send pipeline (spec M3 deliverable 7): P2WPKH build and sign on
-// the confirmed scure stack (decisions.md R2: @scure/bip32 + @scure/
-// btc-signer, audited, pure TS, Hermes-safe) end to end real in the Node
-// gate. Fees come from btc-api /fee-estimates through the injected rate
+// the confirmed scure stack (project decision log R2: @scure/bip32 +
+// @scure/btc-signer, audited, pure TS, Hermes-safe) end to end real in the
+// Node gate. Fees come from btc-api /fee-estimates through the injected rate
 // source (tier buckets chosen by the caller); when the backend is not
 // configured the injected source reports a fixed fallback and the plan
 // flags it (rateIsFallback) so the UI can say the rate is a guess.

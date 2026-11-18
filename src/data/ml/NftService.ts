@@ -1,7 +1,7 @@
 // NFT holdings (spec M2): the indexer has no reverse address-to-NFT route,
 // so ownership comes from the token ids the address summaries already carry
 // (IssueNft outputs are indexed into per-address balances, one unit each,
-// api-coverage.md finding 2) and each id is probed once against GET /nft/{id}.
+// api-coverage notes finding 2) and each id is probed once against GET /nft/{id}.
 // A 404 means the id is a fungible token, not an error. Probes and metadata
 // are cached in session memory; probing stays sequential to stay
 // rate-limit friendly.

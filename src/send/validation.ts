@@ -2,7 +2,7 @@
 // deliverable 3 and the security note on decimal strings). Pure functions:
 // no network, no state, fully Node-testable against published vectors.
 //
-// Address rules (decisions.md F5 and src/keys/mlAccounts.ts): Mintlayer
+// Address rules (project decision log F5 and src/keys/mlAccounts.ts): Mintlayer
 // addresses are bech32m with the mtc (mainnet) or tmt (testnet) human
 // readable part and the 0x01 pubkeyhash variant byte; BTC addresses on the
 // v1 wallet are bech32 P2WPKH (bc1 / tb1, version 0, 20-byte program).

@@ -3,13 +3,13 @@
 The M6 gate document: how this repository is reviewed, what the release gates
 found, and the acceptance decision for store readiness. Companion documents:
 `docs/MANUAL-QA.md` (the device matrix that must still run) and the pending
-list in `README.md`. Decisions cited as D and R live in
-`plans/mojito-neo/decisions.md`; gaps in `missing-architecture.md` (plans
-dir of the project notes); milestone specs in `specs/` of the plans dir.
+list in `README.md`. Decisions cited as D and R live in the project decision
+log, kept with the project notes outside this repository; gaps in the
+missing-architecture notes and the milestone specs live there too.
 
 ## 1. Review model
 
-Two nested cycles (decision D10):
+Two nested cycles (review-model decision, external project notes):
 
 | Cycle | Reviewers | Scope | Gate |
 |---|---|---|---|
@@ -88,19 +88,19 @@ not a code change.
 
 One registration point (`createProviders`), one selection factory per gap
 provider, the runtime policy single-spelled in `src/config/runtime.ts`. The
-M4-to-M5 reconciliation ledger (in-repo `plans/mojito-neo/decisions.md`)
-remains the record for consumed, trimmed and deferred chain-client methods.
+M4-to-M5 reconciliation ledger (project decision log D13) remains the record
+for consumed, trimmed and deferred chain-client methods.
 
 ### 4.2 ux-deferred reconciliation
 
-The M1-gate deferred list (plans ux-deferred) closes as follows; each item
+The deferred-UX lists (external project notes) close as follows; each item
 is either resolved by a later milestone or carried explicitly.
 
 | Item | Outcome |
 |---|---|
 | Swap 1/2 and Max vs balance | resolved in the M2 cycle-4 fix pass (provider balance semantics) |
 | Send address book link | resolved by removal (recipient chips plus paste; contact list is mock-mode only) |
-| Send scan and QR icons | carried as the honest alert (`send.scan.unavailable`); camera scanning ships with its milestone (in-repo decision D15); MANUAL-QA item |
+| Send scan and QR icons | carried as the honest alert (`send.scan.unavailable`); camera scanning ships with its milestone (project decision log D15); MANUAL-QA item |
 | Receive request-specific-amount row | resolved by removal (lands with the payment-request flow; comment at the site) |
 | Home profile chevron | resolved: static label now, lock and settings buttons wired |
 | Home bell with unread badge | resolved by removal (no notification feature exists) |
@@ -113,8 +113,8 @@ is either resolved by a later milestone or carried explicitly.
 | DEX Trades/Depth segment | CARRIED (known limitation): the segment sets state that no panel consumes. Recorded in the README pending list and MANUAL-QA; the house rule (wire, disable or remove) applies at the fix pass that owns the trades panel |
 | ICU plural migration | resolved by removal: the `{plural}` substitution keys no longer exist in the dictionary (English-only D7; the trap is gone with the reworded copy) |
 | Waitlist join-failure path | resolved (recorded fix; invalid and duplicate callouts ship in M5) |
-| Native vault-prompt locale plumb (repo plans/ux-deferred.md) | carried: native BiometricPrompt strings stay English; no locale channel exists; release note item |
-| NFT thumbnails (repo plans/ux-deferred.md) | carried: text-only rows; no image dependency in the set; release note item |
+| Native vault-prompt locale plumb (external project notes) | carried: native BiometricPrompt strings stay English; no locale channel exists; release note item |
+| NFT thumbnails (external project notes) | carried: text-only rows; no image dependency in the set; release note item |
 | Receive QR below 360 dp | carried (no supported target below 360; scale rule recorded at the site) |
 | Waitlist duplicate copy local-store semantics | carried with R4: accurate for v1; revisit with the backend milestone |
 
@@ -156,12 +156,12 @@ breach unless this waiver is renewed.
 
 | Spec item | Shipped | Reason |
 |---|---|---|
-| Runbook and QA docs in-repo | `docs/REVIEW-RUNBOOK.md`, `docs/MANUAL-QA.md` created in-repo per spec deliverables 1 and 2 | the plans-dir copies stay as working notes; the release gate documents live with the code they gate |
+| Runbook and QA docs in-repo | `docs/REVIEW-RUNBOOK.md`, `docs/MANUAL-QA.md` created in-repo per spec deliverables 1 and 2 | the working notes stay outside the repository; the release gate documents live with the code they gate |
 | `update.required.title` / `update.required.body` reserved keys | NOT added | the i18n completeness gate fails on unreferenced keys; reserved-but-unwired entries are exactly the orphan class it exists to prevent. They land with the endpoint-version gate wiring |
 | `send.disabled.title` / `send.disabled.body` | NOT added | superseded by the shipped M3 honesty: send stays enabled through review and sign and refuses at broadcast with existing keys; a disabled-send copy would describe a flow that does not exist |
 | `release.network.mainnetOnly` | NOT added | the release UI hides the switch and shows `settings.network.unavailable`; a second mainnet-only string has no call site |
 | `settings.network.unavailable` | added and wired (SettingsScreen release branch) | as specified |
-| Camera usage string in app.json | NOT added | no camera dependency exists (scanning deferred, in-repo decision D15); a usage string without the feature is a store-rejection and honesty risk. Becomes a submission precondition together with the ScanSheet milestone |
+| Camera usage string in app.json | NOT added | no camera dependency exists (scanning deferred, project decision log D15); a usage string without the feature is a store-rejection and honesty risk. Becomes a submission precondition together with the ScanSheet milestone |
 | Production app identifiers | `org.mintlayer.mojito.me` (iOS bundleIdentifier, Android package) | derived from the project slug; owner confirms before submission (section 7) |
 | EAS profile names | `development`, `preview`, `production-android`, `production-ios` per the spec profile contract | as specified; `EXPO_PUBLIC_DATA_MODE=real` set on preview and production, mock explicit on development; no secrets in eas.json and no endpoint literals outside `src/config/endpoints.ts` |
 | Privacy declarations | none beyond framework defaults: no analytics, no tracking, no third-party SDK data collection anywhere in the dependency set | as specified |
@@ -172,12 +172,12 @@ breach unless this waiver is renewed.
 Statuses: pass (machine or recorded evidence), pending (device pass,
 `docs/MANUAL-QA.md`), blocked (external dependency), waived (section 5).
 
-- [x] All six milestone specs have their acceptance criteria checked or explicitly waived in the branch history and the in-repo decisions ledger; residual deferrals are enumerated in section 4.2 and the README pending list. (pass)
+- [x] All six milestone specs have their acceptance criteria checked or explicitly waived in the branch history and the project decision log (external notes); residual deferrals are enumerated in section 4.2 and the README pending list. (pass)
 - [x] Reviewer gate history: per-commit cycle through M5; M6 integration pass recorded in sections 2 and 4. (pass)
-- [x] EAS profiles configured per the profile contract; identifiers and version policy applied. Builds not run here. (pass as config; builds pending)
+- [ ] EAS profiles configured per the profile contract; identifiers and version policy applied. Builds not run here. (pending: builds; configuration recorded)
 - [ ] Five-size matrix executed per `docs/MANUAL-QA.md` with results recorded; safe areas on notch and dynamic-island devices. (pending device pass)
 - [ ] Perf budgets recorded from the 360x740 baseline. (pending device pass)
-- [x] Size pass: measured JS bundle recorded; installed sizes pending real artifacts; the one budget miss waived in writing. (pass with waiver)
+- [ ] Size pass: measured JS bundle recorded; installed sizes pending real artifacts; the one budget miss waived in writing. (pending: installed sizes; JS waiver recorded)
 - [x] Production endpoints locked in `src/config/endpoints.ts`; undecided gaps flag-hidden or mock-gated with honest states (section 3). (pass)
 - [ ] Security release checks on a release build: sealed seed, lockout persistence, no secrets in the bundle, checksums re-verified, dependency audit clean or waived. (pending device pass; the static half - no secrets in eas.json, no console in secret paths, checksums in CI - passes here)
 - [x] Store metadata readiness minus the camera string: bundle id, version strings, Face ID usage string, privacy posture recorded. Camera string rides the scanning milestone (waiver note in section 6). (pass with noted exception)

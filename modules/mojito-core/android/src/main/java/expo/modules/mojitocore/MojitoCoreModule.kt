@@ -380,7 +380,7 @@ class MojitoCoreModule : Module() {
         },
       )
       val info = BiometricPrompt.PromptInfo.Builder()
-        // i18n exception (plans/ux-deferred.md): these strings are hardcoded
+        // i18n exception (deferred-UX notes): these strings are hardcoded
         // English inside the module; there is no app-locale channel across
         // the bridge yet, so the full plumb is deferred. The wording mirrors
         // the in-app copy (onboarding.unlock.bioReason) so the vault prompt

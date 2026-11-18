@@ -24,7 +24,8 @@
 // Meta rides inside the sealed payload: meta() decrypts metadata only and
 // never hands out phrase bytes; openWords is the single decryption path. Its
 // callers are the backup reveal, the unlock gating upgrade and the real
-// providers' xpub derivation through openKeySession (decisions.md D10).
+// providers' xpub derivation through openKeySession (project decision log
+// D17).
 import type { MlNetwork, SealedBlob } from '../../modules/mojito-core';
 import { getSecureStore } from './secureStore';
 import type { SecureStore } from './secureStore';

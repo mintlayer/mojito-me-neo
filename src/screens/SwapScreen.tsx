@@ -22,7 +22,7 @@ const TIMELOCK_SECONDS: Record<TimelockChoice, number> = { '12h': 43_200, '24h':
  *  off-band and the BTC side is the scripted counterpart. Real mode never
  *  reaches this constant: initiate is gated with a typed unsupported until
  *  a real offer entry supplies the counterparty spend address and key
- *  (see swapGateError and plans/mojito-neo/decisions.md). */
+ *  (see swapGateError and the project decision log). */
 const COUNTERPARTY_ADDRESS = 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl';
 
 /** Real-mode initiate gate in the BridgeError shape (typed unsupported,

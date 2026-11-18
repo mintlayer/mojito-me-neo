@@ -15,7 +15,7 @@ export type AppSettings = {
   autoLock: boolean;
   /** Active-network switch (M2): selects the endpoint set and rebuilds the
    *  data providers. Mainnet is the default; the testnet base itself stays
-   *  pending action item A2 (decisions.md R6). */
+   *  pending action item A2 (project decision log R6). */
   testnet: boolean;
   /** The recovery phrase passed the verify step at least once. False (never
    *  verified, or the read failed) keeps Receive gated at cold start, so a

@@ -1,5 +1,5 @@
 // Money helper gate: roundtrips, formatting edge cases and the no-float
-// rules (decisions.md F9 semantics). Runs in the Node gate:
+// rules (project decision log F9 semantics). Runs in the Node gate:
 //   npx tsx src/money.test.ts
 import { strict as assert } from 'node:assert/strict';
 

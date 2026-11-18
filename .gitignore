@@ -3,6 +3,7 @@ node_modules/
 .expo-export/
 .expo-export-web/
 dist/
+/plans/
 /ios/
 /android/
 .env*

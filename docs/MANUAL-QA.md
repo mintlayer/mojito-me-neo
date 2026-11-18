@@ -225,7 +225,7 @@ the production profiles).
 8. Bindings artifact checksums re-verified against
    `vendor/mintlayer/CHECKSUMS.txt` (CI re-hashes).
 9. Privacy strings: camera usage rides the scanning milestone (deferred,
-   in-repo decision D15); Face ID usage present; no tracking, no analytics,
+   project decision log D15); Face ID usage present; no tracking, no analytics,
    no third-party SDK data collection.
 
 ## 6. Testnet E2E and faucet flow (blocked: A2)

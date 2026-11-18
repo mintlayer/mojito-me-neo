@@ -1,6 +1,6 @@
 // Per-network endpoint sets, selected by the active network flag. No URL is
-// hardcoded in screens or providers. Facts and decisions live in
-// plans/mojito-neo/decisions.md: mainnet indexer is live-verified (F6),
+// hardcoded in screens or providers. Facts and decisions live in the
+// project decision log: mainnet indexer is live-verified (F6),
 // broadcast stays null until the R3 decision lands (action item A1), the
 // testnet base is pending action item A2 (R6), btcBase needs a btc-api
 // deployment URL (F13), priceBase stays null because v1 mocks prices (R1).

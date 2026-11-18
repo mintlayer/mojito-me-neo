@@ -166,7 +166,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
    *  bindings docs: the nonce must sequence with the filler's other
    *  account spendings). Session-scoped until the wallet persists the
    *  account nonce with its state; the native call-through must not go
-   *  live before that (recorded in plans/mojito-neo/decisions.md). */
+   *  live before that (project decision log). */
   let accountNonce = 0;
   /** One order transaction at a time: selection reads live UTXOs and the
    *  change allocation mutates the persisted counters (realSend pattern). */
