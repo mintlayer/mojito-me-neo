@@ -169,7 +169,7 @@ function orderRow(overrides: Partial<OrderRow>): OrderRow {
   };
 }
 
-function harness(opts?: { orders?: OrderRow[]; detail?: OrderRow; utxos?: MlUtxo[]; broadcastFails?: 'disabled' | null }) {
+function harness(opts?: { orders?: OrderRow[]; detail?: OrderRow; utxos?: MlUtxo[]; broadcastFails?: 'disabled' | null; lyingBroadcast?: string }) {
   const bindings = fakeBindings();
   const changeCounter = { n: 0 };
   const broadcastHexes: string[] = [];
@@ -222,7 +222,9 @@ function harness(opts?: { orders?: OrderRow[]; detail?: OrderRow; utxos?: MlUtxo
       if (opts?.broadcastFails === 'disabled') {
         throw new BroadcastError('ml', 'disabled', undefined, 'no ML submission endpoint is configured');
       }
-      return { txId: localIdOf(signedTxHex) };
+      // lyingBroadcast: the dishonest-backend case for the finishTx id
+      // equality contract (fill and conclude), like the htlc harness.
+      return { txId: opts?.lyingBroadcast ?? localIdOf(signedTxHex) };
     },
     async broadcastBtc() {
       return { txId: 'f'.repeat(64) };
@@ -432,6 +434,29 @@ async function main() {
     assert.deepEqual(
       myOrders.map((order) => order.orderId),
       [mine.orderId],
+    );
+  }
+
+  // 6b. A lying broadcast endpoint is refused on the finishTx path too:
+  //     fill and conclude verify the answered id against the locally
+  //     signed transaction (M3 contract; the HTLC side covers the lock).
+  {
+    const fillDetail = orderRow({});
+    const h = harness({
+      detail: fillDetail,
+      utxos: [coinUtxo('aa'.repeat(32), 0, VECTOR_ADDRESS, atoms(500n)), tokenUtxo('cc'.repeat(32), 0, VECTOR_ADDRESS, atoms(4n))],
+      lyingBroadcast: 'bb'.repeat(32),
+    });
+    const destination = await mlAddressAt(account.xpub, 0, 1, 'mainnet');
+    await assert.rejects(
+      () => h.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(3n), destination, priceBand: FILL_BAND }),
+      (e: unknown) => e instanceof OrderFlowError && e.reason === 'rejected',
+    );
+    const concludeDetail = orderRow({ concludeDestination: VECTOR_ADDRESS, giveBalance: { atoms: atoms(4n) }, askBalance: { atoms: atoms(1n) } });
+    const h2 = harness({ detail: concludeDetail, lyingBroadcast: 'bb'.repeat(32) });
+    await assert.rejects(
+      () => h2.flows.concludeOrder({ orderId: ORDER_ID }),
+      (e: unknown) => e instanceof OrderFlowError && e.reason === 'rejected',
     );
   }
 
