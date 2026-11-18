@@ -14,6 +14,8 @@ import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { VaultKeyInvalidatedError } from './modules/mojito-core';
 import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
+import { getBlobStore } from './src/storage/blobStore';
+import { STORAGE_KEYS } from './src/storage/keys';
 import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
 import { AppBackground, Chip, Icon, IconName, Txt } from './src/ui';
@@ -117,7 +119,7 @@ type AppSession = {
 };
 
 function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkChange: (testnet: boolean) => void }) {
-  const { mode, pricesAreMock } = useProviders();
+  const { mode, pricesAreMock, waitlist } = useProviders();
   const insets = useSafeAreaInsets();
   const [splashDone, setSplashDone] = useState(false);
   /** Whether the vault-existence check finished; drives onboarding vs lock. */
@@ -316,15 +318,23 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
     setLocked(true);
   };
 
-  /** Settings sign-out: the device forgets the keys, per its own copy. A
-   *  failed wipe must not drop the session state: the vault is re-verified
-   *  gone before the app returns to onboarding, and the error surfaces. */
+  /** Settings sign-out: the device forgets the keys, per its own copy. The
+   *  waitlist email is personal data, so its sealed store joins the same
+   *  destructive boundary (decision R4): it wipes together with the vault
+   *  and the PIN. A failed wipe must not drop the session state: the vault
+   *  is re-verified gone and the waitlist blob verified absent before the
+   *  app returns to onboarding, and the error surfaces. */
   const signOut = () => {
     void (async () => {
       let gone = false;
       try {
-        await Promise.all([walletVault.wipe(), pinStore.wipe()]);
-        gone = !(await walletVault.exists());
+        await Promise.all([walletVault.wipe(), pinStore.wipe(), waitlist.leave()]);
+        // Same verification pattern as the vault: probe the storage seam
+        // directly instead of trusting the provider (the HTTP provider has
+        // no member-status route to ask, and the local store's blob is the
+        // persistence that must be gone).
+        const leftover = await (await getBlobStore()).store.get(STORAGE_KEYS.waitlistEmail);
+        gone = !(await walletVault.exists()) && leftover === null;
       } catch {
         gone = false;
       }

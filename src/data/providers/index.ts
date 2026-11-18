@@ -21,7 +21,7 @@ import { createRealAccountContext } from '../real/account';
 import { createRealWalletData } from '../real/realWalletData';
 import { createRealSend } from '../real/realSend';
 import { createFixturePriceProvider } from '../mock/priceFixtures';
-import { createLocalWaitlistProvider } from '../mock/localWaitlist';
+import { createWaitlistProvider } from './WaitlistProvider';
 import { createOrderFlows } from '../../trade/orders';
 import { createHtlcFlows } from '../../trade/htlc';
 import { createSwapSessionStore } from '../../trade/swapSession';
@@ -114,7 +114,10 @@ export function createProviders(mode: ProviderMode = readDataMode()): Providers 
       }),
       broadcast,
       txTracker,
-      waitlist: createLocalWaitlistProvider(),
+      // R4: config flip only. waitlistBase is null in v1, so this is the
+      // local-only store; the factory selects the HTTP provider when the
+      // gap 4 endpoint is configured.
+      waitlist: createWaitlistProvider(endpoints),
       // M4 trade seams: real order book and order/HTLC flows over the
       // bindings and the indexer (device-pending honest states until the
       // native call-through verifies), the bridge_v2 api provider per R5,
@@ -156,7 +159,10 @@ export function createProviders(mode: ProviderMode = readDataMode()): Providers 
     send: createMockSend({ broadcast, network: currentNetwork() }),
     broadcast,
     txTracker: new TxTracker(broadcast),
-    waitlist: createLocalWaitlistProvider(),
+    // Mock mode rides the same selection factory as real mode (one
+    // selection path): a configured waitlistBase would activate the HTTP
+    // provider here too.
+    waitlist: createWaitlistProvider(endpointsFor(currentNetwork())),
     // Mock trade seams: demo book and demo flows over the mock broadcaster
     // (deterministic fake ids; the demo chip discloses the mode).
     orderBook: createMockOrderBookService(),
@@ -175,5 +181,5 @@ export type {
   CandleInterval, CardFeature, CardTier, Contact, DappsSummary, FeeSchedule, FeeTierId,
   MarketSummary, MlTxStatus, NftRow, SendQuote, SendQuoteLeg, SendResult, SendService,
   Portfolio, PricePoint, PriceProvider, PriceRange, PriceSnapshot, Profile, ProviderMode,
-  Providers, TxStatusInfo, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
+  Providers, TxStatusInfo, WaitlistMemberStatus, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
 } from './types';

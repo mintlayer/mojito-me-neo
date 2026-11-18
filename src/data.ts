@@ -1,7 +1,7 @@
 // Mock fixtures for the demo UI. Lifted out of the per-screen JSX in the source
 // design so screens stay presentational and nothing is declared twice.
 
-import type { ActivityRow, AssetRow, CandleInterval, PriceRange } from './data/providers/types';
+import type { ActivityRow, AssetRow, CardFeatureId, CardTierId, CandleInterval, PriceRange } from './data/providers/types';
 import type { IconName } from './ui/icons';
 import type { ChainName, Tone } from './theme';
 
@@ -93,18 +93,22 @@ export const WAITLIST = { taken: 12847, total: 25000 };
 /** Connected-dApp demo state for Settings. */
 export const DAPPS = { active: 3 };
 
+/** Feature fixtures carry the visual only: the marketing copy is i18n
+ *  content under card.features.<id>.* (spec M5). */
 export const CARD_FEATURES = [
-  { icon: 'flash', title: 'Spend onchain', detail: 'Instant ML + BTC settlement', tone: 'amber' },
-  { icon: 'bridge', title: 'Auto-route', detail: 'Best fee across chains', tone: 'violet' },
-  { icon: 'shield', title: 'Self-custody', detail: 'Your keys, your card', tone: 'teal' },
-  { icon: 'arrow_dn', title: 'Cashback', detail: 'Up to 4% back in ML', tone: 'green' },
-] satisfies { icon: IconName; title: string; detail: string; tone: Tone }[];
+  { id: 'spend', icon: 'flash', tone: 'amber' },
+  { id: 'route', icon: 'bridge', tone: 'violet' },
+  { id: 'custody', icon: 'shield', tone: 'teal' },
+  { id: 'cashback', icon: 'arrow_dn', tone: 'green' },
+] satisfies { id: CardFeatureId; icon: IconName; tone: Tone }[];
 
+/** Tier fixtures: stake and cashback stay marketing strings with no stake
+ *  backend; the tier names are i18n-driven (card.tiers.<id>). */
 export const CARD_TIERS = [
-  { name: 'Steel', stake: '0 ML', cashback: '1%', active: true },
-  { name: 'Gold', stake: '5,000 ML', cashback: '2.5%' },
-  { name: 'Black', stake: '50,000 ML', cashback: '4%' },
-] satisfies { name: string; stake: string; cashback: string; active?: boolean }[];
+  { id: 'steel', stake: '0 ML', cashback: '1%', active: true },
+  { id: 'gold', stake: '5,000 ML', cashback: '2.5%' },
+  { id: 'black', stake: '50,000 ML', cashback: '4%' },
+] satisfies { id: CardTierId; stake: string; cashback: string; active?: boolean }[];
 
 /* ── Send / Receive ──────────────────────────────────────── */
 

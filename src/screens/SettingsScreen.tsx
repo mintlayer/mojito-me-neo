@@ -3,7 +3,9 @@ import type { Sheet } from './types';
 import Constants from 'expo-constants';
 import { Alert, Linking, Pressable, View } from 'react-native';
 import { t } from '../i18n';
-import { useData } from '../data/providers/context';
+import { useData, useProviders } from '../data/providers/context';
+import type { WaitlistMemberStatus } from '../data/providers';
+import { maskEmail } from '../waitlist/WaitlistForm';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
 import { detectBio } from '../onboarding/ui/useBioScan';
@@ -11,8 +13,13 @@ import { C, G } from '../theme';
 import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint } from '../ui';
 
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount, network, onNetworkChange }: Sheet) {
+  const providers = useProviders();
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
+  // Waitlist membership (M5, R4 local-only): the row exists only while the
+  // device holds its slot, and leave() is the local wipe that keeps the
+  // email persistence user-controlled. The email renders masked only.
+  const [waitlist, setWaitlist] = useState<WaitlistMemberStatus | null>(null);
   // Security toggles are persisted (storage/appSettings); the other flags
   // stay local until their features ship. The network switch is app-level
   // (ProvidersProvider rebuilds on change), not a local flag.
@@ -54,6 +61,50 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       alive = false;
     };
   }, []);
+
+  // Waitlist status read once; refreshed locally after a leave (the wipe is
+  // the only state change this screen can cause). The HTTP provider refuses
+  // status typed until the backend adds a member-status route, so the row
+  // simply stays hidden instead of claiming a state it cannot know.
+  useEffect(() => {
+    let alive = true;
+    void providers.waitlist
+      .status()
+      .then((s) => {
+        if (alive) setWaitlist(s);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [providers.waitlist]);
+
+  // Destructive confirm, same pattern as sign-out: the wipe discards the
+  // sealed email and the waitlist spot on this device. A failed wipe
+  // surfaces (mirroring the sign-out wipe error) and the row stays joined:
+  // only a successful leave clears the local state.
+  const confirmLeaveWaitlist = () =>
+    Alert.alert(
+      t('settings.waitlist.leave.confirm.title'),
+      t('settings.waitlist.leave.confirm.body'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.waitlist.leave'),
+          style: 'destructive',
+          onPress: () => {
+            void providers.waitlist
+              .leave()
+              .then(() => setWaitlist({ joined: false, email: null, position: null }))
+              .catch(() => {
+                // Nothing was erased, so the row above keeps its joined
+                // claim and the failure is surfaced instead of swallowed.
+                Alert.alert(t('settings.waitlist.leave.errorTitle'), t('settings.waitlist.leave.errorBody'));
+              });
+          },
+        },
+      ],
+    );
 
   /** Persist a toggle change. Disabling a security control is a step-up
    *  boundary: someone holding the unlocked phone must not be able to
@@ -216,6 +267,15 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </Section>
 
       <Section title={t('settings.section.preferences')}>
+        {waitlist?.joined && (
+          <ListRow
+            icon="card"
+            iconColor={C.amber}
+            label={t('settings.waitlist.joined', { maskedEmail: maskEmail(waitlist.email ?? '') })}
+            divider
+            onPress={confirmLeaveWaitlist}
+          />
+        )}
         <ListRow icon="eye" label={t('settings.display.hideBalances')} sub={t('settings.display.hideBalancesSub')}>
           <Toggle on={flags.hideBal} onChange={set('hideBal')} />
         </ListRow>

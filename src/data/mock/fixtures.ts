@@ -20,9 +20,9 @@ import {
   PROFILE,
   RANGES,
   TIMEFRAMES,
-  WAITLIST,
 } from '../../data';
 import { endpointsFor } from '../../config/endpoints';
+import { localWaitlistCounter } from './localWaitlist';
 import type {
   BridgeHandle,
   BridgeProvider,
@@ -55,7 +55,7 @@ export function createFixtureWalletData(): WalletData {
     // indexer instead).
     getTokenIds: async (ticker) => [ticker],
     getTokenMeta: async (tokenId) => ({ ticker: tokenId, decimals: tokenId === 'USDT' ? 6 : 0 }),
-    getWaitlist: async () => WAITLIST,
+    getWaitlist: async () => localWaitlistCounter(),
     getDapps: async () => DAPPS,
     getCardFeatures: async () => [...CARD_FEATURES],
     getCardTiers: async () => [...CARD_TIERS],
