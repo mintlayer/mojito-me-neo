@@ -151,6 +151,49 @@ async function main() {
   await assert.rejects(() => fractionalClient.balance('bc1qtest'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
   assert.deepEqual(await fractionalClient.balance('bc1qtest'), { confirmedSat: '0', unconfirmedSat: '-2500', totalSat: '-2500' });
 
+  // POST tx (M3): hex body rides as raw text, the answer is the txid as
+  // plain text; malformed answers fail typed, never as silent success.
+  {
+    let captured: { url: string; headers?: Record<string, string>; body?: string } | undefined;
+    const broadcastClient = new BtcChainService('http://localhost:3100/api/bitcoin', {
+      fetch: async (url, init) => {
+        captured = { url, headers: init.headers, body: (init as { body?: string }).body };
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          text: async () => 'a1075db55d416d7caaf6e3b8eb4c1c9a1f6a520d7f2d3f8a4e0f1c2b3a49586d',
+        };
+      },
+      retries: 0,
+      delay: () => Promise.resolve(),
+    });
+    const txid = await broadcastClient.broadcastTx('02000000000101ff'.padEnd(120, '0'));
+    assert.equal(txid, 'a1075db55d416d7caaf6e3b8eb4c1c9a1f6a520d7f2d3f8a4e0f1c2b3a49586d');
+    assert.ok(captured !== undefined, 'the broadcast request reached the transport');
+    const capturedUrl = captured.url;
+    const capturedHeaders = captured.headers;
+    const capturedBody = captured.body;
+    assert.ok(capturedUrl.endsWith('/tx'), 'posts to /tx');
+    assert.equal(capturedHeaders?.['Content-Type'], 'text/plain');
+    assert.match(capturedBody ?? '', /^02000000/);
+  }
+  {
+    const broadcastClient = new BtcChainService('http://localhost:3100/api/bitcoin', {
+      fetch: scriptedFetch([
+        { status: 400, body: { error: 'invalid tx' } },
+        { status: 200, body: 'not-a-txid' },
+        { status: 200, body: ['json', 'array'] },
+      ]),
+      retries: 0,
+      delay: () => Promise.resolve(),
+    });
+    await assert.rejects(() => broadcastClient.broadcastTx('ff'), (e: unknown) => e instanceof IndexerError && e.kind === 'http' && e.status === 400);
+    await assert.rejects(() => broadcastClient.broadcastTx('ff'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+    await assert.rejects(() => broadcastClient.broadcastTx('ff'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+    await assert.rejects(() => broadcastClient.broadcastTx('nothex'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+  }
+
   console.log('btcChainService: ok');
 }
 

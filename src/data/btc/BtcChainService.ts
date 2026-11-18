@@ -157,14 +157,39 @@ export class BtcChainService {
     return out;
   }
 
+  /** POST tx (F13): broadcast a signed raw transaction, hex body without
+   *  0x per the Esplora contract; the backend answers the txid as plain
+   *  text. A non-64-hex answer is a parse error, never a silent success. */
+  async broadcastTx(signedTxHex: string): Promise<string> {
+    if (!/^[0-9a-f]+$/i.test(signedTxHex) || signedTxHex.length === 0 || signedTxHex.length % 2 !== 0) {
+      throw new TransportError('parse', '/tx', undefined);
+    }
+    const raw = await this.request('/tx', {
+      method: 'POST',
+      body: signedTxHex,
+      contentType: 'text/plain',
+      expect: 'text',
+    });
+    const txid = typeof raw === 'string' ? raw.trim() : '';
+    if (!/^[0-9a-f]{64}$/.test(txid)) throw new TransportError('parse', '/tx', undefined);
+    return txid;
+  }
+
   /** One request with timeout, typed errors and 429/5xx retry with backoff;
    *  the shared transport owns the loop (no Retry-After hook: this backend
    *  does not honor the header). */
-  private async request(path: string, query?: Record<string, string>): Promise<unknown> {
+  private async request(
+    path: string,
+    options?: { query?: Record<string, string>; method?: 'POST'; body?: string; contentType?: string; expect?: 'json' | 'text' },
+  ): Promise<unknown> {
     return requestJson({
       base: this.base,
       path,
-      query,
+      query: options?.query,
+      method: options?.method,
+      body: options?.body,
+      contentType: options?.contentType,
+      expect: options?.expect,
       timeoutMs: this.timeoutMs,
       retries: this.retries,
       fetchImpl: this.fetchImpl,
