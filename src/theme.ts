@@ -52,6 +52,10 @@ export const C = {
   bnb: oklch(0.85, 0.15, 90),
   cream: '#f5e6cf',
   ink: '#0b0a09',
+  // Readable foreground on amber and cream fills (primary buttons, the
+  // backup CTA); the bridge flow dot on the dark tunnel graphic.
+  onAmber: '#1a1208',
+  ice: '#dbe9ff',
 };
 
 /** A palette key: the `tone`/colour name strings fixtures pass around. */

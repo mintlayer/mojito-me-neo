@@ -14,9 +14,26 @@ export type Portfolio = { total: string; change: number; delta: string; spark: n
 export type AssetRow = {
   sym: string; name: string; chain: ChainName;
   amt: number; price: number; change: number; value: number; spark: number[];
+  /** True when the backend for this chain is unconfigured: the amount and
+   *  value are unknown, not zero. The row renders an explicit unavailable
+   *  state and contributes nothing to the total. */
+  unavailable?: boolean;
 };
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };
+
+/** NFT gallery row (Home NFTs tab, real mode via NftService; mock mode ships
+ *  an empty gallery until an account holds NFTs). */
+export type NftRow = {
+  id: string;
+  name: string | null;
+  ticker: string | null;
+  owner: string | null;
+  mediaUri: string | null;
+  iconUri: string | null;
+  /** True when the metadata lookup failed; drives the metadataMissing copy. */
+  metadataMissing: boolean;
+};
 
 // DEX market
 export type MarketSummary = {
@@ -100,12 +117,14 @@ export interface BridgeProvider {
 }
 
 export interface WalletData {
-  // portfolio and home
-  getPortfolio(): Promise<Portfolio>;
-  getAssets(): Promise<AssetRow[]>;
+  // portfolio and home. The force flag bypasses the real-mode home bundle
+  // cache: pull-to-refresh must not resolve on seconds-old data.
+  getPortfolio(opts?: { force?: boolean }): Promise<Portfolio>;
+  getAssets(opts?: { force?: boolean }): Promise<AssetRow[]>;
   getAssetSymbols(): Promise<string[]>;
   getAssetBalances(): Promise<Record<string, string>>;
   getActivity(limit: number): Promise<ActivityRow[]>;
+  getNfts(opts?: { force?: boolean }): Promise<NftRow[]>;
   getNetworks(): Promise<ChainName[]>;
   getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;
@@ -141,4 +160,7 @@ export interface Providers {
   waitlist: WaitlistProvider;
   bridge: BridgeProvider;
   mode: ProviderMode;
+  /** True while USD figures come from the mock price provider (R1): the UI
+   *  labels them as indicative mock data instead of presenting real prices. */
+  pricesAreMock: boolean;
 }

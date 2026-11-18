@@ -2,26 +2,27 @@ import React, { useEffect, useState } from 'react';
 import type { Sheet } from './types';
 import Constants from 'expo-constants';
 import { Alert, Linking, Pressable, View } from 'react-native';
-import { t, type I18nKey } from '../i18n';
+import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
 import { detectBio } from '../onboarding/ui/useBioScan';
 import { C, G } from '../theme';
-import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
+import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint } from '../ui';
 
-export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount }: Sheet) {
+export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount, network, onNetworkChange }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
-  const dapps = useData((d) => d.getDapps());
   // Security toggles are persisted (storage/appSettings); the other flags
-  // stay local until their features ship.
+  // stay local until their features ship. The network switch is app-level
+  // (ProvidersProvider rebuilds on change), not a local flag.
   const [security, setSecurity] = useState({ biometric: true, autoLock: true });
-  const [flags, setFlags] = useState({ testnet: false, notifs: true, hideBal: false });
-  const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
-  const [appearance, setAppearance] = useState<AppearanceId>('dark');
+  const [flags, setFlags] = useState({ notifs: true, hideBal: false });
   const [dex, setDex] = useState<DexId>('mintlayer');
-  const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
+  // Currency and Appearance have no backend in M2: their rows render the
+  // USD/dark defaults as coming-soon status instead of opening silent no-op
+  // pickers.
+  const [sheet, setSheet] = useState<'dex' | null>(null);
   /** Which security control is waiting for its disable step-up. */
   const [confirm, setConfirm] = useState<'biometric' | 'autoLock' | null>(null);
   /** Device biometric capability; null until the probe lands. The enable
@@ -107,7 +108,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       ],
     );
 
-  if (!profile || !networks || !dapps) return <Screen />;
+  if (!profile || !networks) return <Screen />;
 
   // Displayed biometrics state folds in the capability probe: a persisted
   // true on hardware without biometrics reads as off (the unlock flow treats
@@ -128,9 +129,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
               {profile.address} · {profile.chains} chains
             </Txt>
           </View>
-          <Pressable className="px-2.5 py-1.5 rounded-lg" style={tile(0.05, C.line)}>
-            <Txt className="text-[11px] font-medium text-text1">{t('settings.edit')}</Txt>
-          </Pressable>
+          {/* Profile editing has no backend in M2: the dead-end Edit control
+              stays hidden until it does something. */}
         </Card>
       </View>
 
@@ -147,14 +147,16 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         </ListRow>
         <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub', { count: wordCount ?? 24 })} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
-        <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub', { count: dapps.active })} trailing="→" divider />
+        {/* dApp sessions have no backend in M2: the dead-end row stays hidden
+            until real sessions exist. */}
         {confirm && (
           <Card variant="inset" accent={C.amber} className="mt-2.5 p-4 rounded-[16px]">
             <Txt className="text-[14px] font-semibold">{t('settings.security.confirmTitle')}</Txt>
             <Txt className="text-[12px] text-text2 mt-1 leading-[17px]">
-              {t('settings.security.confirmBody', {
-                feature: t(confirm === 'autoLock' ? 'settings.security.autolock' : 'settings.security.biometrics'),
-              })}
+              {t(
+                confirm === 'autoLock' ? 'settings.security.confirmBodyLock' : 'settings.security.confirmBody',
+                { feature: t(confirm === 'autoLock' ? 'settings.security.autolock' : 'settings.security.biometrics') },
+              )}
             </Txt>
             <View className="items-center mt-5">
               <PinDots value={confirmLock.val} error={confirmLock.err} />
@@ -183,9 +185,32 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </Section>
 
       <Section title={t('settings.section.networks')}>
-        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} trailing="→" />
-        <ListRow icon="flash" iconColor={C.amber} label={t('settings.network.testnet')} sub={t('settings.network.testnetSub')} divider>
-          <Toggle on={flags.testnet} onChange={set('testnet')} />
+        {/* A status row, not a button: network management beyond the testnet
+            switch does not exist yet, and the sub must not overclaim a
+            custom-RPC editor. */}
+        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} divider />
+        <ListRow
+          icon="flash"
+          iconColor={C.amber}
+          label={t('settings.network.mode')}
+          sub={t(network === 'testnet' ? 'settings.network.testnet' : 'settings.network.mainnet')}
+          divider
+        >
+          <Toggle
+            on={network === 'testnet'}
+            onChange={(v) => {
+              // The switch rebuilds the providers (cache wipe) after an
+              // explicit confirm; the copy names the pending testnet base.
+              Alert.alert(
+                t(v ? 'settings.network.testnet' : 'settings.network.mainnet'),
+                t('settings.network.switchWarn'),
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  { text: t('common.continue'), onPress: () => onNetworkChange?.(v) },
+                ],
+              );
+            }}
+          />
         </ListRow>
         <ListRow icon="chart" iconColor={C.teal} label={t('settings.dex')} sub={t(dex === 'mintlayer' ? 'settings.dexes.mintlayer' : 'settings.dexes.auto')} trailing="→" divider onPress={() => setSheet('dex')} />
       </Section>
@@ -197,14 +222,17 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         <ListRow icon="bell" iconColor={C.amber} label={t('settings.notifications')} sub={t('settings.notificationsSub')} divider>
           <Toggle on={flags.notifs} onChange={set('notifs')} />
         </ListRow>
-        <ListRow icon="settings" label={t('settings.currency')} sub={currency} trailing="→" divider onPress={() => setSheet('currency')} />
+        <ListRow
+          icon="settings"
+          label={t('settings.currency')}
+          sub={`USD · ${t('settings.comingSoon')}`}
+          divider
+        />
         <ListRow
           icon="settings"
           label={t('settings.appearance')}
-          sub={t(APPEARANCE_LABEL_KEYS[appearance])}
-          trailing="→"
+          sub={`${t('settings.appearance.dark')} · ${t('settings.comingSoon')}`}
           divider
-          onPress={() => setSheet('appearance')}
         />
       </Section>
 
@@ -230,23 +258,6 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </Txt>
 
       <PickerSheet
-        open={sheet === 'currency'}
-        onClose={() => setSheet(null)}
-        title={t('settings.currency')}
-        options={CURRENCIES}
-        value={currency}
-        onSelect={setCurrency}
-      />
-      <PickerSheet
-        open={sheet === 'appearance'}
-        onClose={() => setSheet(null)}
-        title={t('settings.appearance')}
-        options={APPEARANCES}
-        value={appearance}
-        onSelect={setAppearance}
-        labels={{ dark: t('settings.appearance.dark'), light: t('settings.appearance.light'), system: t('settings.appearance.system') }}
-      />
-      <PickerSheet
         open={sheet === 'dex'}
         onClose={() => setSheet(null)}
         title={t('settings.dex')}
@@ -259,17 +270,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   );
 }
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'BTC'] as const;
-
-// Selectable values stay internal ids; the display copy comes from i18n.
-type AppearanceId = 'dark' | 'light' | 'system';
-const APPEARANCES: readonly AppearanceId[] = ['dark', 'light', 'system'];
-
-const APPEARANCE_LABEL_KEYS: Record<AppearanceId, I18nKey> = {
-  dark: 'settings.appearance.dark',
-  light: 'settings.appearance.light',
-  system: 'settings.appearance.system',
-};
+// Display preferences are the USD/dark defaults in M2; the pickers return
+// with their backends.
 
 type DexId = 'mintlayer' | 'auto';
 const DEXES: readonly DexId[] = ['mintlayer', 'auto'];

@@ -4,10 +4,10 @@
 // broadcast stays null until the R3 decision lands (action item A1), the
 // testnet base is pending action item A2 (R6), btcBase needs a btc-api
 // deployment URL (F13), priceBase stays null because v1 mocks prices (R1).
-// M0 status: only FLAGS has consumers. The read side (endpointsFor,
-// setNetwork, currentNetwork) is an M1+ seam reserved for the real
-// providers; its single M0 consumer is the bridge fixture echoing
-// endpointsFor().bridgeBase (src/data/mock/fixtures.ts).
+// M2 status: the read side has live consumers: endpointsFor and
+// currentNetwork drive the data providers (src/data/providers/index.ts) and
+// setNetwork backs the persisted Settings network switch; FLAGS remains the
+// feature-gate surface.
 
 export type NetworkFlag = 'mainnet' | 'testnet';
 

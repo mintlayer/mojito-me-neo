@@ -23,8 +23,8 @@
 // never returns to JS; the sealed blob is persisted by the blobStore seam.
 // Meta rides inside the sealed payload: meta() decrypts metadata only and
 // never hands out phrase bytes; openWords is the single decryption path. Its
-// M1 callers are the backup reveal and the unlock gating upgrade; the
-// KeySession consumer arrives in M2 (decisions.md D10).
+// callers are the backup reveal, the unlock gating upgrade and the real
+// providers' xpub derivation through openKeySession (decisions.md D10).
 import type { MlNetwork, SealedBlob } from '../../modules/mojito-core';
 import { getSecureStore } from './secureStore';
 import type { SecureStore } from './secureStore';

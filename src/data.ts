@@ -26,8 +26,6 @@ export const ASSETS: AssetRow[] = [
   { sym: 'BTC', name: 'Bitcoin', chain: 'Bitcoin', amt: 0.4821, price: 96420.32, change: 2.18, value: 46485.57, spark: [100, 102, 99, 105, 108, 106, 112, 110, 115] },
   { sym: 'ML', name: 'Mintlayer', chain: 'Mintlayer', amt: 12480.5, price: 0.342, change: 8.42, value: 4268.33, spark: [80, 82, 78, 85, 90, 95, 92, 98, 105] },
   { sym: 'USDT', name: 'Tether (ML)', chain: 'Mintlayer', amt: 1240.0, price: 1.0, change: 0.01, value: 1240.0, spark: [100, 100, 100, 100, 100, 100, 100, 100, 100] },
-  { sym: 'ETH', name: 'Ethereum', chain: 'Ethereum', amt: 1.847, price: 3284.1, change: -1.24, value: 6065.74, spark: [100, 105, 102, 98, 95, 96, 92, 94, 90] },
-  { sym: 'USDC', name: 'USD Coin', chain: 'Arbitrum', amt: 820.4, price: 1.0, change: 0.0, value: 820.4, spark: [100, 100, 100, 100, 100, 100, 100, 100, 100] },
 ];
 
 /** Picker subtitles. Declared once so the format can't drift per screen. */
@@ -35,7 +33,10 @@ export const ASSET_BALANCES = Object.fromEntries(ASSETS.map((a) => [a.sym, `${a.
 
 export const ASSET_SYMBOLS = ASSETS.map((a) => a.sym);
 
-export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer', 'Ethereum', 'Arbitrum', 'Polygon'];
+// EVM demo chains (Ethereum, Arbitrum, Polygon, BNB) were removed in M2 per
+// the M2 spec: no wallet backend exists for them. The bridge fixtures keep
+// their R5 pair until M4 wires bridge_v2 wholesale.
+export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer'];
 
 export const ACTIVITY: ActivityRow[] = [
   { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
@@ -158,17 +159,11 @@ export const CONTACTS = [
 export const ADDRESSES = {
   Mintlayer: 'mtc1qkv9d8t4xu2nx5pqxe2u3a8mw0g7e0a4ftpqlsm',
   Bitcoin: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-  Ethereum: '0x9c3FA84B0EE2F71a0c1d8B6F421Bd9aE3c4D8aFF',
-  Arbitrum: '0x9c3FA84B0EE2F71a0c1d8B6F421Bd9aE3c4D8aFF',
-  Polygon: '0x9c3FA84B0EE2F71a0c1d8B6F421Bd9aE3c4D8aFF',
 } satisfies Partial<Record<ChainName, string>>;
 
 export const CHAIN_GLYPH = {
   Bitcoin: '₿',
   Mintlayer: 'Ⓜ',
-  Ethereum: 'Ξ',
-  Arbitrum: 'Ξ',
-  Polygon: 'Ξ',
 } satisfies Partial<Record<ChainName, string>>;
 
 // Onboarding fixtures live in src/onboarding/data.ts; see that file for the

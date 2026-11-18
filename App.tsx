@@ -8,14 +8,15 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import './global.css';
 
 import { t } from './src/i18n';
-import { ProvidersProvider } from './src/data/providers/context';
+import { ProvidersProvider, useProviders } from './src/data/providers/context';
+import { type NetworkFlag } from './src/config/endpoints';
+import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { VaultKeyInvalidatedError } from './modules/mojito-core';
 import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/storage/walletVault';
 import { pinStore } from './src/storage/pinStore';
-import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
-import { AppBackground, Icon, IconName, Txt } from './src/ui';
+import { AppBackground, Chip, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, type OnboardingResult, UnlockScreen } from './src/onboarding';
 import type { Bio } from './src/onboarding/ui';
 import { Splash } from './src/screens/intro';
@@ -57,6 +58,18 @@ const OVERLAYS: Record<Exclude<Overlay, null>, React.ComponentType<Sheet>> = {
 };
 
 export default function App() {
+  // Active network (M2): persisted app setting, applied by ProvidersProvider.
+  // Loaded async after mount; the splash covers the one-shot rebuild.
+  const [testnet, setTestnet] = useState(false);
+  useEffect(() => {
+    void loadAppSettings()
+      .then((s) => setTestnet(s.testnet))
+      .catch(() => undefined);
+  }, []);
+  const switchNetwork = (next: boolean) => {
+    setTestnet(next);
+    void saveAppSettings({ testnet: next }).catch(() => undefined);
+  };
   // Expo Go lacks the local native module; only dev builds launch the app.
   if (Constants.appOwnership === 'expo') {
     return (
@@ -67,9 +80,9 @@ export default function App() {
   }
   return (
     <SafeAreaProvider>
-      <ProvidersProvider>
+      <ProvidersProvider network={testnet ? 'testnet' : 'mainnet'}>
         <StatusBar style="light" />
-        <Shell />
+        <Shell network={testnet ? 'testnet' : 'mainnet'} onNetworkChange={switchNetwork} />
       </ProvidersProvider>
     </SafeAreaProvider>
   );
@@ -103,7 +116,9 @@ type AppSession = {
   settings: { biometrics: boolean; autoLock: boolean; testnet: boolean };
 };
 
-function Shell() {
+function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkChange: (testnet: boolean) => void }) {
+  const { mode, pricesAreMock } = useProviders();
+  const insets = useSafeAreaInsets();
   const [splashDone, setSplashDone] = useState(false);
   /** Whether the vault-existence check finished; drives onboarding vs lock. */
   const [ready, setReady] = useState(false);
@@ -130,7 +145,7 @@ function Shell() {
         if (await walletVault.exists()) {
           const [detected, saved] = await Promise.all([
             detectBio(),
-            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true })),
+            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true, backupVerified: false })),
           ]);
           // Self-heal a persisted biometrics choice on hardware that cannot
           // honor it: gating the vault key here would seal the wallet behind
@@ -153,7 +168,10 @@ function Shell() {
           const wantBio = (saved.biometrics ?? bioUsable) && bioUsable;
           setSession({
             vault: null,
-            deferred: false,
+            // The persisted backup-verified flag seeds the deferred gate: a
+            // wallet that skipped (or never finished) backup re-locks
+            // Receive on every cold start instead of forgetting the gate.
+            deferred: saved.backupVerified !== true,
             bio: detected ?? 'face',
             bioChoice,
             settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
@@ -172,7 +190,9 @@ function Shell() {
         const keyGated = await walletVault.keyGated().catch(() => false);
         setSession({
           vault: null,
-          deferred: false,
+          // Backup state is unreadable here: keep Receive gated until the
+          // flag says otherwise.
+          deferred: true,
           bio: detected ?? 'face',
           bioChoice: keyGated,
           settings: { biometrics: detected !== null, autoLock: true, testnet: false },
@@ -272,8 +292,10 @@ function Shell() {
   const finishOnboarding = (r: OnboardingResult) => {
     void (async () => {
       // Persist the Secure-screen choice so cold start respects "Use PIN
-      // instead"; a failure must not block an otherwise complete onboarding.
-      await saveAppSettings({ biometrics: r.biometrics }).catch(() => undefined);
+      // instead", and persist the backup outcome so the deferred gate
+      // survives a relaunch; a failure must not block an otherwise complete
+      // onboarding.
+      await saveAppSettings({ biometrics: r.biometrics, backupVerified: !r.deferred }).catch(() => undefined);
       const meta = await walletVault.meta().catch(() => null);
       setSession({
         vault: meta ? { meta } : null,
@@ -334,7 +356,10 @@ function Shell() {
     <View className="flex-1" style={{ backgroundColor: C.bg0 }}>
       <AppBackground />
 
-      {session && (
+      {/* Mounted only while unlocked: every screen data load (and the polling
+          it drives) runs behind the unlock gate, so a locked wallet never
+          opens the key session or sends derived addresses to a backend. */}
+      {session && !locked && (
         <>
           <Active
             onOpenSend={() => setOverlay('send')}
@@ -344,6 +369,7 @@ function Shell() {
             deferred={session.deferred}
             onBackUp={revealBackup}
             onLock={() => setLocked(true)}
+            active={!locked}
           />
 
           {Sheet && (
@@ -352,6 +378,8 @@ function Shell() {
                 onClose={() => setOverlay(null)}
                 bio={session.bio}
                 wordCount={session.vault?.meta.wordCount}
+                network={network}
+                onNetworkChange={onNetworkChange}
                 onBackup={() => {
                   setOverlay(null);
                   revealBackup();
@@ -373,6 +401,18 @@ function Shell() {
           )}
 
           {!overlay && <TabBar tab={tab} onChange={setTab} />}
+
+          {/* Persistent demo marker: mock mode serves fixture everything,
+              real mode still carries mock prices per R1. Shell-level so
+              every fixture-backed tab carries the same honest note. */}
+          {(mode === 'mock' || pricesAreMock) && (
+            <View
+              pointerEvents="none"
+              className="absolute left-0 right-0 items-center"
+              style={{ bottom: Math.max(insets.bottom, 12) + 8 + 64 + 10, zIndex: 31 }}>
+              <Chip dot={false}>{t(mode === 'mock' ? 'home.demoData' : 'home.demoPrices')}</Chip>
+            </View>
+          )}
         </>
       )}
 
@@ -395,6 +435,9 @@ function Shell() {
             onEraseWallet={confirmSignOut}
             onDone={(r) => {
               setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
+              // Re-verify clears the gate for good; skipping again re-arms
+              // it for the next cold start.
+              void saveAppSettings({ backupVerified: !r.deferred }).catch(() => undefined);
               setBackup(false);
             }}
           />

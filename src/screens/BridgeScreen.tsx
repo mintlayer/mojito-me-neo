@@ -114,7 +114,7 @@ export function BridgeScreen() {
             {[0, 500, 1000, 1500].map((d) => (
               <View key={d} className="absolute left-2.5 right-2.5 h-2 top-[26px]" pointerEvents="none">
                 <FlowX track={280} duration={2600} delay={d}>
-                  <View className="w-2 h-2 rounded-full" style={{ backgroundColor: '#dbe9ff' }} />
+                  <View className="w-2 h-2 rounded-full" style={{ backgroundColor: C.ice }} />
                 </FlowX>
               </View>
             ))}

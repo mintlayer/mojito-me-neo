@@ -10,7 +10,7 @@ import { gradColors } from './style';
 type BtnTone = 'primary' | 'teal' | 'violet' | 'green' | 'red' | 'default' | 'ghost';
 
 const BTN_TONES: Record<BtnTone, { grad?: readonly string[]; fg: string; border?: string }> = {
-  primary: { grad: GR.amber, fg: '#1a1208' },
+  primary: { grad: GR.amber, fg: C.onAmber },
   teal: { grad: GR.teal, fg: '#06181c' },
   violet: { grad: GR.violet, fg: '#150622' },
   green: { grad: GR.green, fg: '#06210e' },

@@ -6,6 +6,12 @@ export function usd(amount: string | number, price: number): string {
   return (Number.isFinite(value) ? value : 0).toFixed(2);
 }
 
+/** Middle-truncate a long identifier for display: first 10 chars, ellipsis,
+ *  last 6, ids up to 18 chars kept whole. Address rows and profile chips. */
+export function truncateMiddle(id: string, head = 10, tail = 6): string {
+  return id.length <= head + tail + 2 ? id : `${id.slice(0, head)}…${id.slice(-tail)}`;
+}
+
 /** Quantize a float product into a display amount string. Percent-picked
  *  balances (balance * fraction) carry binary float tails; clamp negatives
  *  and non-finite values to zero, round to the asset's decimals (8 for

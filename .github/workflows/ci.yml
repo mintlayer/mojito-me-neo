@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly: keeps the check gate warm and runs the live api-smoke below.
+    - cron: "37 4 * * *"
 
 jobs:
   check:
@@ -23,6 +26,12 @@ jobs:
       # + the dash scan: the same command contributors are asked to run
       # locally, so CI can't disagree with the README.
       - run: npm run check
+
+      # Nightly only: read-only live endpoint smoke over the public indexer
+      # and documented fallbacks; the earliest alarm for contract drift.
+      - name: Nightly api smoke
+        if: github.event_name == 'schedule'
+        run: node scripts/api-smoke.mjs
 
       # Vendored bindings provenance: re-hash the artifacts on disk against
       # vendor/mintlayer/CHECKSUMS.txt (records the upstream SHA256SUMS

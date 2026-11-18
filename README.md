@@ -11,23 +11,32 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · M1 (keys)
+## ⚠️ Project status · M2 (chain data)
 
-**This repository is the keys milestone: real key management under the M0 UI. It is not yet a working wallet.**
+**This repository is the chain-data milestone: real key management plus live mainnet balances, activity and NFTs under the shell UI. Sending is not here yet, so it is still not a full wallet.**
 
 Real since M1, with vector-backed tests:
 
 - **Recovery phrase**: full BIP39 over the complete 2048-word English list. Generation from device secure random (optionally mixed with the drawn-entropy screen, which genuinely feeds the phrase), import validation with checksum, PBKDF2-HMAC-SHA512 seeding.
 - **Vault**: the phrase is sealed with AES-256-GCM under a Keychain (iOS) or Keystore (Android) resident key before onboarding completes; the wallet survives kill and relaunch. The key is **user-authentication gated only when you chose biometrics on the Secure screen** (the persisted choice, never hardware detection): every seal and open then runs the OS biometric prompt inside the native module, and enrolling a new biometric invalidates the key. Enabling biometrics later re-seals the vault under a gated key at the next unlock.
 - **PIN and lock**: persisted PBKDF2 verifier with an escalating lockout that survives restart; real `LocalAuthentication` biometric prompts (biometry-only for the wallet lock, in-app PIN always works); auto-lock on background; the recovery-phrase reveal sits behind a re-auth step-up.
-- **Derivation**: Mintlayer account 0 (`m/44'/<coin type>'/0'`) and BTC BIP84 account (`m/84'/<coin>'/0'`) in pure TypeScript, byte-pinned to the bindings' published parity vectors and the BIP84 test vectors. Discovery derives real addresses (balance probing is still a fixture seam).
+- **Derivation**: Mintlayer account 0 (`m/44'/<coin type>'/0'`) and BTC BIP84 account (`m/84'/<coin>'/0'`) in pure TypeScript, byte-pinned to the bindings' published parity vectors and the BIP84 test vectors. Discovery derives real addresses and probes real usage.
 
-Still deferred, deliberately:
+Real in M2, on mainnet:
 
+- **Chain data**: balances, MLS-01 token balances, NFT metadata and transaction history come from the public Mintlayer indexer; BTC balances and history come from the configured btc-api base under its Esplora shape. Portfolio and BTC totals sum every derived address on BigInt atom strings; USD figures still use mock prices per R1.
+- **Fresh addresses**: a sequential gap scan (BIP44 gap limit) finds used addresses at launch, persists the next index per chain and network, and the receive screen always shows the first unused address with a scannable QR encoding it.
+- **Polling**: the home surfaces refresh on a 60 second cycle with failure backoff, pause in background and refresh once on foreground; real-mode data loads run only behind an unlocked session.
+
+Still fixture-backed or deferred, deliberately:
+
+- **Prices** are the mock provider in both modes (R1): every USD figure is indicative, and the home screen says so with the demo-data chip.
+- **Sending** lands in M3 (the broadcast base stays null until action item A1 resolves).
+- **BTC device verification** is pending: balances come from the configured btc-api deployment, and an end-to-end check against a funded device has not run yet.
+- **Testnet** ships typed-offline: no Mintlayer-operated testnet indexer URL is documented (action item A2), so nothing points at a guess.
 - The **vendored bindings call-through** (transaction assembly, signing, native encoders) still rejects; the artifacts are vendored and linked, the facades are real code that compiles on EAS, and the TS key paths above do not depend on the call-through. See the Storage section and `vendor/mintlayer/`.
-- Chain connectivity, balances, history, prices: fixtures from `src/data.ts` behind the provider layer. Sending lands in M3.
 
-Do not point this at real funds. Do not treat any screen here as a security control until the corresponding logic is implemented and audited.
+Do not point this at real funds you cannot afford to lose, and do not treat any screen here as a security control until the corresponding logic is implemented and audited.
 
 ---
 
@@ -52,14 +61,14 @@ Do not point this at real funds. Do not treat any screen here as a security cont
 - **react-native-svg** for icons, charts and the entropy canvas
 - **TypeScript**, strict mode
 - No navigation library: screen switching is plain state in `App.tsx`
-- Screens read fixture data through the provider layer (`src/data/providers`), never `src/data.ts` directly
+- Screens read data through the provider layer (`src/data/providers`); the mode switch picks the fixture source or the real chain clients, never `src/data.ts` directly
 
 ### Layout
 
 ```
 App.tsx                     root shell: tabs, overlays, onboarding/lock layering
 src/theme.ts                design tokens; oklch→sRGB (feeds tailwind.config.ts too)
-src/data.ts                 wallet fixtures (providers mock from here; M1 slimmed it)
+src/data.ts                 wallet fixtures (mock provider source)
 src/config/endpoints.ts     per-network endpoint sets and feature flags
 
 src/ui/                     shared component library · one file per component
@@ -78,6 +87,15 @@ src/keys/                   the M1 key stack, pure TypeScript and vector-tested
   customPath.ts             generic m/… account-path parse for the discovery scan
   session.ts                KeySession: short-lived vault handle (M2 consumers, see plans/)
 
+src/data/                   the M2 chain data layer, service by service
+  ml/                       typed indexer client, BalanceService, NftService
+  btc/                      Esplora-shaped BTC chain client (balances, txs, fees)
+  addresses/                AddressManager: gap scan, persisted per-network indexes
+  activity/                 unified ML and BTC activity rows, relative times
+  real/                     real-mode WalletData over the services (home bundle)
+  polling.ts                PollCycle: intervals, backoff, background pause, usePoll
+  errors.ts                 typed error copy mapping for the screens
+
 src/screens/                one screen per file
   HomeScreen.tsx  DexScreen.tsx  SwapScreen.tsx  BridgeScreen.tsx
   CardScreen.tsx  SendScreen.tsx  ReceiveScreen.tsx  SettingsScreen.tsx
@@ -95,13 +113,14 @@ src/onboarding/
 src/i18n/                   t() plus the en dictionary; a completeness test gates
   strings/en.ts             every user-visible string (no literals in screens)
 
-src/data/providers/         provider interfaces, mock implementations, mode switch
+src/data/providers/         provider interfaces, mock mode, real/mock mode switch
 src/storage/                the persistence seam
   secureStore.ts            seal/open/wipe over the native crypto (test double in dev/node)
   blobStore.ts              persists sealed blobs across restarts (AsyncStorage)
   walletVault.ts            the sealed recovery phrase over the seed.v1 / seed.v2 slots
   pinStore.ts               PBKDF2 PIN verifier with persisted lockout (pin.meta.v1)
   appSettings.ts            plain security toggles (biometrics, auto-lock)
+  addressStore.ts           persisted derivation indexes per network and chain
 
 modules/mojito-core/        Expo native module: AES-256-GCM seal/open, secure
   index.ts                  random, auth-gated keys; bindings call-throughs pending
@@ -110,9 +129,10 @@ modules/mojito-core/        Expo native module: AES-256-GCM seal/open, secure
 vendor/mintlayer/           vendored wallet-bindings v0.1.0 artifacts
   CHECKSUMS.txt             upstream SHA256SUMS provenance, verified in CI
 
+scripts/api-smoke.mjs       read-only live endpoint smoke run (manually or nightly)
 scripts/no-em-dash.ts       dash gate (no em or en dashes in code or specs;
                             vendored artifacts excluded: checksum-pinned)
-scripts/no-console.ts       secret-logging gate (keys, storage, onboarding, module)
+scripts/no-console.ts       secret-logging gate (keys, storage, data, onboarding, module)
 ```
 
 ---
@@ -202,32 +222,51 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs fourteen things:
+`npm run check` runs twenty-three things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
    runnable check. Plain `node:assert`, no framework.
 2. **`src/i18n/strings.test.ts`**: i18n completeness. Every `t()` key referenced in source must
    exist in `en.ts`, no orphaned keys, and `{var}` interpolation must work.
-3. **`src/storage/secureStore.test.ts`**: memory SecureStore self-check (roundtrip, wrong key and
+3. **`src/money.test.ts`**: the atom and decimal string maths: conversions, rounding,
+   grouping and the USD forms, all on exact digit strings.
+4. **`src/data/polling.test.ts`**: poll intervals, failure backoff caps, pause/resume and
+   the refresh scheduler seams with injected timers.
+5. **`src/data/ml/indexerClient.test.ts`**: the typed Mintlayer indexer client: amount and
+   response parsing, typed transport/http/parse errors, retry with Retry-After, order book
+   pages and the fresh-address 404 mapping.
+6. **`src/data/btc/btcChainService.test.ts`**: the Esplora-shaped BTC client: balances,
+   UTXOs, transaction parsing, address stats and retries against scripted responses.
+7. **`src/data/addresses/addressManager.test.ts`**: gap scan bounds, fresh-address
+   monotonicity, persistence, the no-probe degradation and scan retry after a failure.
+8. **`src/storage/addressStore.test.ts`**: persisted derivation indexes: corrupt JSON drops
+   the state instead of wedging address calls, invalid entries drop on load.
+9. **`src/data/activity/activityService.test.ts`**: portfolio aggregation, ML/BTC activity
+   direction mapping, NFT identification and the 404 tolerances.
+10. **`src/data/real/realWalletData.test.ts`**: the real-mode home bundle over a scripted
+   fetch: BTC sums across derived addresses and tolerates the two-key Esplora balance body.
+11. **`src/storage/secureStore.test.ts`**: memory SecureStore self-check (roundtrip, wrong key and
    tamper rejection, wipe). The native path is exercised on dev builds.
-4. **`src/storage/walletVault.test.ts`**: seal, meta-only read, open and wipe of the phrase vault.
-5. **`src/storage/pinStore.test.ts`**: PIN set/verify, attempt bookkeeping, escalating lockout
+12. **`src/storage/walletVault.test.ts`**: seal, meta-only read, open and wipe of the phrase vault.
+13. **`src/storage/pinStore.test.ts`**: PIN set/verify, attempt bookkeeping, escalating lockout
    with persistence, unset-vs-wrong, wipe.
-6. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour.
-7. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+14. **`src/storage/appSettings.test.ts`**: the plain security toggles roundtrip.
+15. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour, plus
+   the real-mode construction seams.
+16. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
    NFKD normalization, wordlist integrity, supplied-entropy generation.
-8. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+17. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
    blobs, receiving blobs and addresses, plus the custom-path scan.
-9. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+18. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
    account paths.
-10. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
-    release semantics, xpub parity.
-11. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
-    modules (keys, storage, onboarding).
-12. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-13. **`tsc --noEmit`**: strict TypeScript.
-14. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+19. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+   release semantics, xpub parity.
+20. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+    modules (keys, storage, data, onboarding).
+21. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+22. **`tsc --noEmit`**: strict TypeScript.
+23. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
@@ -263,6 +302,20 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
    prompt for the vault key: the label reads "Verifying" while the gate runs, then the screen is
    back at "Tap to unlock" (never stuck on an unlocked claim), and a retryable unlock failure
    shows the "Unlock failed" alert.
+9. **Real QR scans to the correct address.** In real mode (`EXPO_PUBLIC_DATA_MODE=real`, mainnet,
+   unlocked), open Receive on each chain segment and scan the code with a phone camera: it must
+   decode to exactly the address string shown under the QR. Mock mode keeps the decorative grid,
+   which is not scannable by design.
+10. **BTC portfolio sums across used addresses.** With BTC held on a previously used address (so
+   the current receiving address is fresh), the home BTC row shows the combined confirmed plus
+   unconfirmed balance of every derived address, not zero.
+11. **Offline banner versus stale banner.** Cut connectivity on the home screen: the offline
+    banner shows and pull-to-refresh cannot clear it while the network is down. Restore the
+    network, wait for the next poll (or pull to refresh): the banner clears. With connectivity
+    up but no successful sync for over three minutes, the stale banner shows instead.
+12. **Lock screen shows no data prompts behind it.** With auto-lock on, background the app and
+    return: the unlock layer appears with no biometric prompt and no network data prompt firing
+    behind it, and portfolio or address requests only start after unlock.
 
 ---
 
@@ -326,9 +379,9 @@ import and verification steps.
 **The Mintlayer bug bounty does not apply to this repository yet.**
 
 Mojito ME is pre-production: the key stack is real and vector-tested, but the bindings
-call-through, chain connectivity and transaction sending are still pending (see
-[Project status](#️-project-status--m1-keys)). Findings against mock chain data or the not-yet-
-wired bindings facades are out of scope and not eligible for a reward.
+call-through, transaction sending and BTC device verification are still pending (see
+[Project status](#️-project-status--m2-chain-data)). Findings against mock chain data or the
+not-yet-wired bindings facades are out of scope and not eligible for a reward.
 
 The bounty becomes valid for this repository when it ships to production, at which point this
 section will be updated with the scope and terms. Reports are still welcome in the meantime:

@@ -1,4 +1,5 @@
 import type { Bio } from '../onboarding';
+import type { NetworkFlag } from '../config/endpoints';
 
 /** Props the overlay screens receive from App. Most sheets consume a subset. */
 export type Sheet = {
@@ -15,6 +16,10 @@ export type Sheet = {
   bio?: Bio;
   /** Recovery-phrase length from the vault meta (Settings only). */
   wordCount?: number;
+  /** Active network flag (Settings network switch). */
+  network?: NetworkFlag;
+  /** Persisted network switch; rebuilds the providers on change. */
+  onNetworkChange?: (testnet: boolean) => void;
 };
 
 /** Props the tab screens receive from App. Only Home consumes them all. */
@@ -28,4 +33,6 @@ export type Nav = {
   onBackUp?: () => void;
   /** Locks the app and shows the unlock screen. */
   onLock?: () => void;
+  /** False while the session is locked: data screens stop polling. */
+  active?: boolean;
 };

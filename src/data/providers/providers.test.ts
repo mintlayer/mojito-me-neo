@@ -1,9 +1,11 @@
-// Provider switch self-check: mock mode returns today's fixture shapes and
-// real mode refuses loudly (nothing silently pretends to work).
+// Provider switch self-check: mock mode returns today's fixture shapes;
+// real mode answers the fixture seams, and the service gates cover the
+// data calls themselves.
 //   npx tsx src/data/providers/providers.test.ts
 import { strict as assert } from 'node:assert/strict';
 
 import { createProviders, readDataMode } from './index';
+import { setNetwork } from '../../config/endpoints';
 import { BALANCE } from '../../data';
 
 async function main() {
@@ -30,6 +32,11 @@ async function main() {
   assert.equal(snapshots.length, 1);
   assert.equal(snapshots[0].tokenId, 'ML');
 
+  // Mock mode: an empty NFT gallery until real holdings exist, prices are
+  // mock per R1, and the demo-data chip stays honest.
+  assert.deepEqual(await providers.data.getNfts(), []);
+  assert.equal(providers.pricesAreMock, true);
+
   const history = await providers.price.getHistory('ML', '1D');
   assert.ok(history.length > 10);
   const candles = await providers.price.getCandles('ML/USDT', '1h');
@@ -54,8 +61,21 @@ async function main() {
   });
   assert.equal(await providers.bridge.status(handle), 'awaiting-deposit');
 
-  // real mode is gated until M2
-  assert.throws(() => createProviders('real'), /not-implemented/);
+  // Real mode constructs lazily (no network, no vault access until a data
+  // call), keeps the R1 mock price source and the fixture seams for later
+  // milestones; the data calls themselves are covered by the service gates.
+  const real = createProviders('real');
+  assert.equal(real.mode, 'real');
+  assert.equal(real.pricesAreMock, true);
+  // btcBase is unconfigured (F13), so Bitcoin is not listed as connected and
+  // only Mintlayer counts as an active network.
+  assert.deepEqual(await real.data.getNetworks(), ['Mintlayer']);
+  assert.equal((await real.data.getMarket('ML/USDT')).pair, 'ML/USDT');
+  // Unconfigured testnet base (action item A2): typed offline, no fetch.
+  setNetwork('testnet');
+  const offline = createProviders('real');
+  await assert.rejects(() => offline.data.getPortfolio(), /transport/);
+  setNetwork('mainnet');
 
   console.log('providers: ok');
 }
