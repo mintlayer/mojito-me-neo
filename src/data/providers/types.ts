@@ -83,12 +83,23 @@ export interface PriceProvider {
   getCandles(pair: string, interval: CandleInterval): Promise<Candle[]>;
 }
 
-// Broadcast (missing-architecture gap 3, R3: testnet-only mock in v1)
+// Broadcast (missing-architecture gap 3, R3: mock is the v1 demo path;
+// the real ML route stays config-gated behind broadcastBase, BTC rides the
+// configured btc-api POST tx which exists per F13)
 export type MlTxStatus = 'pending' | 'confirmed' | 'not-found';
+
+export type TxStatusInfo = {
+  state: MlTxStatus;
+  /** Mintlayer block id once confirmed; absent while pending. */
+  blockId?: string;
+  confirmations?: number;
+};
 
 export interface BroadcastProvider {
   broadcastMl(signedTxHex: string): Promise<{ txId: string }>;
-  getMlStatus(txId: string): Promise<MlTxStatus>;
+  broadcastBtc(signedTxHex: string): Promise<{ txId: string }>;
+  getMlStatus(txId: string): Promise<TxStatusInfo>;
+  getBtcStatus(txId: string): Promise<TxStatusInfo>;
 }
 
 // Waitlist (missing-architecture gap 4, R4: local-only in v1, real backend before ship)
