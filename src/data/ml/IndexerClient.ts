@@ -21,8 +21,8 @@ import {
   TransportError as IndexerError, type FetchLike,
 } from '../transport';
 import type {
-  AmountJson, CoinStats, MlAddressInfo, MlNftInfo, MlOutput, MlOutpoint, MlTokenInfo,
-  MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
+  AmountJson, CoinStats, MlAddressInfo, MlNftInfo, MlOrderCurrency, MlOrderInfo, MlOutput, MlOutpoint,
+  MlTokenInfo, MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
 } from './types';
 
 export { IndexerError };
@@ -55,6 +55,30 @@ export type WalkerCaps = { maxPages?: number; maxItems?: number };
 const DEFAULT_MAX_PAGES = 100;
 
 const DEFAULT_MAX_ITEMS = 50_000;
+
+/** Page size for the offset walkers (documented cap is 100). */
+const DEFAULT_PAGE_ITEMS = 100;
+
+function parseOrder(raw: unknown): MlOrderInfo {
+  const record = asRecord(raw);
+  const orderId = asString(record.order_id);
+  if (orderId === null) throw new IndexerError('parse', '/order', undefined);
+  const currency = (value: unknown): MlOrderCurrency => {
+    const side = asRecord(value);
+    return { type: asString(side.type) ?? 'Unknown', tokenId: asString(side.token_id) ?? undefined };
+  };
+  return {
+    orderId,
+    giveBalance: parseAmount(record.give_balance),
+    askBalance: parseAmount(record.ask_balance),
+    giveCurrency: currency(record.give_currency),
+    askCurrency: currency(record.ask_currency),
+    initiallyGiven: record.initially_given !== undefined && record.initially_given !== null ? parseAmount(record.initially_given) : null,
+    initiallyAsked: record.initially_asked !== undefined && record.initially_asked !== null ? parseAmount(record.initially_asked) : null,
+    concludeDestination: asString(record.conclude_destination) ?? '',
+    frozen: record.frozen === true,
+  };
+}
 
 /** Absorb every documented amount shape into the atoms/decimal pair.
  *  Numbers must be safe integers (Uint64 atom counts upstream); a 1e21
@@ -285,6 +309,20 @@ export class IndexerClient {
       if (tokenId === null) throw new IndexerError('parse', '/token/ticker', undefined);
       return tokenId;
     });
+  }
+
+  /** Every open order on the network (offset/items walk, F11). */
+  async orders(): Promise<MlOrderInfo[]> {
+    const out: MlOrderInfo[] = [];
+    await this.walkOffset('/order', undefined, DEFAULT_PAGE_ITEMS, async (items) => {
+      for (const entry of items) out.push(parseOrder(entry));
+    });
+    return out;
+  }
+
+  /** GET /order/{id}: one order, balances and currencies included. */
+  async order(id: string): Promise<MlOrderInfo> {
+    return parseOrder(await this.request(`/order/${encodeURIComponent(id)}`));
   }
 
   /** GET /nft/{id}; a 404 NFT not found (non-NFT id) resolves to null. */

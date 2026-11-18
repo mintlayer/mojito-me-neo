@@ -90,6 +90,25 @@ export type CoinStats = {
   burned: AmountJson;
 };
 
+/** One currency side of an order: the base coin or a token id (F11). */
+export type MlOrderCurrency = { type: 'Coin' | 'Token' | (string & {}); tokenId?: string };
+
+/** One entry of GET /order and GET /order/{id} (api-coverage.md). The
+ *  balances shrink as takers fill; initially_given/asked anchor the fill
+ *  progress; conclude_destination anchors the myOrders membership filter. */
+export type MlOrderInfo = {
+  orderId: string;
+  giveBalance: AmountJson;
+  askBalance: AmountJson;
+  giveCurrency: MlOrderCurrency;
+  askCurrency: MlOrderCurrency;
+  initiallyGiven: AmountJson | null;
+  initiallyAsked: AmountJson | null;
+  concludeDestination: string;
+  /** Frozen state field when the indexer serves it (maker freeze). */
+  frozen?: boolean;
+};
+
 /** One aggregated level of GET /order/pair/{BASE}_{QUOTE}/book. */
 export type OrderBookLevel = { price: AmountJson; amount: AmountJson };
 
