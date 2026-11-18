@@ -9,6 +9,7 @@ import { maskEmail } from '../waitlist/WaitlistForm';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
 import { detectBio } from '../onboarding/ui/useBioScan';
+import { devFallbackAllowed } from '../config/runtime';
 import { C, G } from '../theme';
 import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint } from '../ui';
 
@@ -240,6 +241,12 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
             switch does not exist yet, and the sub must not overclaim a
             custom-RPC editor. */}
         <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} divider />
+        {/* M6 release honesty (spec data section): the switch stays available
+            in development builds only. Production defaults to mainnet, and the
+            Mintlayer-operated testnet indexer is still pending (action item
+            A2, decision R6), so a release build shows the unavailable status
+            instead of a switch that can only reach a null endpoint set. */}
+        {devFallbackAllowed() ? (
         <ListRow
           icon="flash"
           iconColor={C.amber}
@@ -263,6 +270,15 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
             }}
           />
         </ListRow>
+        ) : (
+        <ListRow
+          icon="flash"
+          iconColor={C.amber}
+          label={t('settings.network.mode')}
+          sub={t('settings.network.unavailable')}
+          divider
+        />
+        )}
         <ListRow icon="chart" iconColor={C.teal} label={t('settings.dex')} sub={t(dex === 'mintlayer' ? 'settings.dexes.mintlayer' : 'settings.dexes.auto')} trailing="→" divider onPress={() => setSheet('dex')} />
       </Section>
 
