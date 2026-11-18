@@ -122,7 +122,10 @@ is either resolved by a later milestone or carried explicitly.
 
 Static scope in this environment (no device runs, no native builds);
 `scripts/perf.mjs` and `scripts/size-report.mjs` are in the `npm run check`
-gate and grade what they can grade honestly.
+gate and grade what they can grade honestly. CI measures the JS budget
+against the real export: the Bundle step writes `dist/` and a follow-up step
+runs the report, so a measured breach fails the pipeline instead of passing
+on an absent tree.
 
 ### Timing budgets (spec M6)
 

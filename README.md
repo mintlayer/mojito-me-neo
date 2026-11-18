@@ -377,7 +377,13 @@ npx tsx src/theme.test.ts
     budget status; device numbers stay a `docs/MANUAL-QA.md` deliverable.
 42. **`scripts/size-report.mjs`**: the static size inventory (app source, dependency
     trees, vendored artifacts) grading the JS-bundle budget only against a measured metro
-    export, never an estimate.
+    export (an export directory can be passed as an argument or `SIZE_REPORT_DIR`;
+    default `dist/`), never an estimate.
+
+CI measures the gate for real: the Bundle step exports the Android app to `dist/` and a
+follow-up step runs the size report against that export, so an over-budget bundle fails
+the pipeline. Locally, with no export present, the report says NOT MEASURED and stays
+non-failing.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most

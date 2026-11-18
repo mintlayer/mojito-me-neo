@@ -6,8 +6,8 @@
 // as a measurement. No device and no native build is involved here; the
 // installed-size checks are recorded from real build artifacts by hand in
 // docs/MANUAL-QA.md and docs/REVIEW-RUNBOOK.md.
-//   npx expo export --platform android   (machine step, produces dist/)
-//   node scripts/size-report.mjs
+//   npx expo export --platform android   (machine step, produces the export)
+//   node scripts/size-report.mjs [exportDir]   (default dist/, or $SIZE_REPORT_DIR)
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -76,14 +76,21 @@ function dirBytes(root) {
 
 const fmt = (n) => (n === null ? 'not present' : `${(n / MB).toFixed(2)} MB`);
 
+// Export directory: argv wins over the SIZE_REPORT_DIR env var over the
+// default dist/ (where `npx expo export` writes). CI points the gate at the
+// export it just produced; locally the default keeps the check honest when
+// no export exists yet.
+const exportDir = process.argv[2] ?? process.env.SIZE_REPORT_DIR ?? 'dist';
+
 // 1. Measured metro export (the only number evaluated against the JS budget).
-//    dist/ is gitignored: without an export the report says NOT MEASURED and
-//    stays informational; a present export that breaches the budget fails
-//    the gate (waivers live in docs/REVIEW-RUNBOOK.md, in writing).
-const distJs = dirBytes('dist/_expo/static/js');
-const distAssets = dirBytes('dist/assets');
+//    The export dir is gitignored: without an export the report says NOT
+//    MEASURED and stays informational; a present export that breaches the
+//    budget fails the gate (waivers live in docs/REVIEW-RUNBOOK.md, in
+//    writing).
+const distJs = dirBytes(join(exportDir, '_expo/static/js'));
+const distAssets = dirBytes(join(exportDir, 'assets'));
 if (distJs === null) {
-  console.warn('size-report: no dist/ export found; JS bundle NOT MEASURED (machine step: npx expo export --platform android)');
+  console.warn(`size-report: no export found in ${exportDir}; JS bundle NOT MEASURED (machine step: npx expo export --platform android)`);
 } else if (distJs >= JS_BUDGET) {
   fails.push(`measured JS bundle ${(distJs / MB).toFixed(2)} MB is over the 4 MB budget (spec M6); waive in writing in docs/REVIEW-RUNBOOK.md or trim`);
 }
@@ -113,7 +120,7 @@ const iosSim = dirBytes('vendor/mintlayer/MintlayerWalletBindings.xcframework/io
 
 console.log('size report (static inventory + measured export)');
 console.log('------------------------------------------------');
-console.log(`measured JS bundle (dist, Hermes): ${fmt(distJs)}  budget < 4 MB  ${distJs === null ? 'NOT MEASURED' : distJs < JS_BUDGET ? 'pass' : 'FAIL'}`);
+console.log(`measured JS bundle (${exportDir}, Hermes): ${fmt(distJs)}  budget < 4 MB  ${distJs === null ? 'NOT MEASURED' : distJs < JS_BUDGET ? 'pass' : 'FAIL'}`);
 console.log(`measured export assets:            ${fmt(distAssets)}`);
 console.log(`app source (src + modules):        ${fmt(appSource)}`);
 console.log(`runtime deps inventory:            ${fmt(depBytes)} (direct deps, unminified; not graded)`);
