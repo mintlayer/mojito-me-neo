@@ -133,10 +133,12 @@ export class BtcChainService {
     return btcArray(await this.request(`/address/${encodeURIComponent(address)}/${suffix}`, query)).map(parseTx);
   }
 
-  /** GET tx/:txid/status. */
-  async txStatus(txid: string): Promise<{ confirmed: boolean; blockTime: number | null }> {
+  /** GET tx/:txid/status. `blockHeight` is the Esplora block_height (1-based
+   *  position): the broadcast provider computes the confirmation count
+   *  against the chain tip from it. */
+  async txStatus(txid: string): Promise<{ confirmed: boolean; blockTime: number | null; blockHeight: number | null }> {
     const raw = btcRecord(await this.request(`/tx/${encodeURIComponent(txid)}/status`));
-    return { confirmed: raw.confirmed === true, blockTime: asNumberOrNull(raw.block_time) };
+    return { confirmed: raw.confirmed === true, blockTime: asNumberOrNull(raw.block_time), blockHeight: asNumberOrNull(raw.block_height) };
   }
 
   /** GET blocks/tip/height. */

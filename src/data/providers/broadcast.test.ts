@@ -169,9 +169,19 @@ async function main() {
     assert.equal(missing.state, 'not-found');
   }
 
-  // 7. BTC status rides txStatus.
+  // 7. BTC status rides txStatus; the confirmation count is computed
+  //    against the chain tip, and a tip failure keeps the count-less
+  //    confirmed answer (an unknown count must not render as zero).
   {
-    const { fetch } = scriptedFetch([{ status: 200, body: { confirmed: true, block_height: 100, block_time: 1700000000 } }]);
+    const { fetch } = scriptedFetch([
+      { status: 200, body: { confirmed: true, block_height: 100, block_time: 1700000000 } },
+      { status: 200, body: 103 },
+      { status: 200, body: { confirmed: true, block_height: 100, block_time: 1700000000 } },
+      { status: 500, body: {} },
+      { status: 500, body: {} },
+      { status: 500, body: {} },
+      { status: 200, body: { confirmed: false, block_time: null } },
+    ]);
     const provider = createBroadcastProvider({
       mode: 'real',
       broadcastBase: null,
@@ -180,7 +190,9 @@ async function main() {
       fetch,
       delay: () => Promise.resolve(),
     });
-    assert.deepEqual(await provider.getBtcStatus(TXID), { state: 'confirmed' });
+    assert.deepEqual(await provider.getBtcStatus(TXID), { state: 'confirmed', confirmations: 4 });
+    assert.deepEqual(await provider.getBtcStatus(TXID), { state: 'confirmed' }, 'tip failure: count-less confirmed');
+    assert.deepEqual(await provider.getBtcStatus(TXID), { state: 'pending' });
   }
 
   // 8. Plaintext base URL guard: a non-https remote base fails at creation.

@@ -119,7 +119,17 @@ export function createBroadcastProvider(cfg: BroadcastProviderConfig): Broadcast
   const getBtcStatus = async (txId: string): Promise<TxStatusInfo> => {
     if (btc === null) return { state: 'pending' as const };
     const status = await btc.txStatus(txId);
-    return status.confirmed ? { state: 'confirmed' as const } : { state: 'pending' as const };
+    if (!status.confirmed) return { state: 'pending' as const };
+    // Confirmation count against the chain tip (Esplora block_height is the
+    // 1-based inclusion height). A tip read failure keeps the count-less
+    // confirmed answer: an unknown count must not render as zero.
+    if (status.blockHeight === null) return { state: 'confirmed' as const };
+    try {
+      const confirmations = Math.max(1, (await btc.tipHeight()) - status.blockHeight + 1);
+      return { state: 'confirmed' as const, confirmations };
+    } catch {
+      return { state: 'confirmed' as const };
+    }
   };
 
   return { broadcastMl, broadcastBtc, getMlStatus, getBtcStatus };

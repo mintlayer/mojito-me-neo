@@ -72,7 +72,7 @@ async function main() {
         ],
       },
       { status: 200, body: { chain_stats: { funded_txo_sum: 100, spent_txo_sum: 40, tx_count: 3 }, mempool_stats: { funded_txo_sum: 0, spent_txo_sum: 0, tx_count: 0 } } },
-      { status: 200, body: { confirmed: false, block_time: null } },
+      { status: 200, body: { confirmed: true, block_height: 363366, block_time: 1435766771 } },
       { status: 429, body: {} },
       { status: 200, body: 941320 },
     ]),
@@ -100,7 +100,7 @@ async function main() {
   assert.equal(stats.chain.fundedSat, '100');
 
   const status = await client.txStatus('f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16');
-  assert.deepEqual(status, { confirmed: false, blockTime: null });
+  assert.deepEqual(status, { confirmed: true, blockTime: 1435766771, blockHeight: 363366 });
 
   // 429 retries with backoff, then the numeric tip height parses.
   assert.equal(await client.tipHeight(), 941320);

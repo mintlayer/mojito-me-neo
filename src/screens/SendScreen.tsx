@@ -191,6 +191,9 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
   if (step === 2 && result !== null) {
     const txUrl = explorerUrl(result.kind, result.txId, network);
     const confirmed = txState?.state === 'confirmed';
+    // An unknown confirmation count must not render as a zero: the count
+    // less copy covers the tip-read failure and count-less backends.
+    const confirmationCount = txState?.confirmations ?? null;
     return (
       <SuccessScreen
         title={t('send.success.title')}
@@ -209,7 +212,11 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
         <Card className="w-full mt-6 p-3.5 rounded-[14px] gap-2">
           <KVRow k={t('send.txHash')} v={truncateMiddle(result.txId)} tone={C.text1} />
           {confirmed ? (
-            <KVRow k={t('send.status')} v={t('send.success.confirmed', { count: txState?.confirmations ?? 0 })} tone={C.green} />
+            <KVRow
+              k={t('send.status')}
+              v={confirmationCount === null ? t('send.success.confirmedUnknown') : t('send.success.confirmed', { count: confirmationCount })}
+              tone={C.green}
+            />
           ) : (
             <KVRow k={t('send.status')} v={t('send.success.pending')} tone={C.amber} />
           )}

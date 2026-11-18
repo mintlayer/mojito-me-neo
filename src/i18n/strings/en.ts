@@ -111,6 +111,7 @@ export const en = {
   'send.success.title': 'Sent',
   'send.success.pending': 'Pending confirmation',
   'send.success.confirmed': 'Confirmed ({count})',
+  'send.success.confirmedUnknown': 'Confirmed',
   'send.chain.mlPending': 'Mintlayer signing needs the native crypto module; this device cannot verify it yet.',
   'send.chain.btcUnconfigured': 'Bitcoin sends need a btc-api backend, which is not connected yet.',
   'send.scan.unavailable': 'Camera scanning ships with the next milestone; paste an address for now.',
