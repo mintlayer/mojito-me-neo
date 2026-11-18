@@ -23,7 +23,12 @@ const providers = readFileSync('src/data/providers/index.ts', 'utf8');
 
 // Check 1: the splash covers startup until the shell is ready (App keeps the
 // Splash layer up via splashDone; removing it would expose the pre-data UI).
-if (!app.includes('!splashDone && <Splash')) {
+// Match the stable tokens (the gate variable and the Splash element) instead
+// of a formatting-sensitive source literal: a benign reformat must not fail
+// the gate, removing either token still does.
+const splashGate = app.includes('splashDone');
+const splashElement = app.includes('<Splash');
+if (!splashGate || !splashElement) {
   fails.push('App.tsx no longer gates the Splash layer behind splashDone (startup regression)');
 } else {
   notes.push('splash covers startup until the shell reports ready (App.tsx splashDone gate)');
@@ -32,8 +37,13 @@ if (!app.includes('!splashDone && <Splash')) {
 // Check 2: the native bindings load stays a lazy require inside loadBindings.
 // A top-level require would pull expo-modules-core (and react-native) into
 // every Node-side import of the provider module and slow the JS start.
-const requires = [...providers.matchAll(/require\(/g)];
-if (requires.length !== 1 || !/const core = require\(/.test(providers)) {
+// Stable tokens again: exactly one require, located after loadBindings
+// starts. A local variable rename must not matter; hoisting the require
+// above the function (out of loadBindings) does.
+const requires = [...providers.matchAll(/\brequire\s*\(/g)];
+const fnStart = providers.indexOf('function loadBindings');
+const requireAt = providers.search(/\brequire\s*\(/);
+if (requires.length !== 1 || fnStart < 0 || requireAt < fnStart) {
   fails.push('src/data/providers/index.ts must keep exactly one lazy require inside loadBindings');
 } else {
   notes.push('bindings require stays lazy inside loadBindings (no top-level native pull)');
