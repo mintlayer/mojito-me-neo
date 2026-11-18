@@ -9,22 +9,41 @@
       "distribution": "internal",
       "ios": {
         "simulator": true
-      }
+      },
+      "env": {
+        "EXPO_PUBLIC_DATA_MODE": "mock"
+      },
+      "channel": "development"
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "env": {
+        "EXPO_PUBLIC_DATA_MODE": "real"
+      },
+      "channel": "preview"
     },
-    "production": {
+    "production-android": {
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
       },
+      "env": {
+        "EXPO_PUBLIC_DATA_MODE": "real"
+      },
+      "channel": "production"
+    },
+    "production-ios": {
+      "autoIncrement": true,
       "ios": {
         "autoProvision": true
-      }
+      },
+      "env": {
+        "EXPO_PUBLIC_DATA_MODE": "real"
+      },
+      "channel": "production"
     }
   }
 }
