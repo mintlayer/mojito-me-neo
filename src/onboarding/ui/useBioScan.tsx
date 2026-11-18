@@ -42,10 +42,11 @@ export type BioScan = {
  * succeeds; failures drop back to idle with the failure count for the PIN
  * fallback copy. Biometry-only by product decision: the OS device credential
  * is not offered on the wallet's prompt (the in-app PIN fallback in
- * usePinEntry is the always-working path; see decisions.md). This is the
- * UI-level check for enrolment and the unlock screen only: vault cipher
- * operations are authorized by the native module's own BiometricPrompt, and
- * a generic prompt without a CryptoObject cannot authorize those keys.
+ * usePinEntry is the always-working path; see the project decision log).
+ * This is the UI-level check for enrolment and the unlock screen only:
+ * vault cipher operations are authorized by the native module's own
+ * BiometricPrompt, and a generic prompt without a CryptoObject cannot
+ * authorize those keys.
  */
 export function useBioScan(onDone: () => void, onFail?: () => void): BioScan {
   const [phase, setPhase] = useState<ScanPhase>('idle');

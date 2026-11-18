@@ -137,8 +137,8 @@ export function UnlockScreen({ bio, biometrics, onUnlock }: { bio: Bio; biometri
                 : msg}
           </Txt>
           {/* No bio switch while a lockout is active: bio attempts during the
-              countdown would bypass the app's escalating counter (decisions.md
-              records the biometry-only product decision). */}
+              countdown would bypass the app's escalating counter (the project
+              decision log records the biometry-only product decision). */}
           <View className="flex-1" />
           <Keypad
             disabled={locked || verifying}

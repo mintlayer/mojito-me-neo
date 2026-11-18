@@ -98,7 +98,7 @@ export function Onboarding({
   const finish = useCallback(
     (deferred: boolean) => {
       void (async () => {
-        // Deviation from spec M1-keys (recorded in decisions.md): the PIN
+        // Deviation from spec M1-keys (recorded in the project decision log): the PIN
         // change flow swaps only the verifier; it does not re-key or re-seal
         // the vault. The vault key is independent of the PIN, so re-sealing
         // on a PIN change adds no security; the seed.v2 slot exists for the

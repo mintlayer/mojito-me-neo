@@ -11,19 +11,30 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · M5 (card)
+## ⚠️ Project status · M6 (release readiness)
 
-**This repository is the card milestone: everything M4 shipped (keys, vault, live chain data, the send pipeline, the trade surfaces) plus the card screen with its early-access waitlist. The join flow runs on a validated, normalized email through a sealed device-local store (one slot per install), the confirmation view masks the address, duplicates, transport failures and retries land in honest states, and both Leave and wallet sign-out wipe the sealed email from the device.**
+**This repository is the release milestone: a feature-complete v1 candidate on top of M0 to M5 (keys and vault, live chain data, the send pipeline, the trade surfaces, the card waitlist), with the release gates run and recorded in `docs/REVIEW-RUNBOOK.md` and the device matrix finalized in `docs/MANUAL-QA.md`. The machine gates are green; store submission waits on the ship blockers below and the device pass.**
+
+### Ship blockers (consolidated; each ships honest-gated until it closes)
+
+1. **Card waitlist backend (R4)**: v1 persistence is device-local only; a production build refuses to start without a configured `waitlistBase` (`LocalWaitlistShipBlockerError` in `createWaitlistProvider`). This is the enforced gate, not a warning.
+2. **ML transaction broadcast endpoint (R3, action item A1)**: the Mintlayer-operated production API refuses submissions (403); real-mode ML send reviews and signs, then stops honestly at broadcast. Enabling later is a URL change in `src/config/endpoints.ts`.
+3. **Mintlayer-operated testnet URL (action item A2, R6)**: testnet ships typed-offline; release builds hide the network switch (dev-only until the URL lands).
+4. **BTC data backend deployment (F13)**: no production btc-api base is configured; the BTC surface degrades honestly (chains list drops Bitcoin) until a deployment URL is set.
+5. **EVM signer decision (R5 sub-question)**: the bridge's Ethereum-to-Mintlayer direction stays disabled with explanatory copy; the M2E direction is wired to the bridge api but gated until the deposit intent encoder and the ML submission route exist.
+6. **Bindings call-through device verification**: the vendored artifacts are linked and the facades compile, but no build machine has verified the native call-through; the TS key paths do not depend on it.
+
+Release configuration shipped in M6: final EAS profiles (`development`, `preview`, `production-android`, `production-ios`; Android local, iOS via Mac mini or CI per D5), production identifiers `org.mintlayer.mojito.me`, CI-stamped build numbers, the static perf and size gates in `npm run check`, and the honesty audit in `docs/REVIEW-RUNBOOK.md` section 3. Measured JS bundle: 4.40 MiB against the 4 MB budget, waived in writing in the runbook. Timing and installed-size numbers await the device pass (`docs/MANUAL-QA.md`).
 
 Real in M5:
 
-- **Card waitlist**: the form machine (RFC-validated input, no double submits, submit-time address freeze so a mid-flight edit cannot rename the confirmation), the masked confirmation and duplicate callouts, the provider-state counter, the Settings membership row with Leave, and the sign-out wipe. **R4 ship blocker (decision R4, 2026-11-17): the waitlist backend does not exist; v1 persistence is device-local only, and a production build must never ship it. `createWaitlistProvider` refuses release construction without a configured `waitlistBase` (plans/mojito-neo/decisions.md, missing-architecture gap 4).**
+- **Card waitlist**: the form machine (RFC-validated input, no double submits, submit-time address freeze so a mid-flight edit cannot rename the confirmation), the masked confirmation and duplicate callouts, the provider-state counter, the Settings membership row with Leave, and the sign-out wipe. **R4 ship blocker (decision R4, 2026-11-17): the waitlist backend does not exist; v1 persistence is device-local only, and a production build must never ship it. `createWaitlistProvider` refuses release construction without a configured `waitlistBase` (project decision log R4, missing-architecture gap 4).**
 
 Real in M4:
 
 - **Order book**: Dex depth rows come from GET /order/pair/{base}_{quote}/book with keyset cursor pagination and an invalid-cursor page-1 restart; stale and error states are explicit, never fixture rows in real mode.
 - **Orders**: place (confirm sheet with the exact amounts and a slippage guard against the book mid), fill and conclude run the bindings order encoders with the F11 witness mix (no-signature on the order input, signed payer inputs); the order id derives through the bindings from the create tx inputs, and fill and conclude inputs carry the account nonce and block height per the vendored wallet-bindings v0.1.0 signatures (pinned by src/trade/bindingsParity.test.ts).
-- **Atomic swap**: the ML-side HTLC flow (lock, claim, refund, secret extraction) per the docs guide; sessions persist across restarts with the secret hash only (the preimage never persists and never logs; the keep-open warning explains what is at stake), and the lock bytes are stored before the broadcast so a crash cannot strand the refund. The BTC counterparty leg is the scripted demo (see scripts/e2e-testnet.mjs); the timelock guard returns with real offers (plans/mojito-neo/decisions.md).
+- **Atomic swap**: the ML-side HTLC flow (lock, claim, refund, secret extraction) per the docs guide; sessions persist across restarts with the secret hash only (the preimage never persists and never logs; the keep-open warning explains what is at stake), and the lock bytes are stored before the broadcast so a crash cannot strand the refund. The BTC counterparty leg is the scripted demo (see scripts/e2e-testnet.mjs); the timelock guard returns with real offers (project decision log).
 - **Bridge**: quotes and status ride the bridge_v2 api-server per R5 (per-token fees per direction, the Mintlayer treasury deposit address, m2e deposit confirmations); E2M stays disabled with explanatory copy (no EVM signer, scoped decision open). M2E initiation is honestly gated until the deposit intent encoder and the ML submission route exist. The EVM demo fixtures (Arbitrum, Polygon, BNB) are removed from the bridge chains and pickers in this milestone.
 
 M3 (still accurate): BTC sends are end-to-end real on scure against the configured btc-api base; ML sends prepare and sign over the bindings interface but honestly refuse to broadcast (R3, action item A1); the send lifecycle tracks pending to confirmed with fresh-address rotation.
@@ -56,8 +67,11 @@ Still fixture-backed or deferred, deliberately:
 - **BTC device verification** is pending: balances and sends come from the configured btc-api deployment, and an end-to-end check against a funded device has not run yet.
 - **Testnet** ships typed-offline: no Mintlayer-operated testnet indexer URL is documented (action item A2), so nothing points at a guess. The E2E harness (`npx tsx scripts/e2e-testnet.mjs`) states this honestly and runs its BTC leg when a btc-api testnet base is provided.
 - The **vendored bindings call-through** (transaction assembly, signing, native encoders) still rejects; the artifacts are vendored and linked, the facades are real code that compiles on EAS, and the TS key paths above do not depend on the call-through. See the Storage section and `vendor/mintlayer/`.
-- **QR encoding** rides the battle-tested `react-native-qrcode-svg` library at error correction H: the spec's pure-TypeScript encoder deliverable (ECC M) was replaced deliberately, and the substitution is recorded in `plans/mojito-neo/decisions.md` (D14).
-- **Camera scanning** (the send screen's ScanSheet over expo-camera) ships with a later milestone: the QR button explains this honestly in an alert, and the deferral is recorded in `plans/mojito-neo/decisions.md` (D15).
+- **QR encoding** rides the battle-tested `react-native-qrcode-svg` library at error correction H: the spec's pure-TypeScript encoder deliverable (ECC M) was replaced deliberately, and the substitution is recorded in the project decision log (D14).
+- **Camera scanning** (the send screen's ScanSheet over expo-camera) ships with a later milestone: the QR button explains this honestly in an alert, and the deferral is recorded in the project decision log (D15). The store's camera usage string rides with it.
+- **DEX Trades/Depth segment** sets state but no trades panel consumes it yet (carried from the M1-gate UX list through the M6 reconciliation in `docs/REVIEW-RUNBOOK.md` 4.2): the house rule (wire, visibly disable, or remove) applies at the fix pass that owns the panel.
+- **Timing and installed-size numbers** (cold start, tab switch, sheet open, QR; installed iOS and Android sizes) await the device pass per `docs/MANUAL-QA.md`; the static halves ship in `npm run check` (`scripts/perf.mjs`, `scripts/size-report.mjs`).
+- **Native biometric prompt strings** are English-only (the module has no locale channel yet; recorded in the external deferred-UX notes), and **NFT rows** render text-only (no image dependency in the set).
 
 Do not point this at real funds you cannot afford to lose, and do not treat any screen here as a security control until the corresponding logic is implemented and audited.
 
@@ -108,7 +122,7 @@ src/keys/                   the M1 key stack, pure TypeScript and vector-tested
   mlAccounts.ts             Mintlayer account derivation and bech32m addresses
   BtcKeyring.ts             BIP84 P2WPKH accounts on scure
   customPath.ts             generic m/… account-path parse for the discovery scan
-  session.ts                KeySession: short-lived vault handle (M2 consumers, see plans/)
+  session.ts                KeySession: short-lived vault handle (M2 consumers, see decision log D17)
 
 src/data/                   the M2 chain data layer, service by service
   ml/                       typed indexer client, BalanceService, NftService
@@ -153,6 +167,8 @@ vendor/mintlayer/           vendored wallet-bindings v0.1.0 artifacts
   CHECKSUMS.txt             upstream SHA256SUMS provenance, verified in CI
 
 scripts/api-smoke.mjs       read-only live endpoint smoke run (manually or nightly)
+scripts/perf.mjs            static startup-path review with the timing budget status
+scripts/size-report.mjs     static size inventory plus the measured-export budget grade
 scripts/no-em-dash.ts       dash gate (no em or en dashes in code or specs;
                             vendored artifacts excluded: checksum-pinned)
 scripts/no-console.ts       secret-logging gate (keys, storage, data, onboarding, module)
@@ -187,6 +203,20 @@ npm run ios:dev      # build + launch on an iOS simulator
 
 The first dev-client build takes a while; after that `npm start` plus a relaunch of the installed
 app is enough. Changes to `modules/mojito-core` native sources require a rebuild.
+
+### Release builds (M6)
+
+```bash
+npx eas build -p android --profile production-android   # local machine per D5
+npx eas build -p ios --profile production-ios           # Mac mini or CI per D5
+npx eas build -p android --profile preview              # real-mode internal APK
+```
+
+Identifiers are `org.mintlayer.mojito.me` (owner-confirmable before submission); version and
+build numbers are CI-stamped (`appVersionSource: remote`, `autoIncrement`). No secrets live in
+`eas.json`; the release profiles set `EXPO_PUBLIC_DATA_MODE=real`. Production profiles refuse to
+start while the R4 waitlist backend is unconfigured (`LocalWaitlistShipBlockerError`): that is
+the designed ship blocker, not a bug. The full gate picture lives in `docs/REVIEW-RUNBOOK.md`.
 
 <details>
 <summary><b>Android troubleshooting</b> · real issues hit during development</summary>
@@ -245,7 +275,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs forty things:
+`npm run check` runs forty-two things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -334,13 +364,26 @@ npx tsx src/theme.test.ts
     transitions, no double submits, the submit-time address freeze and retry
     scoping.
 
-34. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+36. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
     release semantics, xpub parity.
 37. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
     modules (keys, send, storage, data, onboarding, trade, screens, waitlist).
-38. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+38. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs
+    (`docs/` added to the scan roots in M6).
 39. **`tsc --noEmit`**: strict TypeScript.
 40. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+41. **`scripts/perf.mjs`**: the static startup-path review (splash gate, lazy bindings
+    require, synchronous provider construction, eager-import inventory) with the timing
+    budget status; device numbers stay a `docs/MANUAL-QA.md` deliverable.
+42. **`scripts/size-report.mjs`**: the static size inventory (app source, dependency
+    trees, vendored artifacts) grading the JS-bundle budget only against a measured metro
+    export (an export directory can be passed as an argument or `SIZE_REPORT_DIR`;
+    default `dist/`), never an estimate.
+
+CI measures the gate for real: the Bundle step exports the Android app to `dist/` and a
+follow-up step runs the size report against that export, so an over-budget bundle fails
+the pipeline. Locally, with no export present, the report says NOT MEASURED and stays
+non-failing.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
@@ -350,6 +393,8 @@ swallowed every touch typechecked and bundled perfectly).
 
 ### Manual checks (device, gated-vault and waitlist paths)
 
+The release QA list consolidating this whole section lives in `docs/MANUAL-QA.md`; the items
+below stay for the day-to-day device loop.
 The native auth gate cannot be exercised in Node; verify these by hand on a device build.
 The waitlist matrix (18 to 24) runs in mock mode on a dev build: it needs no backend.
 
@@ -499,7 +544,7 @@ import and verification steps.
 
 Mojito ME is pre-production: the key stack is real and vector-tested, but the bindings
 call-through, transaction sending and BTC device verification are still pending (see
-[Project status](#️-project-status--m3-send-and-receive)). Findings against mock chain data or the
+[Project status](#️-project-status--m6-release-readiness)). Findings against mock chain data or the
 not-yet-wired bindings facades are out of scope and not eligible for a reward.
 
 The bounty becomes valid for this repository when it ships to production, at which point this

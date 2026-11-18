@@ -71,8 +71,8 @@ class OpenKeySession implements KeySession {
 
 /**
  * Unlock-time session: decrypts the vault phrase (after PIN or biometrics)
- * and returns a short-lived handle. Wired in M2 per decisions.md D10: the
- * real data providers open one to derive account xpubs
+ * and returns a short-lived handle. Wired in M2 per project decision log
+ * D17: the real data providers open one to derive account xpubs
  * (src/data/providers/index.ts). There is at most one at a time; callers
  * call release() when done (the zeroize guarantee of withSeed does not
  * extend to the mnemonic string, see the header comment). One sanctioned UI

@@ -6,8 +6,8 @@
 //
 // TODO (SHIP BLOCKER, decision R4, 2026-11-17): the waitlist backend does
 // not exist; v1 persistence is device-local. This MUST be replaced by a
-// real backend before any production ship (plans/mojito-neo/decisions.md
-// R4, missing-architecture gap 4).
+// real backend before any production ship (project decision log R4,
+// missing-architecture gap 4).
 import type { WaitlistProvider, WaitlistResult } from '../data/providers/types';
 
 export type WaitlistPhase = 'idle' | 'invalid' | 'submitting' | 'duplicate' | 'done' | 'unavailable';

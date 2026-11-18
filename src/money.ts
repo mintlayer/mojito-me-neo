@@ -1,5 +1,5 @@
-// Atom and decimal string helpers (decisions.md F4 and F9): amounts cross
-// the chain, the indexer and storage as decimal atom strings, and every
+// Atom and decimal string helpers (project decision log F4 and F9): amounts
+// cross the chain, the indexer and storage as decimal atom strings, and every
 // arithmetic on them runs on BigInt with pure string parsing and formatting.
 // No float value ever represents money here; Number() conversions live only
 // at the UI render boundary, never inside these helpers or provider state.

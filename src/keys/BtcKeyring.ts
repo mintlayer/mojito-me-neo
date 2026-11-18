@@ -1,5 +1,5 @@
-// BTC keyring per decisions.md R2: pure TypeScript on @scure/bip32 and
-// @scure/btc-signer. BIP84-style P2WPKH accounts from the same BIP39 seed
+// BTC keyring per project decision log R2: pure TypeScript on @scure/bip32
+// and @scure/btc-signer. BIP84-style P2WPKH accounts from the same BIP39 seed
 // that backs the Mintlayer accounts. Derivation path m/84'/<coin>'/0'
 // (coin 0 mainnet, 1 testnet), receiving <account>/0/i, change <account>/1/i.
 // Signing ships with M3 (BtcTxBuilder); M1 covers keys and addresses.
@@ -88,8 +88,8 @@ export async function btcReceiveAddresses(
 
 /**
  * Extended private key at a path under the account (m/branch/index), for the
- * signing path (decisions.md D11): the M3 BtcTxBuilder derives input keys
- * with it inside the KeySession closure and never caches or logs the key.
+ * signing path (project decision log D11): the M3 BtcTxBuilder derives input
+ * keys with it inside the KeySession closure and never caches or logs the key.
  */
 export function btcPrivateKeyAt(
   words: string[],

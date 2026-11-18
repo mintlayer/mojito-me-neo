@@ -8,9 +8,11 @@
     "scheme": "mojito-me",
     "backgroundColor": "#0b0a09",
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "org.mintlayer.mojito.me"
     },
     "android": {
+      "package": "org.mintlayer.mojito.me",
       "adaptiveIcon": {
         "backgroundColor": "#0b0a09"
       }

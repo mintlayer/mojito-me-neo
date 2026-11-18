@@ -1,6 +1,6 @@
 // Portfolio aggregation across the derived ML receiving and change
 // addresses (spec M2): coin balance plus MLS-01 token balances straight from
-// the indexer address summaries (api-coverage.md finding 2), summed on
+// the indexer address summaries (api-coverage notes finding 2), summed on
 // BigInt atom strings. Address scanning is sequential, one request per
 // address, rate-limit friendly per the spec security note. Token metadata
 // (ticker, decimals) is cached in session memory only.

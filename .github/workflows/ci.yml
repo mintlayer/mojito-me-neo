@@ -44,4 +44,10 @@ jobs:
       # Catches anything that typechecks but won't bundle (native module
       # resolution, Metro config drift).
       - name: Bundle
-        run: npx expo export --platform android --output-dir .expo-export
+        run: npx expo export --platform android
+
+      # The size budget gate must measure the real export: without this step
+      # the report would pass on an absent dist/ and the 4 MB budget would be
+      # advisory in CI. Fails the pipeline on a measured over-budget bundle.
+      - name: Size gate (measured export)
+        run: node scripts/size-report.mjs

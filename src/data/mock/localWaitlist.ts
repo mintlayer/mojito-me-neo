@@ -7,7 +7,7 @@
 // TODO (SHIP BLOCKER, decision R4, 2026-11-17): this LOCAL-ONLY provider
 // MUST be replaced by a real backend (gap 4 option A or B) before any
 // production ship; a production build must never run the local waitlist.
-// See plans/mojito-neo/decisions.md R4 and the provider selection in
+// See project decision log R4 and the provider selection in
 // WaitlistProvider.ts.
 //
 // Semantics (spec M5): one waitlist slot per install. A second join of the

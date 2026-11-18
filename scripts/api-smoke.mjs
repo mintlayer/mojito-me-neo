@@ -5,7 +5,7 @@
 //   MOJITO_INDEXER_BASE=http://127.0.0.1:3000/api/v2 node scripts/api-smoke.mjs
 const base = (process.env.MOJITO_INDEXER_BASE ?? 'https://api-server.mintlayer.org/api/v2').replace(/\/+$/, '');
 
-// Public derivation test vector (decisions.md F5, mainnet). A 404
+// Public derivation test vector (project decision log F5, mainnet). A 404
 // AddressNotFound is a VALID answer here: it proves the endpoint contract
 // for an unused address without depending on any particular funded account.
 const VECTOR_ADDRESS = 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl';

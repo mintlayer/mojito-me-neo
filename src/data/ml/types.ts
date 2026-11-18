@@ -1,5 +1,6 @@
 // Normalized shapes for the public Mintlayer indexer responses (/api/v2,
-// facts in api-coverage.md and decisions.md F6). Amounts arrive as
+// facts in the project notes: api-coverage and decision log F6). Amounts
+// arrive as
 // {"atoms": "...", "decimal": "..."} pairs, bare strings, or Uint64 encoded
 // as a number or a string; the AmountJson tolerance is the single place that
 // absorbs every documented shape. Field names mirror the web-server JSON
@@ -86,7 +87,7 @@ export type MlNftInfo = {
 /** One currency side of an order: the base coin or a token id (F11). */
 export type MlOrderCurrency = { type: 'Coin' | 'Token' | (string & {}); tokenId?: string };
 
-/** One entry of GET /order and GET /order/{id} (api-coverage.md). The
+/** One entry of GET /order and GET /order/{id} (api-coverage notes). The
  *  balances shrink as takers fill; initially_given/asked anchor the fill
  *  progress; conclude_destination anchors the myOrders membership filter. */
 export type MlOrderInfo = {

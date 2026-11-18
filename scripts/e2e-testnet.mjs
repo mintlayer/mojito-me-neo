@@ -5,7 +5,7 @@
 // manager and the seeded KeySession closure shape). Headless thin harness.
 // Runs under tsx because the service is TypeScript: npx tsx scripts/e2e-testnet.mjs
 //
-// BTC-ONLY status (decisions.md R6 / action items A1, A2): the Mintlayer-
+// BTC-ONLY status (project decision log R6 / action items A1, A2): the Mintlayer-
 // operated testnet indexer URL is not documented (A2) and the ML broadcast
 // switch needs the A1 submission endpoint, so there is no ML leg here yet.
 // The BTC leg is fully real on scure and needs MOJITO_BTC_BASE (btc-api

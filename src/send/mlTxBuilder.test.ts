@@ -21,7 +21,8 @@ import { MlTxBuilder, mlFeeAtoms, selectMlInputs } from './MlTxBuilder';
 import { MlTxSigner } from './MlTxSigner';
 import { SendError } from './errors';
 
-// Public test vector (decisions.md F5): abandon x23 + art, mainnet account 0.
+// Public test vector (project decision log F5): abandon x23 + art,
+// mainnet account 0.
 const VECTOR_WORDS = [...Array(23).fill('abandon'), 'art'];
 const VECTOR_ADDRESS = 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl';
 

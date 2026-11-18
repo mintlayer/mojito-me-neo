@@ -1,5 +1,6 @@
-// Esplora-shaped BTC chain client (decisions.md F13): balances, UTXOs, tx
-// history and fee estimates against btc-api under its /api/bitcoin base.
+// Esplora-shaped BTC chain client (project decision log F13): balances,
+// UTXOs, tx history and fee estimates against btc-api under its
+// /api/bitcoin base.
 // The base URL is config only (endpointsFor().btcBase); when it is null no
 // third-party fallback is ever hardcoded here and callers surface the
 // unconfigured state instead. Shapes per the btc-api API.md, which mirrors
@@ -7,7 +8,8 @@
 //
 // Methods with an M3 consumer (`utxos`, `txStatus`, `tipHeight`,
 // `feeEstimates`) are a recorded deferral, not an implied caller:
-// decisions.md D13 lists each one with the milestone that consumes it.
+// project decision log D13 lists each one with the milestone that
+// consumes it.
 //
 // The retry/timeout/response-cap transport and the JSON parse guards come
 // from ../transport.ts; this module owns only the Esplora parse layer and

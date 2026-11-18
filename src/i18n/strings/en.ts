@@ -348,6 +348,7 @@ export const en = {
   'settings.network.mainnet': 'Mainnet',
   'settings.network.testnet': 'Testnet',
   'settings.network.switchWarn': 'Switching networks reloads balances and activity for the selected network. The testnet index URL is not configured yet, so testnet shows no live data.',
+  'settings.network.unavailable': 'Testnet is not available in this build: the Mintlayer testnet endpoint is still pending (A2).',
   'settings.dex': 'Default DEX',
   'settings.display.hideBalances': 'Hide balances',
   'settings.display.hideBalancesSub': 'Until you tap to reveal',

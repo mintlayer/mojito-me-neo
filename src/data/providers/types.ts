@@ -1,7 +1,7 @@
 // Single source for the data-provider seams. Every later milestone implements
 // against these interfaces; the mock | real mode switch lives in
 // src/data/providers/index.ts. Shapes mirror the gap interfaces in
-// missing-architecture.md so the real implementations slot in unchanged.
+// the missing-architecture notes so the real implementations slot in unchanged.
 import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
 import type { TxTracker } from '../../send/TxTracker';

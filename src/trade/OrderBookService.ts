@@ -81,7 +81,7 @@ export function createOrderBookService(cfg: OrderBookServiceConfig): OrderBookSe
     return rows;
   }
 
-  /** Page walk with one invalid-cursor restart (api-coverage.md: cursors
+  /** Page walk with one invalid-cursor restart (api-coverage notes: cursors
    *  are opaque and can go stale; refetching page 1 is the documented
    *  recovery). Depth flicker on the restart is accepted for v1. */
   async function walkLevels(base: string, quote: string, side: OrderBookSide, depth: number, allowRestart: boolean): Promise<BookRow[]> {

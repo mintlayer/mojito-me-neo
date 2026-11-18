@@ -8,7 +8,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SCAN_ROOTS = ['src', 'modules', 'specs', 'scripts', '.github'];
+const SCAN_ROOTS = ['src', 'modules', 'specs', 'scripts', '.github', 'docs'];
 // Root config files and docs that sit outside the scanned roots (decision D9:
 // no dash characters anywhere in specs or code).
 const SCAN_FILES = [
