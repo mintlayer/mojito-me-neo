@@ -10,6 +10,10 @@ export const STORAGE_KEYS = {
   waitlistEmail: 'waitlist.email.v1',
   // Public per-chain derivation indexes (receiving/change); never secrets.
   addressIndex: 'address.index.v1',
+  // Persisted atomic swap sessions (state machine rows). The swap preimage
+  // is high-value material and NEVER persists; rows carry the secret hash
+  // and tx ids only (spec M4 security note).
+  swapSessions: 'swap.sessions.v1',
   // Not a sealed-store key: the plain settings JSON read by appSettings.
   settings: 'settings.v1',
 } as const;
