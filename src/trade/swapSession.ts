@@ -24,7 +24,6 @@ export type SwapSessionRow = {
   /** Counterparty spend path and our refund path (rebuild leg data after
    *  a restart without touching the chain). */
   spendAddress: string;
-  spendPubkeyHex: string;
   refundAddress: string;
   /** Hex of the unsigned lock transaction bytes as built before the
    *  broadcast: the claim and refund bindings decodes consume serialized
@@ -39,8 +38,7 @@ export type SwapSessionRow = {
 /** The persisted offer form: scalar fields only. Byte fields (the secret
  *  hash) never persist inside the offer; JSON would mangle a Uint8Array
  *  into an object map and the restored row would lie about its type. The
- *  bytes are rebuilt from secretHashHex on load, exactly like
- *  spendPubkeyHex already does for the spend key. */
+ *  bytes are rebuilt from secretHashHex on load. */
 type PersistedOffer = {
   role: HtlcOffer['role'];
   giveChain: HtlcOffer['giveChain'];
@@ -67,7 +65,7 @@ function toPersisted(row: SwapSessionRow): Omit<SwapSessionRow, 'offer'> & { off
 /** Allowed transitions; anything else is a programming error, not a
  *  silent overwrite. */
 const TRANSITIONS: Record<SwapState, SwapState[]> = {
-  offered: ['locked', 'expired'],
+  offered: ['locked', 'refunded', 'expired'],
   locked: ['claiming', 'refunded', 'expired'],
   claiming: ['settled', 'refunded', 'expired'],
   settled: [],
@@ -154,11 +152,13 @@ export function parseSwapSessions(json: string | null): SwapSessionRow[] {
       Array.isArray(row.txIds) && row.txIds.length <= MAX_TX_IDS && row.txIds.every((id) => typeof id === 'string') &&
       typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt)
     ) {
-      // Normalize: the in-memory row carries the secret hash bytes rebuilt
-      // from the persisted hex, never whatever a tampered store embedded
-      // inside the offer object.
+      // Normalize: rebuild the row from the validated fields only, so a
+      // legacy or tampered store's extra columns (the retired
+      // spendPubkeyHex) never ride into memory or persist back, and the
+      // secret hash bytes are rebuilt from the persisted hex, never from
+      // whatever junk the store embedded inside the offer object.
       rows.push({
-        ...(entry as SwapSessionRow),
+        id: row.id,
         offer: {
           role: offer.role,
           giveChain: offer.giveChain,
@@ -167,6 +167,13 @@ export function parseSwapSessions(json: string | null): SwapSessionRow[] {
           secretHash: hexOf.decode(row.secretHashHex),
           timelockSeconds: offer.timelockSeconds,
         },
+        secretHashHex: row.secretHashHex,
+        spendAddress: row.spendAddress,
+        refundAddress: row.refundAddress,
+        ...(row.lockTxHex !== undefined ? { lockTxHex: row.lockTxHex } : {}),
+        state: row.state,
+        txIds: [...row.txIds],
+        updatedAt: row.updatedAt,
       });
     }
   }

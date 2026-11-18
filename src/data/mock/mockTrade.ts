@@ -5,11 +5,12 @@
 // demo-data chip stays visible in mock mode, spec M4 honesty rules).
 import { ASKS, BIDS } from '../../data';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { hex as hexOf } from '@scure/base';
 import type { NetworkFlag } from '../../config/endpoints';
 import type { BroadcastProvider } from '../providers/types';
 import { DEFAULT_BOOK_DEPTH, type BookRow, type OrderBookService } from '../../trade/OrderBookService';
 import { COIN_REF, type OrderData, type OrderFlows } from '../../trade/orders';
-import type { HtlcFlows, HtlcOffer, HtlcSpend } from '../../trade/htlc';
+import type { HtlcFlows, HtlcOffer, HtlcSpend, PreparedLock } from '../../trade/htlc';
 import { createSwapSessionStore, type SwapSessionStorage, type SwapSessionStore } from '../../trade/swapSession';
 
 /** Fixture book mapped onto the live-service row shape, so the DexScreen
@@ -109,7 +110,9 @@ export function createMockOrderFlows(cfg: { broadcast: BroadcastProvider; networ
 let orderIdSeedCounter = 0;
 
 /** Demo HTLC flows: the swap session demo walks lock/claim/refund on the
- *  mock broadcaster with deterministic fake tx ids. */
+ *  mock broadcaster with deterministic fake tx ids, split like the real
+ *  seam (initiate builds the bytes, broadcastLock sends them, so the demo
+ *  exercises the same offered -> locked session machine). */
 export function createMockHtlcFlows(cfg: { broadcast: BroadcastProvider }): HtlcFlows {
   return {
     async initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string) {
@@ -117,11 +120,19 @@ export function createMockHtlcFlows(cfg: { broadcast: BroadcastProvider }): Htlc
       void refundAddress;
       requireAtomAmount(offer.giveAtoms, 'give');
       if (offer.secretHash.length !== 32) throw new Error('the secret hash must be 32 bytes');
-      const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-lock:${offer.giveAtoms}`));
       // Demo lock bytes: the session persists them so the claim/refund
-      // signatures match the real seam (the demo decode is a no-op).
+      // signatures match the real seam (the demo decode is a no-op). No
+      // broadcast here: the bytes must rest in the session row before the
+      // broadcast half runs.
       const lockTx = new Uint8Array(64).fill(0x1c);
-      return { txId, lockTx, htlcOutpoint: { id: new Uint8Array(32).fill(0x0a), index: 0 } };
+      const txId = fakeId(`htlc-lock:${offer.giveAtoms}`);
+      return { txId, lockTx, signedLockHex: bytesToHex(lockTx), htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
+    },
+    async broadcastLock(prepared: PreparedLock) {
+      await cfg.broadcast.broadcastMl(prepared.signedLockHex);
+      // The demo lock tx id is stable across both steps, exactly like the
+      // real seam's locally computed id.
+      return { txId: prepared.txId };
     },
     async claim(lockTx: Uint8Array, secret: Uint8Array) {
       void lockTx;

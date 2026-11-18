@@ -23,7 +23,6 @@ const row = (overrides?: Partial<SwapSessionRow>): SwapSessionRow => ({
   offer: OFFER,
   secretHashHex: bytesToHex(new Uint8Array(32).fill(0x21)),
   spendAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
-  spendPubkeyHex: '02'.repeat(33),
   refundAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
   lockTxHex: 'ee0102ff01',
   state: 'offered',
@@ -51,6 +50,7 @@ function memoryStorage() {
 async function main() {
   // Transition table: the happy path and the honest alternates.
   assert.ok(canTransition('offered', 'locked'));
+  assert.ok(canTransition('offered', 'refunded'), 'a stranded offered row refunds from its stored lock bytes');
   assert.ok(canTransition('locked', 'claiming'));
   assert.ok(canTransition('locked', 'refunded'));
   assert.ok(canTransition('locked', 'expired'));
@@ -59,6 +59,22 @@ async function main() {
   assert.ok(!canTransition('offered', 'settled'), 'a swap never skips the lock');
   assert.ok(!canTransition('settled', 'claiming'), 'terminal states are terminal');
   assert.throws(() => assertTransition('expired', 'locked'), /invalid swap transition/);
+
+  // The screen's split initiate: the offered row carries the lock bytes
+  // BEFORE any broadcast, then transitions offered -> locked on the
+  // broadcast answer, and the bytes rest through the transition.
+  {
+    const backend = memoryStorage();
+    const store = createSwapSessionStore(backend.storage);
+    const offered = row({ state: 'offered', lockTxHex: 'ee0102ff01' });
+    await store.save(offered);
+    assert.equal(JSON.parse(backend.json() ?? '[]')[0].state, 'offered', 'the offered row with the lock bytes is at rest');
+    assertTransition(offered.state, 'locked');
+    await store.save({ ...offered, state: 'locked', txIds: [offered.id], updatedAt: offered.updatedAt + 1 });
+    const saved = await store.get(offered.id);
+    assert.equal(saved?.state, 'locked');
+    assert.equal(saved?.lockTxHex, 'ee0102ff01', 'the lock tx bytes rest through the offered -> locked transition');
+  }
 
   // Persistence round-trip over the scripted backend.
   {
@@ -141,6 +157,14 @@ async function main() {
   const legacy = JSON.parse(JSON.stringify(row({ id: 'legacy' })));
   delete legacy.lockTxHex;
   assert.equal(parseSwapSessions(JSON.stringify([legacy])).length, 1);
+  // The retired spendPubkeyHex column does not resurrect from a legacy
+  // store: parse rebuilds rows from the validated fields only.
+  const legacyKey = JSON.parse(JSON.stringify(row({ id: 'legacy-key' })));
+  legacyKey.spendPubkeyHex = '02'.repeat(33);
+  const stripped = parseSwapSessions(JSON.stringify([legacyKey]))[0];
+  assert.ok(stripped, 'the legacy row still loads');
+  assert.ok(!('spendPubkeyHex' in stripped), 'the retired spend pubkey column is stripped on load');
+  assert.equal(Object.keys(stripped).sort().join(','), 'id,lockTxHex,offer,refundAddress,secretHashHex,spendAddress,state,txIds,updatedAt');
 
   // Session cap: a hostile store cannot force unbounded memory.
   const many = Array.from({ length: 40 }, (_, i) => row({ id: `s${i}` }));

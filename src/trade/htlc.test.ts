@@ -24,9 +24,7 @@ const atoms = (ml: bigint): string => (ml * ML).toString();
 const SECRET = new Uint8Array(32).fill(0x42);
 const SECRET_HASH = secretHashOf(SECRET);
 const LOCK_TX_ID = 'aa'.repeat(32);
-const SPEND_PUBKEY = new Uint8Array(33).fill(0x02);
-
-type HtlcJson = { atoms: string; secret_hash: string; spend_address: string; spend_pubkey: string; refund_address: string; refund_timelock: number };
+type HtlcJson = { atoms: string; secret_hash: string; spend_address: string; refund_address: string; refund_timelock: number };
 
 /** The unsigned lock transaction bytes as the flows return them from
  *  initiate; the claim and refund decodes consume bytes, never the tx id. */
@@ -148,7 +146,6 @@ function harness(opts?: { htlcJson?: Partial<HtlcJson>; lockTimestamp?: number |
     atoms: atoms(2n),
     secret_hash: bytesToHex(SECRET_HASH),
     spend_address: VECTOR_ADDRESS,
-    spend_pubkey: bytesToHex(SPEND_PUBKEY),
     refund_address: VECTOR_ADDRESS,
     refund_timelock: 172800,
     ...opts?.htlcJson,
@@ -231,20 +228,23 @@ async function main() {
   // TIMELOCK_RULE is the recorded F10 string.
   assert.equal(TIMELOCK_RULE, 'btc timelock must be shorter than the mintlayer timelock (F10)');
 
-  // 1. initiate: the lock output encodes the F10 parameters through the
-  //    vendored shape (hex hash, encodeLockForSeconds blob), the signed
-  //    lock tx broadcasts and the flow returns the unsigned bytes.
+  // 1. initiate is the build+sign half only: the lock output encodes the
+  //    F10 parameters through the vendored shape (hex hash,
+  //    encodeLockForSeconds blob), the flow answers the unsigned bytes and
+  //    the locally computed id WITHOUT broadcasting; broadcastLock is the
+  //    second half, after the caller has the bytes at rest.
   {
     const h = harness();
-    const result = await h.flows.initiate(
+    const prepared = await h.flows.initiate(
       { role: 'initiator', giveChain: 'ml', giveAtoms: atoms(2n), wantAtoms: atoms(560n), secretHash: SECRET_HASH, timelockSeconds: 172800 },
-      { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY },
+      { address: VECTOR_ADDRESS },
       VECTOR_ADDRESS,
     );
-    assert.equal(result.txId, LOCK_TX_ID);
-    assert.ok(result.lockTx.length > 32, 'initiate returns the unsigned lock tx bytes for the session record');
-    assert.deepEqual(result.htlcOutpoint.id, hexOf.decode(LOCK_TX_ID));
-    assert.equal(result.htlcOutpoint.index, 0);
+    assert.equal(prepared.txId, LOCK_TX_ID);
+    assert.ok(prepared.lockTx.length > 32, 'initiate returns the unsigned lock tx bytes for the session record');
+    assert.ok(prepared.signedLockHex.length > 0, 'broadcastLock receives the signed lock hex');
+    assert.deepEqual(prepared.htlcOutpoint.id, hexOf.decode(LOCK_TX_ID));
+    assert.equal(prepared.htlcOutpoint.index, 0);
     // The final (real-build) HTLC output encoding carries the lock params
     // in the vendored shape: atoms, addresses and the seconds lock blob.
     const lock = h.bindings.htlcOutputs[h.bindings.htlcOutputs.length - 1];
@@ -256,7 +256,35 @@ async function main() {
     assert.equal(h.bindings.witnesses.length, 1);
     assert.equal(bytesToHex(h.bindings.witnesses[0].privateKey), expectedKey);
     assert.equal(h.bindings.witnesses[0].secret, undefined);
+    // Bytes at rest BEFORE broadcast: nothing left the wallet yet, so the
+    // session row can be persisted between the two steps.
+    assert.equal(h.broadcastHexes.length, 0, 'initiate must not broadcast');
+    // The broadcast half rides the same prepared transaction; the session
+    // transitions offered -> locked only after this answers.
+    const broadcast = await h.flows.broadcastLock(prepared);
+    assert.equal(broadcast.txId, LOCK_TX_ID);
     assert.equal(h.broadcastHexes.length, 1);
+    assert.ok(
+      Buffer.from(h.broadcastHexes[0], 'hex').subarray(0, prepared.lockTx.length).equals(Buffer.from(prepared.lockTx)),
+      'the broadcast carries the prepared lock transaction',
+    );
+  }
+
+  // 1b. A lying broadcast endpoint is refused on the lock leg too (M3
+  //     contract), and the failed broadcast releases the change allocation.
+  {
+    const h = harness({ lyingBroadcast: 'bb'.repeat(32) });
+    const prepared = await h.flows.initiate(
+      { role: 'initiator', giveChain: 'ml', giveAtoms: atoms(2n), wantAtoms: atoms(560n), secretHash: SECRET_HASH, timelockSeconds: 172800 },
+      { address: VECTOR_ADDRESS },
+      VECTOR_ADDRESS,
+    );
+    await assert.rejects(
+      () => h.flows.broadcastLock(prepared),
+      (e: unknown) => e instanceof HtlcError && e.reason === 'rejected',
+    );
+    assert.equal(h.broadcastHexes.length, 1, 'the lying answer still reached the broadcaster');
+    assert.equal(h.changeCounter.n, 0, 'the failed broadcast releases the change allocation');
   }
 
   // 2. Guard rails: bad hash length, zero amounts and busy serialization.
@@ -266,7 +294,7 @@ async function main() {
       () =>
         h.flows.initiate(
           { role: 'initiator', giveChain: 'ml', giveAtoms: atoms(1n), wantAtoms: '1', secretHash: SECRET_HASH.subarray(0, 16), timelockSeconds: 3600 },
-          { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY },
+          { address: VECTOR_ADDRESS },
           VECTOR_ADDRESS,
         ),
       (e: unknown) => e instanceof HtlcError && e.reason === 'rejected',
@@ -274,14 +302,14 @@ async function main() {
     await assert.rejects(
       () => h.flows.initiate(
         { role: 'initiator', giveChain: 'ml', giveAtoms: '0', wantAtoms: '1', secretHash: SECRET_HASH, timelockSeconds: 3600 },
-        { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY },
+        { address: VECTOR_ADDRESS },
         VECTOR_ADDRESS,
       ),
       (e: unknown) => e instanceof HtlcError && e.reason === 'rejected',
     );
-    const first = h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
+    const first = h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS });
     await assert.rejects(
-      () => h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
+      () => h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS }),
       (e: unknown) => e instanceof HtlcError && e.reason === 'busy',
     );
     await first;
@@ -291,7 +319,7 @@ async function main() {
   //    re-encoded HTLC output; the decode consumes the lock tx bytes.
   {
     const h = harness();
-    const result = await h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
+    const result = await h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS });
     assert.equal(result.txId, LOCK_TX_ID);
     assert.equal(h.bindings.spendWitnesses.length, 1);
     const witness = h.bindings.spendWitnesses[0];
@@ -312,7 +340,7 @@ async function main() {
   //     guessed slot 0.
   {
     const h = harness({ outputIndex: 2 });
-    const result = await h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
+    const result = await h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS });
     assert.equal(result.txId, LOCK_TX_ID);
     assert.deepEqual(h.bindings.utxoCalls.map((c) => c.index), [2, 2], 'the HTLC input and the fee estimate both use output index 2');
   }
@@ -322,7 +350,7 @@ async function main() {
   {
     const h = harness({ lyingBroadcast: 'bb'.repeat(32) });
     await assert.rejects(
-      () => h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
+      () => h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS }),
       (e: unknown) => e instanceof HtlcError && e.reason === 'rejected',
     );
     const refundH = harness({ lyingBroadcast: 'bb'.repeat(32), lockTimestamp: Math.floor(Date.now() / 1000) - 172_801 });
@@ -366,7 +394,6 @@ async function main() {
       atoms: atoms(2n),
       secret_hash: bytesToHex(SECRET_HASH),
       spend_address: VECTOR_ADDRESS,
-      spend_pubkey: bytesToHex(SPEND_PUBKEY),
       refund_address: VECTOR_ADDRESS,
       refund_timelock: 172800,
     });
@@ -400,7 +427,7 @@ async function main() {
       withSession: async (fn) => fn({ withSeed: (run: (s: Uint8Array) => Promise<string>) => run(seed) } as unknown as KeySession),
     });
     await assert.rejects(
-      () => flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
+      () => flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS }),
       (e: unknown) => e instanceof HtlcError && e.reason === 'no-htlc-output',
     );
   }

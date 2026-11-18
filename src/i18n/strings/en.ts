@@ -243,6 +243,7 @@ export const en = {
   'swap.state.expired': 'Expired',
   'swap.warn.keepOpen': 'Keep this screen open until settlement: the preimage lives only in memory. Losing it forfeits the swap (the refund path still works).',
   'swap.error.generic': 'The swap action failed. Nothing was sent.',
+  'swap.error.lockedRecord': 'The lock broadcast succeeded (tx {txId}) and the funds are locked, but saving the session failed. The saved session can still refund after the timelock. Do not start a second lock.',
   'swap.real.unavailable': 'Real swaps need a counterparty offer with its own spend path. Offer entry is not available in this build, so locking is disabled. Existing sessions can still refund.',
   'swap.refund.cta': 'Refund after timelock',
   'swap.session.empty': 'No swap sessions yet. Initiate one to see the live protocol steps.',

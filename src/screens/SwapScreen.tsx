@@ -9,7 +9,7 @@ import { useProviders } from '../data/providers/context';
 import { fnv1a } from '../data/mock/hash';
 import { MojitoCore } from '../../modules/mojito-core';
 import { isBindingsUnavailable } from '../send/errors';
-import type { SwapSessionRow, SwapState } from '../trade/swapSession';
+import { assertTransition, type SwapSessionRow, type SwapState } from '../trade/swapSession';
 import type { StepState } from '../ui/StepState';
 import { C, G } from '../theme';
 import { AmountRow, Btn, Callout, Card, FlowX, Label, PctButtons, Screen, ScreenIntro, Segmented, Steps, Txt } from '../ui';
@@ -57,10 +57,14 @@ export function SwapScreen() {
     void loadSessions();
   }, [loadSessions]);
 
-  /** Lock Mintlayer: secret generated off-band, only the hash crosses the
-   *  wire; the session persists with the hash, the lock tx bytes and the
-   *  tx ids. The refund path is a wallet-owned address and the spend path
-   *  is the demo vector in mock mode; real mode refuses typed. */
+  /** Lock Mintlayer in two steps: initiate builds and signs (no
+   *  broadcast), the session row persists the lock tx bytes at state
+   *  'offered', then broadcastLock sends the prepared transaction and the
+   *  row transitions offered -> locked. The bytes-at-rest-before-broadcast
+   *  order is the point: a crash after the broadcast still leaves the
+   *  refund leg's decode input. The refund path is a wallet-owned address
+   *  and the spend path is the demo vector in mock mode; real mode refuses
+   *  typed. */
   const initiate = async () => {
     setError(null);
     if (mode === 'real') {
@@ -78,7 +82,7 @@ export function SwapScreen() {
       const secret = await swapSecret(mode);
       const secretHash = sha256(secret);
       preimageRef.current = secret;
-      const { txId, lockTx } = await htlc.initiate(
+      const prepared = await htlc.initiate(
         {
           role: 'initiator',
           giveChain: 'ml',
@@ -87,21 +91,36 @@ export function SwapScreen() {
           secretHash,
           timelockSeconds: mlSeconds,
         },
-        { address: COUNTERPARTY_ADDRESS, pubkey: new Uint8Array(33).fill(0x02) },
+        { address: COUNTERPARTY_ADDRESS },
         refundAddress,
       );
-      await swapSessions.save({
-        id: txId,
+      const row: SwapSessionRow = {
+        id: prepared.txId,
         offer: { role: 'initiator', giveChain: 'ml', giveAtoms: toAtoms(amount), wantAtoms: wantAtomsOf(amount), secretHash, timelockSeconds: mlSeconds },
         secretHashHex: bytesToHex(secretHash),
         spendAddress: COUNTERPARTY_ADDRESS,
-        spendPubkeyHex: '02'.repeat(33),
         refundAddress,
-        lockTxHex: bytesToHex(lockTx),
-        state: 'locked',
-        txIds: [txId],
+        lockTxHex: bytesToHex(prepared.lockTx),
+        state: 'offered',
+        txIds: [],
         updatedAt: Date.now(),
-      });
+      };
+      // Bytes at rest BEFORE the broadcast: the row (with the lock tx
+      // bytes) is stored first, so the honest refund source survives a
+      // crash that happens after the broadcast.
+      await swapSessions.save(row);
+      const { txId } = await htlc.broadcastLock(prepared);
+      assertTransition(row.state, 'locked');
+      try {
+        await swapSessions.save({ ...row, state: 'locked', txIds: [txId], updatedAt: Date.now() });
+      } catch {
+        // The lock IS on-chain: the generic nothing-sent copy would invite
+        // a second lock. Name the tx id; the offered row keeps the bytes,
+        // so the refund path stays available.
+        setError(t('swap.error.lockedRecord', { txId: prepared.txId }));
+        void loadSessions();
+        return;
+      }
       void loadSessions();
     } catch (e) {
       setError(swapErrorCopy(e));
@@ -116,8 +135,11 @@ export function SwapScreen() {
     try {
       // The refund rebuilds the lock parameters from the locally captured
       // unsigned lock transaction bytes (the decode seam consumes bytes,
-      // not the tx id); rows without them cannot refund honestly.
+      // not the tx id); rows without them cannot refund honestly. An
+      // 'offered' row whose post-broadcast save failed refunds from the
+      // same bytes, hence offered -> refunded in the machine.
       if (!session.lockTxHex) throw new SwapGateError('stored session predates the lock tx bytes record');
+      assertTransition(session.state, 'refunded');
       const { txId } = await htlc.refund(hexOf.decode(session.lockTxHex));
       await swapSessions.save({ ...session, state: 'refunded', txIds: [...session.txIds, txId].slice(0, 16), updatedAt: Date.now() });
       void loadSessions();
@@ -205,7 +227,7 @@ export function SwapScreen() {
             </View>
             <HtlcRail />
             <Steps steps={stepsFor(session)} />
-            {session.state === 'locked' && (
+            {session.lockTxHex && (session.state === 'offered' || session.state === 'locked') && (
               <Btn tone="ghost" className="mt-2" disabled={busy} onPress={() => void refund(session)}>
                 {t('swap.refund.cta')}
               </Btn>

@@ -157,3 +157,20 @@ callout. The tautological timelock guard (a fabricated BTC leg derived
 from the ML value) was removed from the entry path;
 `checkTimelockRule` returns with real offers, taking `btcSeconds` from
 the offer instead of the scripted half.
+
+### Swap initiate split so the lock bytes rest before the broadcast (M4 fix)
+
+`initiate` now only builds and signs the lock transaction (locally
+computed tx id, unsigned bytes, signed hex); `broadcastLock` is the
+second half and verifies the answered id against the locally computed
+one. The swap screen persists the session row (state 'offered',
+`lockTxHex` set) between the two calls, so a crash after the broadcast
+still leaves the bytes the claim and refund decodes consume, and the
+offered -> locked transition fires only after the broadcast answers.
+The transition table now also allows offered -> refunded: an 'offered'
+row whose post-broadcast save failed still refunds from its stored
+bytes, and a failed save maps to an explicit funds-locked error naming
+the tx id (the generic nothing-sent copy would invite a second lock).
+The retired spend pubkey column is dropped with the split: the vendored
+`encodeOutputHtlc` carries no spend pubkey, the decoded descriptor never
+read one, and the screen no longer fabricates a 33-byte key to persist.

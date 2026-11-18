@@ -8,8 +8,10 @@
 // Secret handling (spec security note): the preimage is generated with
 // MojitoCore.secureRandom by the caller (createSwapSecret), held in memory
 // inside the session closure and never persisted and never logged; only
-// SHA-256(secret) crosses the wire and storage. TIMELOCK_RULE guards the
-// initiate path: the BTC timelock must be shorter than the ML one.
+// SHA-256(secret) crosses the wire and storage. TIMELOCK_RULE records the
+// F10 ordering (the BTC timelock must be shorter than the ML one); the
+// guard call returns with real offer entry, which supplies the BTC leg
+// the demo path had to fabricate (plans/mojito-neo/decisions.md).
 //
 // Honest states: every transaction assembles and signs through the
 // MintlayerBindings seam, so without the native call-through the flows
@@ -41,15 +43,40 @@ export type HtlcOffer = {
   timelockSeconds: number;
 };
 
-export type HtlcSpend = { address: string; pubkey: Uint8Array };
+/** Counterparty spend path (the address only: the vendored
+ *  encodeOutputHtlc carries no spend pubkey, so a key here would be a
+ *  fabricated field no consumer reads). */
+export type HtlcSpend = { address: string };
+
+/** The signed-but-unbroadcast lock transaction as initiate answers it: the
+ *  opaque carrier between the build+sign and broadcast steps. The caller
+ *  persists lockTx with the swap session (state 'offered') between the two
+ *  steps, so the bytes are at rest before anything leaves the wallet. */
+export type PreparedLock = {
+  /** Locally computed lock transaction id (the HTLC outpoint id). */
+  txId: string;
+  /** Unsigned lock transaction bytes: the claim and refund decodes
+   *  consume them, and the session record must persist them. */
+  lockTx: Uint8Array;
+  /** Signed lock transaction hex for broadcastLock. */
+  signedLockHex: string;
+  htlcOutpoint: { id: Uint8Array; index: number };
+};
 
 export interface HtlcFlows {
-  /** Lock the offer's giveAtoms on Mintlayer with the counterparty's spend
-   *  key and our refund path (the initiator leg of the swap). Returns the
-   *  unsigned lock transaction bytes: the claim and refund decodes consume
-   *  them, because the public Mintlayer indexer serves no raw transaction
-   *  route, so the caller must persist them with the swap session. */
-  initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string): Promise<{ txId: string; lockTx: Uint8Array; htlcOutpoint: { id: Uint8Array; index: number } }>;
+  /** Build and sign the lock transaction WITHOUT broadcasting (the first
+   *  half of the initiate contract): the answer carries the unsigned lock
+   *  bytes, the locally computed tx id and the signed hex for
+   *  broadcastLock. The claim and refund decodes consume the bytes,
+   *  because the public Mintlayer indexer serves no raw transaction route,
+   *  so the caller MUST persist them with the swap session (state
+   *  'offered') before calling broadcastLock: bytes at rest before the
+   *  broadcast, or a crash after it strands the refund leg. */
+  initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string): Promise<PreparedLock>;
+  /** Broadcast the prepared lock (the second half): verifies the answered
+   *  id against the locally computed one (M3 contract) and returns it. The
+   *  caller transitions the session offered -> locked on success. */
+  broadcastLock(prepared: PreparedLock): Promise<{ txId: string }>;
   /** Spend an HTLC with the revealed secret (the counterparty claim leg).
    *  lockTx carries the unsigned lock transaction bytes captured at
    *  initiate (not the tx id: the bindings decode consumes bytes). */
@@ -98,7 +125,6 @@ export type HtlcDescriptor = {
   atoms: string;
   secretHash: Uint8Array;
   spendAddress: string;
-  spendPubkey: Uint8Array;
   refundAddress: string;
   refundTimelock: number;
 };
@@ -213,7 +239,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     if (outputIndex < 0) throw new HtlcError('no-htlc-output', `transaction ${htlcTxId} carries no HTLC output`);
     const json = await b().decodeTransactionToJson(lockTx, cfg.network);
     const parsed = JSON.parse(json) as {
-      outputs?: { htlc?: { atoms?: string; secret_hash?: string; spend_address?: string; spend_pubkey?: string; refund_address?: string; refund_timelock?: number } }[];
+      outputs?: { htlc?: { atoms?: string; secret_hash?: string; spend_address?: string; refund_address?: string; refund_timelock?: number } }[];
     };
     const htlc = parsed.outputs?.[outputIndex]?.htlc;
     if (!htlc?.atoms || htlc.secret_hash === undefined || htlc.spend_address === undefined) {
@@ -225,7 +251,6 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       atoms: htlc.atoms,
       secretHash: hexOf.decode(htlc.secret_hash),
       spendAddress: htlc.spend_address,
-      spendPubkey: hexOf.decode(htlc.spend_pubkey ?? ''),
       refundAddress: htlc.refund_address ?? '',
       refundTimelock: htlc.refund_timelock ?? 0,
     };
@@ -296,12 +321,32 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
           const transaction = await b().encodeTransaction(inputs, outputs, 0);
           const tip = await cfg.indexer.tip();
           const signedHex = await cfg.withSession((session) => sign(transaction, selection.selection, spentOutputs, session, tip.blockHeight + 1));
-          const txId = await broadcast(transaction, signedHex);
-          // The HTLC outpoint rides the locally verified lock tx id and its
+          // First half only: the tx id is computed locally (the same
+          // getTransactionId the broadcast step verifies against) and the
+          // broadcast waits for broadcastLock, after the caller has the
+          // lock bytes at rest in the session record.
+          const txId = await b().getTransactionId(transaction, false);
+          // The HTLC outpoint rides the locally computed lock tx id and its
           // output index (the HTLC output is assembled at index 0 of this
           // flow), never the backend's answer.
-          return { txId, lockTx: transaction, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
+          return { txId, lockTx: transaction, signedLockHex: signedHex, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
         } catch (e) {
+          await cfg.releaseFailedChange();
+          throw e;
+        }
+      });
+    },
+
+    async broadcastLock(prepared) {
+      return serialize(async () => {
+        if (prepared.lockTx.length === 0 || prepared.signedLockHex.length === 0) {
+          throw new HtlcError('rejected', 'the prepared lock carries no transaction');
+        }
+        try {
+          return { txId: await broadcast(prepared.lockTx, prepared.signedLockHex) };
+        } catch (e) {
+          // A refused broadcast never spent the inputs: the change
+          // allocation steps back like any failed attempt.
           await cfg.releaseFailedChange();
           throw e;
         }

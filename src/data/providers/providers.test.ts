@@ -5,6 +5,8 @@
 //   npx tsx src/data/providers/providers.test.ts
 import { strict as assert } from 'node:assert/strict';
 
+import { bytesToHex } from '@noble/hashes/utils.js';
+
 import { createProviders, readDataMode } from './index';
 import { setNetwork } from '../../config/endpoints';
 import { BALANCE } from '../../data';
@@ -77,19 +79,24 @@ async function main() {
   assert.deepEqual((await providers.orders.myOrders()).map((o) => o.orderId), [demoOrder.orderId]);
   const demoLock = await providers.htlc.initiate(
     { role: 'initiator', giveChain: 'ml', giveAtoms: '1000', wantAtoms: '280000', secretHash: new Uint8Array(32).fill(7), timelockSeconds: 172800 },
-    { address: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl', pubkey: new Uint8Array(33) },
+    { address: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl' },
     'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
   );
   assert.equal(demoLock.htlcOutpoint.index, 0);
+  assert.equal(demoLock.lockTx.length, 64, 'the demo lock answers the same bytes shape as the real seam');
+  // Split contract: broadcastLock is the second half, after the session
+  // row would have the bytes at rest (the demo follows the screen flow).
+  const demoBroadcast = await providers.htlc.broadcastLock(demoLock);
+  assert.equal(demoBroadcast.txId, demoLock.txId);
   await providers.swapSessions.save({
     id: demoLock.txId,
     offer: { role: 'initiator', giveChain: 'ml', giveAtoms: '1000', wantAtoms: '280000', secretHash: new Uint8Array(32).fill(7), timelockSeconds: 172800 },
     secretHashHex: '07'.repeat(32),
     spendAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
-    spendPubkeyHex: '',
     refundAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
+    lockTxHex: bytesToHex(demoLock.lockTx),
     state: 'locked',
-    txIds: [demoLock.txId],
+    txIds: [demoBroadcast.txId],
     updatedAt: Date.now(),
   });
   assert.equal((await providers.swapSessions.all()).length, 1);
