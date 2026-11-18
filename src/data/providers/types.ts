@@ -4,7 +4,6 @@
 // missing-architecture.md so the real implementations slot in unchanged.
 import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
-import type { StepState } from '../../ui/StepState';
 import type { TxTracker } from '../../send/TxTracker';
 import type { OrderBookService } from '../../trade/OrderBookService';
 import type { OrderFlows } from '../../trade/orders';
@@ -55,15 +54,6 @@ export type MarketSummary = {
   pair: string; last: string; change: number; btc: string;
   high: string; low: string; volume: string; price: number;
 };
-
-export type BookLevel = { p: number; s: number; t: number };
-
-// Swap and bridge fixture rows
-export type HtlcStep = { label: string; detail: string; state: StepState; note?: string };
-export type SwapStat = [string, string];
-export type BridgeChain = { name: ChainName; sym: string };
-export type BridgeRouteStep = { label: string; detail: string; icon: IconName; eta: string };
-export type BridgeQuoteLine = [string, string];
 
 // Card
 export type WaitlistStatus = { taken: number; total: number };
@@ -203,9 +193,10 @@ export interface WalletData {
   getNetworks(): Promise<ChainName[]>;
   getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;
-  // dex
-  getMarket(pair: string): Promise<MarketSummary>;
-  getOrderBook(pair: string): Promise<{ asks: BookLevel[]; bids: BookLevel[] }>;
+  // dex. Null answers a price-snapshot miss: the header renders a typed
+  // unavailable state, never a fixture row (the AssetRow.unavailable
+  // precedent).
+  getMarket(pair: string): Promise<MarketSummary | null>;
   getTimeframes(): Promise<CandleInterval[]>;
   /** Token ids served for one ticker; tickers are not unique (F6), so the
    *  list can carry more than one id and callers must disambiguate
@@ -213,13 +204,6 @@ export interface WalletData {
   getTokenIds(ticker: string): Promise<string[]>;
   /** Ticker and decimals of one token id; null when unindexed. */
   getTokenMeta(tokenId: string): Promise<{ ticker: string | null; decimals: number } | null>;
-  // swap
-  getHtlcSteps(): Promise<HtlcStep[]>;
-  getSwapStats(): Promise<SwapStat[]>;
-  // bridge
-  getBridgeChains(): Promise<BridgeChain[]>;
-  getBridgeRoute(): Promise<BridgeRouteStep[]>;
-  getBridgeQuote(): Promise<BridgeQuoteLine[]>;
   // card
   getWaitlist(): Promise<WaitlistStatus>;
   getDapps(): Promise<DappsSummary>;

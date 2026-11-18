@@ -17,10 +17,7 @@ import { ML_DECIMALS, atomsToDecimal, decimalsToAtoms, formatAmount, formatUsd }
 import { IndexerError } from '../ml/IndexerClient';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
 import type { AccountServices, RealAccountContext, RealAccountConfig } from './account';
-import {
-  CHAIN_GLYPH, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
-  TIMEFRAMES, WAITLIST, ASKS, BIDS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE,
-} from '../../data';
+import { CHAIN_GLYPH, DAPPS, FEES, RANGES, TIMEFRAMES, WAITLIST } from '../../data';
 import { truncateMiddle } from '../../ui/format';
 import { createFixtureWalletData } from '../mock/fixtures';
 import { createFixturePriceProvider } from '../mock/priceFixtures';
@@ -221,12 +218,13 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
     // M4: the market header derives from the R1 price provider (still the
     // mock source, so the figures stay indicative and the screens disclose
     // pricesAreMock); high, low and volume derive from the 1d candles the
-    // same source serves. No fixture row leaks into the header.
+    // same source serves. A snapshot miss answers null: the header renders
+    // a typed unavailable state, never a fixture row.
     getMarket: async (pair) => {
       const [snapshots, candles] = await Promise.all([price.getSnapshots(['ML', 'BTC']), price.getCandles(pair, '1d')]);
       const ml = snapshots.find((s) => s.tokenId === 'ML');
       const btc = snapshots.find((s) => s.tokenId === 'BTC');
-      if (!ml) return MARKET;
+      if (!ml) return null;
       const highDecimal = candles.reduce((acc, c) => (BigInt(decimalsToAtoms(c.h, 11)) > BigInt(decimalsToAtoms(acc, 11)) ? c.h : acc), candles[0]?.h ?? '0');
       const lowDecimal = candles.reduce((acc, c) => (BigInt(decimalsToAtoms(c.l, 11)) < BigInt(decimalsToAtoms(acc, 11)) ? c.l : acc), candles[0]?.h ?? '0');
       const volumeAtoms = candles.reduce((acc, c) => acc + BigInt(decimalsToAtoms(c.v, 11)), 0n);
@@ -257,13 +255,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
         return null;
       }
     },
-    getOrderBook: async () => ({ asks: [...ASKS], bids: [...BIDS] }),
     getTimeframes: async () => [...TIMEFRAMES],
-    getHtlcSteps: async () => [...HTLC_STEPS],
-    getSwapStats: async () => SWAP_STATS,
-    getBridgeChains: async () => [...BRIDGE_CHAINS],
-    getBridgeRoute: async () => [...BRIDGE_ROUTE],
-    getBridgeQuote: async () => BRIDGE_QUOTE,
     getWaitlist: async () => WAITLIST,
     getDapps: async () => DAPPS,
     getCardFeatures: async () => fixtureData.getCardFeatures(),

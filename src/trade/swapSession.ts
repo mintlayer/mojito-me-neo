@@ -4,6 +4,7 @@
 // rows carry the secret hash and transaction ids, NEVER the preimage (the
 // spec security note: losing the preimage forfeits the swap, so the session
 // screen shows a keep-open warning instead of persisting the secret).
+import { hex as hexOf } from '@scure/base';
 import { STORAGE_KEYS } from '../storage/keys';
 import { loadAsyncStorage } from '../storage/asyncStorage';
 import { devFallbackAllowed } from '../config/runtime';
@@ -34,6 +35,34 @@ export type SwapSessionRow = {
   txIds: string[];
   updatedAt: number;
 };
+
+/** The persisted offer form: scalar fields only. Byte fields (the secret
+ *  hash) never persist inside the offer; JSON would mangle a Uint8Array
+ *  into an object map and the restored row would lie about its type. The
+ *  bytes are rebuilt from secretHashHex on load, exactly like
+ *  spendPubkeyHex already does for the spend key. */
+type PersistedOffer = {
+  role: HtlcOffer['role'];
+  giveChain: HtlcOffer['giveChain'];
+  giveAtoms: string;
+  wantAtoms: string;
+  timelockSeconds: number;
+};
+
+/** Serialize one row into its persisted form (offer bytes stripped). */
+function toPersisted(row: SwapSessionRow): Omit<SwapSessionRow, 'offer'> & { offer: PersistedOffer } {
+  const { offer, ...rest } = row;
+  return {
+    ...rest,
+    offer: {
+      role: offer.role,
+      giveChain: offer.giveChain,
+      giveAtoms: offer.giveAtoms,
+      wantAtoms: offer.wantAtoms,
+      timelockSeconds: offer.timelockSeconds,
+    },
+  };
+}
 
 /** Allowed transitions; anything else is a programming error, not a
  *  silent overwrite. */
@@ -108,9 +137,15 @@ export function parseSwapSessions(json: string | null): SwapSessionRow[] {
   const rows: SwapSessionRow[] = [];
   for (const entry of parsed.slice(0, MAX_SESSIONS)) {
     const row = entry as Partial<SwapSessionRow>;
+    const offer = row.offer as Partial<PersistedOffer> | null | undefined;
     if (
       typeof row.id === 'string' && row.id.length > 0 &&
-      row.offer !== null && typeof row.offer === 'object' &&
+      offer !== null && typeof offer === 'object' &&
+      (offer.role === 'initiator' || offer.role === 'counterparty') &&
+      (offer.giveChain === 'ml' || offer.giveChain === 'btc') &&
+      typeof offer.giveAtoms === 'string' && /^\d+$/.test(offer.giveAtoms) &&
+      typeof offer.wantAtoms === 'string' && /^\d+$/.test(offer.wantAtoms) &&
+      typeof offer.timelockSeconds === 'number' && Number.isInteger(offer.timelockSeconds) && offer.timelockSeconds > 0 &&
       typeof row.secretHashHex === 'string' && /^[0-9a-f]{64}$/.test(row.secretHashHex) &&
       typeof row.spendAddress === 'string' &&
       typeof row.refundAddress === 'string' &&
@@ -119,7 +154,20 @@ export function parseSwapSessions(json: string | null): SwapSessionRow[] {
       Array.isArray(row.txIds) && row.txIds.length <= MAX_TX_IDS && row.txIds.every((id) => typeof id === 'string') &&
       typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt)
     ) {
-      rows.push(entry as SwapSessionRow);
+      // Normalize: the in-memory row carries the secret hash bytes rebuilt
+      // from the persisted hex, never whatever a tampered store embedded
+      // inside the offer object.
+      rows.push({
+        ...(entry as SwapSessionRow),
+        offer: {
+          role: offer.role,
+          giveChain: offer.giveChain,
+          giveAtoms: offer.giveAtoms,
+          wantAtoms: offer.wantAtoms,
+          secretHash: hexOf.decode(row.secretHashHex),
+          timelockSeconds: offer.timelockSeconds,
+        },
+      });
     }
   }
   return rows;
@@ -129,9 +177,9 @@ export function createSwapSessionStore(storage: SwapSessionStorage = defaultStor
   return {
     async save(row) {
       assertTransitionIsKnown(row.state);
-      const rows = (await this.all()).filter((existing) => existing.id !== row.id);
-      rows.unshift({ ...row, txIds: row.txIds.slice(0, MAX_TX_IDS) });
-      await storage.save(JSON.stringify(rows.slice(0, MAX_SESSIONS)));
+      const existing = (await this.all()).map(toPersisted).filter((saved) => saved.id !== row.id);
+      existing.unshift(toPersisted({ ...row, txIds: row.txIds.slice(0, MAX_TX_IDS) }));
+      await storage.save(JSON.stringify(existing.slice(0, MAX_SESSIONS)));
     },
     async all() {
       return parseSwapSessions(await storage.load());

@@ -4,7 +4,7 @@ import { t } from '../i18n';
 import { useData, useProviders } from '../data/providers/context';
 import type { Candle, CandleInterval } from '../data/providers';
 import type { OrderData } from '../trade/orders';
-import { COIN_REF, orderPhase } from '../trade/orders';
+import { COIN_REF, orderPhase, proportionalGivePayout } from '../trade/orders';
 import { checkAmounts, checkSlippage } from '../trade/priceGuards';
 import { isBindingsUnavailable } from '../send/errors';
 import { ML_DECIMALS, atomsToDecimal, decimalsToAtoms } from '../money';
@@ -18,7 +18,10 @@ const BOOK_POLL_MS = 30_000;
 const MAX_SLIPPAGE_PCT = 1;
 
 export function DexScreen() {
-  const market = useData((d) => d.getMarket('ML/USDT'));
+  // Loaded wrapper: useData answers null while pending AND for a null
+  // result, so the header unavailable state needs the resolved marker.
+  const marketState = useData(async (d) => ({ market: await d.getMarket('ML/USDT') }));
+  const market = marketState?.market ?? null;
   const timeframes = useData((d) => d.getTimeframes());
   const fees = useData((d) => d.getFees());
   const assets = useData((d) => d.getAssets());
@@ -98,27 +101,42 @@ export function DexScreen() {
   const [ticketError, setTicketError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
   const [lastDemoNote, setLastDemoNote] = useState<string | null>(null);
+  // Fill confirmation state: the payout preview (proportionalGivePayout on
+  // the order legs) plus the effective price versus the book mid, before
+  // any fill transaction is built.
+  const [fillSheet, setFillSheet] = useState<{ order: OrderData; payout: string; effective: string; mid: string } | null>(null);
 
   const bookRows = liveBook;
-  if (!market || !timeframes || !fees || !candles || !assets || !askTokenIds || !askMeta || !bookRows) return <Screen />;
+  if (!timeframes || !fees || !candles || !assets || !askTokenIds || !askMeta || !bookRows) return <Screen />;
   const maxAsk = Math.max(...bookRows.asks.map((r) => Number(r.total || 0)), 1);
   const maxBid = Math.max(...bookRows.bids.map((r) => Number(r.total || 0)), 1);
-  const total = usd(amount, market.price);
-  const bestAsk = Number(bookRows.asks[0]?.price ?? market.price);
-  const bestBid = Number(bookRows.bids[0]?.price ?? market.price);
+  const total = usd(amount, market?.price ?? 0);
+  const bestAsk = Number(bookRows.asks[0]?.price ?? market?.price ?? 0);
+  const bestBid = Number(bookRows.bids[0]?.price ?? market?.price ?? 0);
   const spread = Math.abs(bestAsk - bestBid);
   const spreadPct = (spread / bestAsk) * 100;
   const mlBalance = assets.find((a) => a.sym === 'ML')?.amt ?? 0;
   const bookIsStale = bookLoadedAt > 0 && Date.now() - bookLoadedAt > BOOK_STALE_MS;
 
-  /** Ticket submit: guards first, then the order flows. Real mode runs the
-   *  full pipeline (device-pending and config-pending states surface
-   *  honestly); mock mode runs the demo pipeline labelled as demo. */
+  /** Ticket submit: the give/ask legs follow the selected side (buy: the
+   *  USDT token is given and ML is asked; sell: the inverse), guards run
+   *  first, and the order flows run last. Real mode runs the full pipeline
+   *  (device-pending and config-pending states surface honestly); mock
+   *  mode runs the demo pipeline labelled as demo. */
   const placeOrder = async () => {
     setTicketError(null);
-    const guard = checkAmounts({ giveDecimal: amount, askDecimal: total });
+    if (market === null) {
+      setTicketError(t('errors.price.unavailable'));
+      return;
+    }
+    if (orderType !== 'Limit') {
+      setTicketError(t('dex.order.typeUnsupported'));
+      return;
+    }
+    const buy = side === 'buy';
+    const guard = checkAmounts({ giveDecimal: buy ? total : amount, askDecimal: buy ? amount : total });
     if (!guard.ok) {
-      setTicketError(t('dex.order.place'));
+      setTicketError(t('dex.order.badAmount'));
       return;
     }
     // Slippage guard versus the live book mid (the ticket prices at the
@@ -131,17 +149,19 @@ export function DexScreen() {
         return;
       }
     }
+    // Tickers are not unique (F6): placement refuses instead of guessing
+    // which token id the user meant.
     if (askTokenIds.length !== 1) {
-      setTicketError(t('errors.orders.notMine'));
+      setTicketError(t('dex.order.ambiguousTicker'));
       return;
     }
     setPlacing(true);
     try {
       await orders.createOrder({
-        giveTokenId: COIN_REF,
-        giveAtoms: decimalsToAtoms(amount, ML_DECIMALS),
-        askTokenId: askTokenIds[0],
-        askAtoms: decimalsToAtoms(total, askMeta.decimals || ML_DECIMALS),
+        giveTokenId: buy ? askTokenIds[0] : COIN_REF,
+        giveAtoms: buy ? decimalsToAtoms(total, askMeta.decimals || ML_DECIMALS) : decimalsToAtoms(amount, ML_DECIMALS),
+        askTokenId: buy ? COIN_REF : askTokenIds[0],
+        askAtoms: buy ? decimalsToAtoms(amount, ML_DECIMALS) : decimalsToAtoms(total, askMeta.decimals || ML_DECIMALS),
       });
       setConfirmOpen(false);
       setLastDemoNote(mode === 'mock' ? t('dex.order.demo') : null);
@@ -154,18 +174,50 @@ export function DexScreen() {
     }
   };
 
+  /** Fill preview: payout from the order legs (the same math the flow
+   *  applies) and the effective ask-per-give price, checked against the
+   *  book mid before the fill executes; the flow re-checks the band. */
+  const openFill = (order: OrderData) => {
+    const mid = (bestAsk + bestBid) / 2;
+    const payout = proportionalGivePayout(order.giveBalanceAtoms, order.askBalanceAtoms, order.askBalanceAtoms);
+    const fillDecimal = Number(atomsToDecimal(order.askBalanceAtoms, askMeta.decimals));
+    const payoutDecimal = Number(atomsToDecimal(payout, ML_DECIMALS));
+    const effective = payoutDecimal > 0 ? fillDecimal / payoutDecimal : 0;
+    setFillSheet({ order, payout, effective: effective.toFixed(4), mid: mid.toFixed(4) });
+  };
+
+  const runFill = async () => {
+    if (!fillSheet) return;
+    setPlacing(true);
+    try {
+      await orders.fillOrder({
+        orderId: fillSheet.order.orderId,
+        fillAtoms: fillSheet.order.askBalanceAtoms,
+        destination: fillSheet.order.concludeDestination,
+        priceBand: { midDecimal: fillSheet.mid, maxSlippagePct: MAX_SLIPPAGE_PCT, askDecimals: askMeta.decimals, giveDecimals: ML_DECIMALS },
+      });
+      setFillSheet(null);
+      void loadMyOrders();
+    } catch (e) {
+      setFillSheet(null);
+      setTicketError(orderErrorCopy(e));
+    } finally {
+      setPlacing(false);
+    }
+  };
+
   return (
     <Screen>
       <View className="px-5 flex-row items-center justify-between">
         <View>
           <View className="flex-row items-center gap-2">
-            <Txt className="text-[18px] font-bold">{market.pair}</Txt>
+            <Txt className="text-[18px] font-bold">{'ML/USDT'}</Txt>
             <Chip tone={C.teal} dot={false}>
               {t('dex.badge')}
             </Chip>
           </View>
           <Txt mono className="text-[11px] text-text2 mt-0.5">
-            {market.volume}
+            {market?.volume ?? ''}
           </Txt>
         </View>
         <IconBtn name="chart" label={t('dex.fullChart')} />
@@ -174,6 +226,9 @@ export function DexScreen() {
       {/* Price + candles */}
       <View className="px-5 pt-5">
         <Card grad={G.raisedTeal} className="p-4">
+          {market === null ? (
+            <Txt className="text-[12px] text-text2">{t('errors.price.unavailable')}</Txt>
+          ) : (
           <View className="flex-row justify-between items-end">
             <View>
               <Label>{t('dex.lastPrice')}</Label>
@@ -200,6 +255,7 @@ export function DexScreen() {
               </Txt>
             </View>
           </View>
+          )}
 
           <View className="mt-3">
             <Candles candles={candles} />
@@ -301,13 +357,19 @@ export function DexScreen() {
           />
 
           <View className="gap-2">
-            <Field label={t('dex.price')} value={market.price.toFixed(4)} unit="USDT" />
+            <Field label={t('dex.price')} value={market !== null ? market.price.toFixed(4) : '-'} unit="USDT" />
             <Field label={t('common.amount')} value={amount} unit="ML" onChangeText={setAmount} />
             <PctButtons onPick={(f) => setAmount(String(Math.round(mlBalance * f)))} />
             <Field label={t('common.total')} value={total} unit="USDT" tone={C.text1} />
           </View>
 
-          <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-3.5" disabled={placing} onPress={() => setConfirmOpen(true)}>
+          {orderType !== 'Limit' && (
+            <Txt className="text-[11px] mt-2" style={{ color: C.amber }}>
+              {t('dex.order.typeUnsupported')}
+            </Txt>
+          )}
+
+          <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-3.5" disabled={placing || market === null || orderType !== 'Limit'} onPress={() => setConfirmOpen(true)}>
             {t('dex.order.place')}
           </Btn>
           {ticketError && (
@@ -322,7 +384,7 @@ export function DexScreen() {
           )}
 
           <View className="mt-3 gap-1">
-            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue', { fee: String(fees.standard.cost), usd: `$${usd(fees.standard.cost, market.price)}` })} />
+            <KVRow k={t('common.networkFee')} v={t('dex.networkFeeValue', { fee: String(fees.standard.cost), usd: market !== null ? `$${usd(fees.standard.cost, market.price)}` : '-' })} />
             <KVRow k={t('dex.onchainSettlement')} v={t('dex.settlementEta')} tone={C.teal} />
           </View>
         </Card>
@@ -338,7 +400,7 @@ export function DexScreen() {
             </Txt>
           )}
           {myOrders !== null && myOrders.length === 0 && (
-            <Txt className="text-[11px] text-text2 mt-2">{t('swap.session.empty')}</Txt>
+            <Txt className="text-[11px] text-text2 mt-2">{t('dex.orders.empty')}</Txt>
           )}
           {myOrders?.map((order) => (
             <MyOrderRow
@@ -346,6 +408,7 @@ export function DexScreen() {
               order={order}
               onDone={() => void loadMyOrders()}
               onError={setTicketError}
+              onFill={openFill}
             />
           ))}
         </Card>
@@ -355,19 +418,42 @@ export function DexScreen() {
           built (spec order entry guards). */}
       <Sheet open={confirmOpen} onClose={() => setConfirmOpen(false)} title={t('dex.order.confirm.title')}>
         <View className="gap-2">
-          <KVRow k={t('dex.order.give')} v={`${amount} ML`} />
-          <KVRow k={t('dex.order.ask')} v={`${total} USDT`} />
+          <KVRow k={t('dex.order.give')} v={side === 'buy' ? `${total} USDT` : `${amount} ML`} />
+          <KVRow k={t('dex.order.ask')} v={side === 'buy' ? `${amount} ML` : `${total} USDT`} />
           <KVRow k={t('dex.book.asks')} v={bestAsk ? bestAsk.toFixed(4) : '-'} />
           <KVRow k={t('dex.book.bids')} v={bestBid ? bestBid.toFixed(4) : '-'} />
         </View>
         {mode === 'mock' && (
           <Txt className="text-[11px] mt-3" style={{ color: C.amber }}>
-            {t('bridge.dev.mockBanner')}
+            {t('dex.dev.demoBanner')}
           </Txt>
         )}
         <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-4" disabled={placing} onPress={() => void placeOrder()}>
           {placing ? t('swap.state.pending') : t('dex.order.place')}
         </Btn>
+      </Sheet>
+
+      {/* Fill confirmation: the payout preview and the effective price
+          before anything is built (spec order entry guards). */}
+      <Sheet open={fillSheet !== null} onClose={() => setFillSheet(null)} title={t('dex.fill.confirm.title')}>
+        {fillSheet && (
+          <>
+            <View className="gap-2">
+              <KVRow k={t('dex.fill.pay')} v={`${atomsToDecimal(fillSheet.order.askBalanceAtoms, askMeta.decimals)} USDT`} />
+              <KVRow k={t('dex.fill.receive')} v={`${atomsToDecimal(fillSheet.payout, ML_DECIMALS)} ML`} />
+              <KVRow k={t('dex.fill.effective')} v={`${fillSheet.effective} USDT/ML`} />
+              <KVRow k={t('dex.book.mid')} v={fillSheet.mid} />
+            </View>
+            {Number(fillSheet.effective) > 0 && Number(fillSheet.mid) > 0 && (Math.abs(Number(fillSheet.effective) - Number(fillSheet.mid)) / Number(fillSheet.mid)) * 100 > MAX_SLIPPAGE_PCT && (
+              <Txt className="text-[11px] mt-3" style={{ color: C.red }}>
+                {t('dex.fill.slippageWarn', { drift: ((Math.abs(Number(fillSheet.effective) - Number(fillSheet.mid)) / Number(fillSheet.mid)) * 100).toFixed(2) })}
+              </Txt>
+            )}
+            <Btn tone="green" className="mt-4" disabled={placing} onPress={() => void runFill()}>
+              {placing ? t('swap.state.pending') : t('dex.fill.cta')}
+            </Btn>
+          </>
+        )}
       </Sheet>
     </Screen>
   );
@@ -381,12 +467,15 @@ function orderErrorCopy(e: unknown): string {
   if (record && typeof record.reason === 'string') {
     if (record.reason === 'broadcast-disabled') return t('dex.order.broadcastOff');
     if (record.reason === 'not-mine') return t('errors.orders.notMine');
-    if (record.reason === 'busy') return t('swap.state.pending');
+    if (record.reason === 'not-open') return t('errors.orders.notOpen');
+    if (record.reason === 'overbid') return t('errors.orders.overbid');
+    if (record.reason === 'slippage') return t('errors.orders.slippage');
+    if (record.reason === 'busy') return t('dex.order.busy');
   }
   return t('dex.book.error');
 }
 
-function MyOrderRow({ order, onDone, onError }: { order: OrderData; onDone: () => void; onError: (message: string) => void }) {
+function MyOrderRow({ order, onDone, onError, onFill }: { order: OrderData; onDone: () => void; onError: (message: string) => void; onFill: (order: OrderData) => void }) {
   const { orders } = useProviders();
   const phase = orderPhase(order);
   const [busy, setBusy] = useState(false);
@@ -420,8 +509,8 @@ function MyOrderRow({ order, onDone, onError }: { order: OrderData; onDone: () =
             tone="ghost"
             className="flex-1"
             disabled={busy}
-            onPress={() => void run(() => orders.fillOrder({ orderId: order.orderId, fillAtoms: order.askBalanceAtoms, destination: order.concludeDestination }))}>
-            {t('dex.fill.amount')}
+            onPress={() => onFill(order)}>
+            {t('dex.fill.cta')}
           </Btn>
           <Btn
             tone="red"

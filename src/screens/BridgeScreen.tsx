@@ -223,7 +223,7 @@ export function BridgeScreen() {
                 {quote.confirmationsRequired !== undefined && (
                   <KVRow k={t('bridge.quote.confirmations')} v={String(quote.confirmationsRequired)} />
                 )}
-                {receiveAmount !== null && <KVRow k={t('bridge.success.title')} v={`${receiveAmount} ${token}`} />}
+                {receiveAmount !== null && <KVRow k={t('bridge.quote.receive')} v={`${receiveAmount} ${token}`} />}
                 <KVRow k={t('bridge.quote.depositAddress')} v={`${quote.destContractOrAddress.slice(0, 18)}…`} />
               </>
             )}

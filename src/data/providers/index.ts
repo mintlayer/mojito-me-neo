@@ -170,10 +170,10 @@ export function createProviders(mode: ProviderMode = readDataMode()): Providers 
 }
 
 export type {
-  ActivityRow, AssetRow, BookLevel, BridgeChain, BridgeHandle, BridgeProvider, BridgeQuote,
-  BridgeQuoteLine, BridgeQuoteRequest, BridgeRouteStep, BridgeState, BroadcastProvider, Candle,
-  CandleInterval, CardFeature, CardTier, Contact, DappsSummary, FeeSchedule, FeeTierId, HtlcStep,
+  ActivityRow, AssetRow, BridgeHandle, BridgeProvider, BridgeQuote,
+  BridgeQuoteRequest, BridgeState, BroadcastProvider, Candle,
+  CandleInterval, CardFeature, CardTier, Contact, DappsSummary, FeeSchedule, FeeTierId,
   MarketSummary, MlTxStatus, NftRow, SendQuote, SendQuoteLeg, SendResult, SendService,
   Portfolio, PricePoint, PriceProvider, PriceRange, PriceSnapshot, Profile, ProviderMode,
-  Providers, SwapStat, TxStatusInfo, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
+  Providers, TxStatusInfo, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
 } from './types';

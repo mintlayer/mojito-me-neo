@@ -316,7 +316,7 @@ function stateTone(state: SwapState): string {
   }
 }
 
-/** The four protocol steps (spec: HTLC_STEPS becomes a live StepState). */
+/** The four protocol steps (the M0 HTLC_STEPS fixture became these live session steps). */
 function stepsFor(session: SwapSessionRow): { label: string; detail: string; state: StepState; note?: string }[] {
   const done = session.state === 'settled' || session.state === 'refunded';
   const lockState: StepState = session.state === 'offered' ? 'active' : 'done';

@@ -27,6 +27,7 @@ async function main() {
   assert.equal(activity.length, 2);
 
   const market = await providers.data.getMarket('ML/USDT');
+  assert.ok(market, 'the mock fixture market stays non-null');
   assert.equal(market.pair, 'ML/USDT');
 
   const snapshots = await providers.data.getPrices(['ML']);
@@ -102,7 +103,9 @@ async function main() {
   // btcBase is unconfigured (F13), so Bitcoin is not listed as connected and
   // only Mintlayer counts as an active network.
   assert.deepEqual(await real.data.getNetworks(), ['Mintlayer']);
-  assert.equal((await real.data.getMarket('ML/USDT')).pair, 'ML/USDT');
+  const realMarket = await real.data.getMarket('ML/USDT');
+  assert.ok(realMarket, 'the R1 mock price source serves the ML snapshot, so the header stays live');
+  assert.equal(realMarket.pair, 'ML/USDT');
   // M4: the real bridge provider carries the R5 gates; E2M is refused
   // typed before any network call (no EVM signer, scoped decision open).
   await assert.rejects(

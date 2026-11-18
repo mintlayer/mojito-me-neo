@@ -3,7 +3,6 @@
 
 import type { ActivityRow, AssetRow, CandleInterval, PriceRange } from './data/providers/types';
 import type { IconName } from './ui/icons';
-import type { StepState } from './ui/StepState';
 import type { ChainName, Tone } from './theme';
 
 export const PROFILE = {
@@ -77,48 +76,15 @@ export const BIDS = [
 
 export const TIMEFRAMES: CandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
-/* ── Swap ────────────────────────────────────────────────── */
+/* ── Bridge ───────────────────────────────────────── */
 
-export const HTLC_STEPS = [
-  { label: 'Initiate swap', detail: 'Generate secret hash · lock 0.025 BTC', state: 'done' },
-  { label: 'Counterparty matched', detail: 'Mintlayer node locks 7,012.45 ML', state: 'done' },
-  { label: 'Reveal preimage on Mintlayer', detail: 'Claim ML, hash exposed onchain', state: 'active', note: '~3 min' },
-  { label: 'Counterparty claims BTC', detail: 'Settles atomically', state: 'pending' },
-] satisfies { label: string; detail: string; state: StepState; note?: string }[];
-
-export const SWAP_STATS = [
-  ['Rate', '1 BTC = 280,498 ML'],
-  ['Slippage', '0.18%'],
-  ['Timelock', '24h refund'],
-  ['Est. time', '~18 min'],
-] satisfies [string, string][];
-
-/* ── Bridge ──────────────────────────────────────────────── */
-
-// M4 (F14, R5): the real bridge scope is exactly Ethereum and Mintlayer;
-// the EVM demo chains of the M0 design (Arbitrum, Polygon, BNB) are gone
-// and the E2M direction is disabled with explanatory copy (R5: no EVM
-// signer; scoped decision open, never silently dropped).
-export const BRIDGE_CHAINS = [
-  { name: 'Mintlayer', sym: 'ML' },
-  { name: 'Ethereum', sym: 'ETH' },
-] satisfies { name: ChainName; sym: string }[];
-
-/** Ethereum-side mint contract shown in the route and the bridge fixture. */
+/** Ethereum-side mint contract shown in the bridge fixture quote. The
+ *  swap/bridge fixture rows of the M0 design (HTLC_STEPS, SWAP_STATS,
+ *  BRIDGE_CHAINS, BRIDGE_ROUTE, BRIDGE_QUOTE) died with the M4 live
+ *  trade seams: the screens run the real session steps, the order book
+ *  service and the bridge_v2 provider, so the fixture rows are deleted
+ *  rather than kept as forward-declared API. */
 export const BRIDGE_CONTRACT = '0xA1c2…F39e';
-
-export const BRIDGE_ROUTE = [
-  { label: 'Lock on Mintlayer', detail: 'ml deposit to the bridge treasury', icon: 'lock', eta: '~15s' },
-  { label: 'Validator attestation', detail: 'agent majority signs the intent', icon: 'shield', eta: '~12 confirmations' },
-  { label: 'Mint on Ethereum', detail: `${BRIDGE_CONTRACT} (wrapped asset)`, icon: 'flash', eta: '~1 min' },
-] satisfies { label: string; detail: string; icon: IconName; eta: string }[];
-
-export const BRIDGE_QUOTE = [
-  ['Bridge fee', '0.15% · $0.75'],
-  ['Est. time', '~65 sec'],
-  ['You receive', '499.25 USDT'],
-  ['Gas (ETH)', '0.00012 ETH'],
-] satisfies [string, string][];
 
 /* ── Card ────────────────────────────────────────────────── */
 

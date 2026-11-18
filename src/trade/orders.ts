@@ -27,10 +27,25 @@ import type { KeySession } from '../keys/session';
 import { mlAddressAt, mlPrivateKeyFromSeed, mlXpubFromSeed, type MlBranch } from '../keys/mlAccounts';
 import { selectMlInputs, type EstimatedMlOutput, type SelectedMlInput } from '../send/MlTxBuilder';
 import { BroadcastError } from '../data/providers/BroadcastProvider';
+import { checkSlippage } from './priceGuards';
 
 /** Sentinel marking the base coin (give_token '0' in the F11 docs model;
  *  the bindings OrderParams spelling is 'coin'). */
 export const COIN_REF = 'coin' as const;
+
+/** Fractional digits kept when flattening the effective fill price
+ *  (display-scale comparison against the book mid; no float money math). */
+const EFFECTIVE_PRICE_DIGITS = 8;
+
+/** num/denom as a decimal string at fixed digits, pure BigInt. */
+function rationalDecimal(num: bigint, denom: bigint): string {
+  if (denom <= 0n) throw new OrderFlowError('rejected', 'the effective price is not computable');
+  const scaled = (num * 10n ** BigInt(EFFECTIVE_PRICE_DIGITS)) / denom;
+  const text = scaled.toString().padStart(EFFECTIVE_PRICE_DIGITS + 1, '0');
+  const int = text.slice(0, text.length - EFFECTIVE_PRICE_DIGITS);
+  const frac = text.slice(text.length - EFFECTIVE_PRICE_DIGITS);
+  return frac.length > 0 ? `${int}.${frac}` : int;
+}
 
 export type OrderData = {
   orderId: string;
@@ -81,8 +96,9 @@ export interface OrderFlows {
    *  bindings on the create tx output. */
   createOrder(params: { giveTokenId: string; giveAtoms: string; askTokenId: string; askAtoms: string }): Promise<{ txId: string; orderId: string }>;
   /** Pay fillAtoms of the ask currency into an order; the proportional
-   *  give payout lands on destination. */
-  fillOrder(params: { orderId: string; fillAtoms: string; destination: string }): Promise<{ txId: string }>;
+   *  give payout lands on destination. The price band re-checks the
+   *  effective fill price against the book mid before anything is built. */
+  fillOrder(params: { orderId: string; fillAtoms: string; destination: string; priceBand: PriceBand }): Promise<{ txId: string }>;
   /** Close an order (maker only) and return the leftovers to the conclude
    *  destination. */
   concludeOrder(params: { orderId: string }): Promise<{ txId: string }>;
@@ -92,6 +108,17 @@ export interface OrderFlows {
   /** Orders whose conclude destination is one of this wallet's addresses. */
   myOrders(): Promise<OrderData[]>;
 }
+
+/** Slippage band for the fill: the effective price computed from the
+ *  fetched order must stay within maxSlippagePct of the book mid. The
+ *  decimals are the display decimals of the two currencies, because the
+ *  effective price crosses two atom scales. */
+export type PriceBand = {
+  midDecimal: string;
+  maxSlippagePct: number;
+  askDecimals: number;
+  giveDecimals: number;
+};
 
 export type OrderFlowsConfig = {
   network: MlNetwork;
@@ -121,7 +148,7 @@ const ORIGIN_WALK_LIMIT = 512;
 
 export class OrderFlowError extends Error {
   constructor(
-    readonly reason: 'rejected' | 'busy' | 'not-open' | 'overbid' | 'not-mine' | 'broadcast-disabled',
+    readonly reason: 'rejected' | 'busy' | 'not-open' | 'overbid' | 'not-mine' | 'slippage' | 'broadcast-disabled',
     detail?: string,
   ) {
     super(detail ?? `order flow rejected: ${reason}`);
@@ -348,7 +375,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
       });
     },
 
-    async fillOrder({ orderId, fillAtoms, destination }) {
+    async fillOrder({ orderId, fillAtoms, destination, priceBand }) {
       return serialize(async () => {
         requireAtomAmount(fillAtoms);
         const info = await cfg.indexer.order(orderId);
@@ -360,7 +387,21 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
         // indexer serves them, current balances on fully-unfilled orders).
         const giveLeg = BigInt(info.initiallyGiven?.atoms ?? order.giveBalanceAtoms);
         const askLeg = BigInt(info.initiallyAsked?.atoms ?? order.askBalanceAtoms);
+        if (giveLeg <= 0n || askLeg <= 0n) throw new OrderFlowError('rejected', 'the order legs are not a usable price');
         const givePayout = ((giveLeg * BigInt(fillAtoms)) / askLeg).toString();
+
+        // Effective fill price (ask units per give unit) from the fetched
+        // order, re-checked against the book mid inside the user band
+        // before any transaction is built: a stale or hostile book must
+        // not silently price the fill.
+        const effective = rationalDecimal(
+          BigInt(fillAtoms) * 10n ** BigInt(priceBand.giveDecimals),
+          BigInt(givePayout) * 10n ** BigInt(priceBand.askDecimals),
+        );
+        const band = checkSlippage({ limitDecimal: effective, midDecimal: priceBand.midDecimal, maxSlippagePct: priceBand.maxSlippagePct });
+        if (!band.ok) {
+          throw new OrderFlowError('slippage', `the effective fill price ${effective} sits past the ${priceBand.maxSlippagePct}% band around the mid ${priceBand.midDecimal}`);
+        }
 
         const utxos = await fetchUtxos();
         const changeAddress = await cfg.allocateChangeAddress();

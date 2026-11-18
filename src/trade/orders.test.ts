@@ -32,6 +32,10 @@ const ML = 10n ** 11n;
 const ORDER_ID = bech32m.encode('mordr', bech32m.toWords(new Uint8Array([0xab, 0xcd, 0xef, 0x12])));
 
 const atoms = (ml: bigint): string => (ml * ML).toString();
+/** Band matching the fixture order price (10 ML give, 7 USDT ask: the
+ *  effective fill price is 0.7 ask per give at equal atom scales), so the
+ *  guard tests can vary only the order or the mid. */
+const FILL_BAND = { midDecimal: '0.7', maxSlippagePct: 1, askDecimals: 11, giveDecimals: 11 };
 
 function fakeBindings(): MintlayerBindings & {
   witnesses: WitnessParams[];
@@ -311,7 +315,7 @@ async function main() {
     const askUtxo = tokenUtxo('cc'.repeat(32), 0, VECTOR_ADDRESS, atoms(4n));
     const h = harness({ detail, utxos: [coinUtxo('aa'.repeat(32), 0, VECTOR_ADDRESS, atoms(500n)), askUtxo] });
     const destination = await mlAddressAt(account.xpub, 0, 1, 'mainnet');
-    const result = await h.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(3n), destination });
+    const result = await h.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(3n), destination, priceBand: { midDecimal: '0.7', maxSlippagePct: 1, askDecimals: 11, giveDecimals: 11 } });
     assert.match(result.txId, /^[0-9a-f]{64}$/);
     assert.equal(h.bindings.fillCalls.length, 1);
     assert.equal(h.bindings.fillCalls[0].amount, atoms(3n));
@@ -347,21 +351,41 @@ async function main() {
     const frozen = orderRow({ frozen: true });
     const h = harness({ detail: frozen });
     await assert.rejects(
-      () => h.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS }),
+      () => h.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS, priceBand: FILL_BAND }),
       (e: unknown) => e instanceof OrderFlowError && e.reason === 'not-open',
     );
     const concluded = orderRow({ giveBalance: { atoms: '0' }, askBalance: { atoms: '0' } });
     const h2 = harness({ detail: concluded });
     await assert.rejects(
-      () => h2.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS }),
+      () => h2.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS, priceBand: FILL_BAND }),
       (e: unknown) => e instanceof OrderFlowError && e.reason === 'not-open',
     );
     const overbid = orderRow({ askBalance: { atoms: atoms(1n) } });
     const h3 = harness({ detail: overbid });
     await assert.rejects(
-      () => h3.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(2n), destination: VECTOR_ADDRESS }),
+      () => h3.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(2n), destination: VECTOR_ADDRESS, priceBand: FILL_BAND }),
       (e: unknown) => e instanceof OrderFlowError && e.reason === 'overbid',
     );
+    // A hostile order row with a zero ask leg refuses typed instead of
+    // crashing the division.
+    const zeroLeg = orderRow({ askBalance: { atoms: atoms(1n) }, initiallyAsked: { atoms: '0' } });
+    const h4 = harness({ detail: zeroLeg });
+    await assert.rejects(
+      () => h4.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS, priceBand: FILL_BAND }),
+      (e: unknown) => e instanceof OrderFlowError && e.reason === 'rejected',
+    );
+    // The effective price re-check: an order priced far from the book mid
+    // refuses typed before any transaction is built.
+    const offBook = orderRow({ initiallyGiven: { atoms: atoms(10n) }, initiallyAsked: { atoms: atoms(1n) } });
+    const h5 = harness({ detail: offBook });
+    await assert.rejects(
+      () => h5.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS, priceBand: { midDecimal: '0.7', maxSlippagePct: 1, askDecimals: 11, giveDecimals: 11 } }),
+      (e: unknown) => e instanceof OrderFlowError && e.reason === 'slippage',
+    );
+    // The same order inside the band passes the guard and builds.
+    const inBand = harness({ detail: offBook, utxos: [coinUtxo('aa'.repeat(32), 0, VECTOR_ADDRESS, atoms(500n)), tokenUtxo('dd'.repeat(32), 0, VECTOR_ADDRESS, atoms(4n))] });
+    const filled = await inBand.flows.fillOrder({ orderId: ORDER_ID, fillAtoms: atoms(1n), destination: VECTOR_ADDRESS, priceBand: { midDecimal: '0.1', maxSlippagePct: 1, askDecimals: 11, giveDecimals: 11 } });
+    assert.match(filled.txId, /^[0-9a-f]{64}$/);
   }
 
   // 5. concludeOrder: foreign conclude destination refuses as not-mine; the

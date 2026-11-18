@@ -85,7 +85,8 @@ async function main() {
   }
 
   // The persisted JSON carries the secret hash only: the raw preimage
-  // bytes must never appear in storage.
+  // bytes must never appear in storage, and the offer rides its scalar
+  // persisted form (no byte fields that JSON would mangle into objects).
   {
     const backend = memoryStorage();
     const store = createSwapSessionStore(backend.storage);
@@ -94,6 +95,20 @@ async function main() {
     assert.ok(json.includes(bytesToHex(new Uint8Array(32).fill(0x21))), 'the secret hash persists');
     assert.ok(!json.includes('preimage'), 'no preimage field ever persists');
     assert.ok(!('secret' in JSON.parse(json)[0].offer));
+    const savedOffer = JSON.parse(json)[0].offer;
+    assert.deepEqual(Object.keys(savedOffer).sort(), ['giveAtoms', 'giveChain', 'role', 'timelockSeconds', 'wantAtoms'], 'the offer persists in its scalar form');
+  }
+
+  // Round-trip: the restored row rebuilds the secret hash bytes from the
+  // persisted hex (Uint8Array, not a JSON object map).
+  {
+    const backend = memoryStorage();
+    const store = createSwapSessionStore(backend.storage);
+    await store.save(row({ state: 'locked' }));
+    const restored = (await store.all())[0];
+    assert.ok(restored.offer.secretHash instanceof Uint8Array, 'secretHash is rebuilt as bytes');
+    assert.equal(bytesToHex(restored.offer.secretHash), bytesToHex(new Uint8Array(32).fill(0x21)));
+    assert.equal(restored.offer.timelockSeconds, 172800);
   }
 
   // Corrupt stores drop bad rows instead of wedging the machine: garbage
@@ -106,13 +121,21 @@ async function main() {
   const badHash = row({ id: 'bad-hash', secretHashHex: 'zz' });
   const badLockTx = row({ id: 'bad-locktx', lockTxHex: 'not-hex!' });
   const badState = row({ id: 'bad-state', state: 'cancelled' as SwapState });
+  const badTimelock = row({ id: 'bad-timelock', offer: { ...OFFER, timelockSeconds: Number.NaN } });
+  const badOfferShape = row({ id: 'bad-offer', offer: { ...OFFER, role: 'attacker' as never } });
   const tooManyTxIds = row({ id: 'bad-txids', txIds: Array.from({ length: 20 }, () => 'aa') });
-  const mixed = JSON.stringify([good, badHash, badLockTx, badState, tooManyTxIds]);
+  const mixed = JSON.stringify([good, badHash, badLockTx, badState, badTimelock, badOfferShape, tooManyTxIds]);
   const parsed = parseSwapSessions(mixed);
   assert.deepEqual(
     parsed.map((r) => r.id),
     ['swap-1'],
   );
+  // A tampered offer object carrying a mangled byte field is normalized:
+  // the rebuilt bytes come from secretHashHex, not from the stored junk.
+  const tampered = JSON.parse(JSON.stringify(row({ id: 'tampered' })));
+  tampered.offer.secretHash = { 0: 1 };
+  const normalized = parseSwapSessions(JSON.stringify([tampered]))[0];
+  assert.equal(bytesToHex(normalized.offer.secretHash), bytesToHex(new Uint8Array(32).fill(0x21)));
   // Rows persisted before the lock-tx record stay loadable (optional
   // field); they just cannot refund (the screen guards on the bytes).
   const legacy = JSON.parse(JSON.stringify(row({ id: 'legacy' })));
