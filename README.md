@@ -232,7 +232,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs twenty-nine things:
+`npm run check` runs thirty things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -282,14 +282,17 @@ npx tsx src/theme.test.ts
     poll cadence, attempt caps, terminal stop, flaky-read tolerance.
 24. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
     funding across every managed address with fresh branch 1 change, typed busy refusal,
-    broadcast-answer verification, fee pinning, quote purity, post-broadcast warning.
-25. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+    broadcast-answer verification, fee pinning, quote purity, post-broadcast warning, the
+    origin walk over long change histories and the failed-send change release.
+25. **`src/data/mock/mockSend.test.ts`**: the R3 demo send path: fixture fee tiers, the same
+    address and amount validation rejections and deterministic demo-labelled ids.
+26. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
     release semantics, xpub parity.
-26. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+27. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
     modules (keys, storage, data, onboarding).
-27. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-28. **`tsc --noEmit`**: strict TypeScript.
-29. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+28. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+29. **`tsc --noEmit`**: strict TypeScript.
+30. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most

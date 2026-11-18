@@ -1,6 +1,7 @@
 // Provider switch self-check: mock mode returns today's fixture shapes;
-// real mode answers the fixture seams, and the service gates cover the
-// data calls themselves.
+// real mode builds the real services (fixture-backed seams only where a
+// milestone is still deferred), and the service gates cover the data calls
+// themselves.
 //   npx tsx src/data/providers/providers.test.ts
 import { strict as assert } from 'node:assert/strict';
 
