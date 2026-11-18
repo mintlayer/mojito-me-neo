@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
 import { t, type I18nKey } from '../i18n';
 import { currentNetwork, endpointsFor } from '../config/endpoints';
 import { devFallbackAllowed } from '../config/runtime';
-import { useData, useProviders } from '../data/providers/context';
+import { useData, useDataState, useProviders } from '../data/providers/context';
 import type { WaitlistPhase } from '../waitlist/WaitlistForm';
 import { WaitlistForm, maskEmail } from '../waitlist/WaitlistForm';
 import { C, G, alpha, black } from '../theme';
@@ -13,12 +13,12 @@ import { Btn, Callout, Card, Chip, Divider, Enter, Float, IconTile, Label, Progr
 
 export function CardScreen() {
   const providers = useProviders();
-  const waitlistCount = useData((d) => d.getWaitlist());
   const cardFeatures = useData((d) => d.getCardFeatures());
   const cardTiers = useData((d) => d.getCardTiers());
   // One machine per screen instance, rebuilt if the provider handle swaps
-  // (network switch rebuilds the provider set without remounting screens);
-  // the draft resets with it, while the sealed store itself persists.
+  // (network switch rebuilds the provider set without remounting screens).
+  // The machine starts fresh on a swap, so the effect below resets the
+  // screen-local mirror with it; the sealed store itself persists.
   const form = useMemo(() => new WaitlistForm(providers.waitlist), [providers.waitlist]);
   const [email, setEmailDraft] = useState('');
   const [phase, setPhase] = useState<WaitlistPhase>('idle');
@@ -26,16 +26,37 @@ export function CardScreen() {
   /** The full-screen confirmation view (SuccessScreen); the card view stays
    *  underneath it so Done returns to the same screen state. */
   const [view, setView] = useState<'card' | 'confirm'>('card');
+  // Bumped after a successful join so the counter gauge re-reads with the
+  // new local slot instead of going stale until the next remount.
+  const [counterRefresh, setCounterRefresh] = useState(0);
+  const { data: waitlistCount } = useDataState((d) => d.getWaitlist(), counterRefresh);
+
+  // The useStates above survive a provider swap while the machine does not:
+  // without this reset the field would show a draft the fresh machine never
+  // saw, and a stale duplicate callout or confirmation view could survive
+  // the swap.
+  useEffect(() => {
+    setEmailDraft('');
+    setPhase('idle');
+    setBusy(false);
+    setView('card');
+  }, [providers.waitlist]);
 
   if (!waitlistCount || !cardFeatures || !cardTiers) return <Screen />;
   const blackTier = cardTiers.find((tier) => tier.id === 'black');
 
-  const confirmationEmail = form.duplicateEmail ?? form.email;
+  // The confirmation copy names the address the submit sent (frozen in the
+  // machine at submit time, so a mid-flight edit cannot rename the join)
+  // and is masked everywhere per the M5 redaction rule.
+  const confirmationEmail = form.duplicateEmail ?? form.submittedEmail ?? form.email;
   const openConfirmation = () => setView('confirm');
   const finishPhase = (next: WaitlistPhase) => {
     setBusy(false);
     setPhase(next);
-    if (next === 'done') openConfirmation();
+    if (next === 'done') {
+      setCounterRefresh((k) => k + 1);
+      openConfirmation();
+    }
   };
   // Same handler for the primary button and the email field's return key.
   const submit = () => {
@@ -61,8 +82,8 @@ export function CardScreen() {
         title={t('card.waitlist.success.title')}
         description={
           position !== null
-            ? t('card.waitlist.success.body', { position: position.toLocaleString(), email: confirmationEmail })
-            : t('card.waitlist.success.noPosition', { email: confirmationEmail })
+            ? t('card.waitlist.success.body', { position: position.toLocaleString(), email: maskEmail(confirmationEmail) })
+            : t('card.waitlist.success.noPosition', { email: maskEmail(confirmationEmail) })
         }
         onDone={() => setView('card')}
       />

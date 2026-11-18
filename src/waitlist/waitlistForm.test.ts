@@ -149,6 +149,31 @@ async function main() {
   assert.deepEqual(slowJoinCalls, ['slow@example.com']);
   assert.equal(slowForm.joinedPosition, 1);
 
+  // Submit-during-edit race: the outgoing address is frozen at submit time,
+  // so retyping while the join is in flight cannot rename the confirmation
+  // copy (the screen renders submittedEmail, not the live draft).
+  const releaseRace: { resolveJoin: () => void } = { resolveJoin: () => undefined as void };
+  const raceCalls: string[] = [];
+  const raceProvider: WaitlistProvider = {
+    join: (email) =>
+      new Promise<WaitlistResult>((resolve) => {
+        releaseRace.resolveJoin = () => resolve({ ok: true, position: 9 });
+        raceCalls.push(email);
+      }),
+    status: async () => ({ joined: false, email: null, position: null }),
+    leave: async () => undefined,
+  };
+  const raceForm = new WaitlistForm(raceProvider);
+  raceForm.setEmail('first@example.com');
+  const flight = raceForm.submit();
+  raceForm.setEmail('second@example.com');
+  assert.equal(raceForm.currentPhase, 'submitting', 'the flight keeps the phase while the draft edits');
+  releaseRace.resolveJoin();
+  assert.equal(await flight, 'done');
+  assert.deepEqual(raceCalls, ['first@example.com']);
+  assert.equal(raceForm.submittedEmail, 'first@example.com', 'the confirmation names the sent address, not the edited draft');
+  assert.equal(raceForm.email, 'second@example.com', 'the draft itself still holds the edit');
+
   console.log('waitlist form: ok');
 }
 

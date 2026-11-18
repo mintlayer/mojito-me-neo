@@ -3,8 +3,14 @@
 //   npx tsx src/data/providers/WaitlistProvider.test.ts
 import { strict as assert } from 'node:assert/strict';
 
-import { createHttpWaitlistProvider, createWaitlistProvider } from './WaitlistProvider';
+import { createHttpWaitlistProvider, createWaitlistProvider, LocalWaitlistShipBlockerError } from './WaitlistProvider';
 import type { FetchLike } from '../transport';
+
+/** Metro folds __DEV__ to false in release builds; the Node gate folds it
+ *  here to exercise the same policy branch in devFallbackAllowed(). */
+function setRelease(release: boolean): void {
+  (globalThis as { __DEV__?: boolean | undefined }).__DEV__ = release ? false : true;
+}
 
 type RecordedCall = { url: string; method?: string; body?: string };
 
@@ -74,6 +80,18 @@ async function main() {
 
   const selected = createWaitlistProvider({ waitlistBase: 'https://waitlist.example.org' });
   await assert.rejects(() => selected.status(), /member-status route/, 'a configured base selects the HTTP provider');
+
+  // R4 ship blocker (FLAGS.localWaitlistOnly): a release build must refuse
+  // the local-only waitlist instead of constructing it silently; a
+  // configured backend still selects the HTTP provider under the same
+  // policy, and dev builds keep the local store.
+  setRelease(true);
+  assert.throws(() => createWaitlistProvider({ waitlistBase: null }), LocalWaitlistShipBlockerError, 'release construction without a backend is refused');
+  assert.ok(createWaitlistProvider({ waitlistBase: 'https://waitlist.example.org' }), 'a configured base is allowed in a release build');
+  setRelease(false);
+  const devLocal = createWaitlistProvider({ waitlistBase: null });
+  assert.equal((await devLocal.join('dev.build@example.com')).ok, true, 'dev builds keep the local store');
+  await devLocal.leave();
 
   console.log('waitlist providers: ok');
 }

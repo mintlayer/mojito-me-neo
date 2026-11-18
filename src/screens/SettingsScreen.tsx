@@ -80,7 +80,9 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   }, [providers.waitlist]);
 
   // Destructive confirm, same pattern as sign-out: the wipe discards the
-  // sealed email and the waitlist spot on this device.
+  // sealed email and the waitlist spot on this device. A failed wipe
+  // surfaces (mirroring the sign-out wipe error) and the row stays joined:
+  // only a successful leave clears the local state.
   const confirmLeaveWaitlist = () =>
     Alert.alert(
       t('settings.waitlist.leave.confirm.title'),
@@ -94,7 +96,11 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
             void providers.waitlist
               .leave()
               .then(() => setWaitlist({ joined: false, email: null, position: null }))
-              .catch(() => undefined);
+              .catch(() => {
+                // Nothing was erased, so the row above keeps its joined
+                // claim and the failure is surfaced instead of swallowed.
+                Alert.alert(t('settings.waitlist.leave.errorTitle'), t('settings.waitlist.leave.errorBody'));
+              });
           },
         },
       ],

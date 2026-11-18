@@ -363,6 +363,8 @@ export const en = {
   'settings.waitlist.leave': 'Leave the waitlist',
   'settings.waitlist.leave.confirm.title': 'Leave the waitlist?',
   'settings.waitlist.leave.confirm.body': 'This device forgets your email address and waitlist spot. You can join again at any time.',
+  'settings.waitlist.leave.errorTitle': 'Could not leave the waitlist',
+  'settings.waitlist.leave.errorBody': 'Your email could not be erased from this device, so you are still on the list - try again.',
   'settings.support.help': 'Help center',
   'settings.support.contact': 'Contact us',
   'settings.support.terms': 'Terms & privacy',

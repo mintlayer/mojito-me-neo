@@ -6,7 +6,9 @@
 // TODO (SHIP BLOCKER, decision R4, 2026-11-17): v1 ships the waitlist
 // LOCAL-ONLY. This MUST be replaced by a real backend (option A or B) before
 // any production ship; the build must not ship to production with the
-// local-only waitlist. See specs/M5-card.md and missing-architecture gap 4.
+// local-only waitlist. Enforced in createWaitlistProvider: release
+// construction without a configured waitlistBase refuses. See specs/M5-card.md
+// and missing-architecture gap 4.
 //
 // Security note (spec M5): the email is personal data. It is stored sealed
 // on device (src/data/mock/localWaitlist.ts), never logged, never sent
@@ -15,6 +17,8 @@
 // added to this path.
 import { assertHttpsBase, type FetchLike } from '../transport';
 import { createLocalWaitlistProvider } from '../mock/localWaitlist';
+import { FLAGS } from '../../config/endpoints';
+import { devFallbackAllowed } from '../../config/runtime';
 import { normalizeEmail } from '../../waitlist/WaitlistForm';
 import type { EndpointsConfig } from '../../config/endpoints';
 import type { WaitlistMemberStatus, WaitlistProvider, WaitlistResult } from './types';
@@ -28,13 +32,27 @@ export type HttpWaitlistOptions = {
   now?: () => Date;
 };
 
+/** R4 ship blocker enforcement: a production build must never run the
+ *  local-only waitlist, so release construction without a configured
+ *  backend refuses instead of silently shipping the device-local store. */
+export class LocalWaitlistShipBlockerError extends Error {
+  constructor() {
+    super('local-only waitlist refused in a release build: configure waitlistBase before ship (decision R4)');
+    this.name = 'LocalWaitlistShipBlockerError';
+  }
+}
+
 /**
  * Config-driven selection per gap 4: waitlistBase set means the HTTP
  * provider, unset (v1 default, R4) means the local-only store. Flipping to
- * the real backend is a URL change in src/config/endpoints.ts.
+ * the real backend is a URL change in src/config/endpoints.ts. The R4 ship
+ * blocker is enforced here: while FLAGS.localWaitlistOnly holds, a build
+ * where dev fallbacks are not allowed (a release build) refuses to
+ * construct the local store.
  */
 export function createWaitlistProvider(cfg: Pick<EndpointsConfig, 'waitlistBase'>): WaitlistProvider {
   if (cfg.waitlistBase) return createHttpWaitlistProvider({ base: cfg.waitlistBase });
+  if (FLAGS.localWaitlistOnly && !devFallbackAllowed()) throw new LocalWaitlistShipBlockerError();
   return createLocalWaitlistProvider();
 }
 

@@ -81,7 +81,9 @@ export function endpointsFor(network: NetworkFlag = activeNetwork): EndpointsCon
 export const FLAGS = {
   /** R3: sending is testnet-only on the mock broadcast until A1 resolves. */
   realBroadcastEnabled: false,
-  /** R4 ship blocker: the local-only waitlist must be replaced before ship. */
+  /** R4 ship blocker: the local-only waitlist must be replaced before ship.
+   *  Enforced in createWaitlistProvider: a release build with no configured
+   *  waitlistBase refuses to construct the provider. */
   localWaitlistOnly: true,
   /** Default data-provider mode; EXPO_PUBLIC_DATA_MODE overrides to 'real'. */
   defaultDataMode: 'mock' as const,

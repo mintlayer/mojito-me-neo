@@ -60,7 +60,9 @@ export function maskEmail(email: string): string {
  * no-position confirmation, e.g. the idempotent rejoin); duplicate carries
  * the address already on file so the screen can render the masked callout.
  * The machine owns the no-double-submit rule: a second submit while one is
- * in flight returns the submitting phase untouched.
+ * in flight returns the submitting phase untouched. It also freezes the
+ * outgoing address at submit time (submittedEmail), so a mid-flight edit
+ * cannot rename what the confirmation copy claims.
  */
 export class WaitlistForm {
   private readonly provider: WaitlistProvider;
@@ -68,6 +70,7 @@ export class WaitlistForm {
   private phase: WaitlistPhase = 'idle';
   private storedEmail: string | null = null;
   private storedPosition: number | null = null;
+  private sentEmail: string | null = null;
 
   constructor(provider: WaitlistProvider) {
     this.provider = provider;
@@ -94,6 +97,13 @@ export class WaitlistForm {
     return this.storedPosition;
   }
 
+  /** The address the current or last submit sent, captured at submit time
+   *  so a mid-flight edit cannot rename the confirmation. Null before the
+   *  first submit of this machine. */
+  get submittedEmail(): string | null {
+    return this.sentEmail;
+  }
+
   /** Editing clears every non-flight outcome: a stale duplicate or failure
    *  never sits next to a new address. While a submit is in flight the
    *  draft still updates but the phase stays owned by that submit. */
@@ -115,10 +125,14 @@ export class WaitlistForm {
       this.phase = 'invalid';
       return this.phase;
     }
+    // Freeze the outgoing address now: the draft stays editable during the
+    // flight, and the confirmation copy must name what was actually sent.
+    const address = normalizeEmail(this.raw);
+    this.sentEmail = address;
     this.phase = 'submitting';
     let result: WaitlistResult;
     try {
-      result = await this.provider.join(this.email);
+      result = await this.provider.join(address);
     } catch {
       this.phase = 'unavailable';
       return this.phase;
@@ -136,14 +150,14 @@ export class WaitlistForm {
     if (result.reason === 'duplicate') {
       // One slot per install: surface the address already on file so the
       // screen can offer the confirmation view with the masked email. The
-      // typed-in address is the fallback when the provider cannot report
+      // submitted address is the fallback when the provider cannot report
       // one (the HTTP provider has no member-status route yet).
       try {
         const status = await this.provider.status();
-        this.storedEmail = status.email ?? this.email;
+        this.storedEmail = status.email ?? address;
         this.storedPosition = status.position;
       } catch {
-        this.storedEmail = this.email;
+        this.storedEmail = address;
       }
       this.phase = 'duplicate';
       return this.phase;
