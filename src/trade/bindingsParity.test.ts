@@ -81,6 +81,36 @@ const PINNED: { name: string; swift: string; ts: string[] }[] = [
     swift: 'public func encodeInputForUtxo(outpointSourceId: Data, outputIndex: UInt32)throws -> Data {',
     ts: ['encodeInputForUtxo(outpointSource: Uint8Array, index: number): Promise<Uint8Array>;'],
   },
+  {
+    name: 'encodeCreateOrderOutput',
+    swift: 'public func encodeCreateOrderOutput(askAmount: String, askTokenId: String?, giveAmount: String, giveTokenId: String?, concludeAddress: String, network: Network)throws -> Data {',
+    ts: ['encodeCreateOrderOutput(params: OrderParams): Promise<Uint8Array>;'],
+  },
+  {
+    name: 'encodeSignedTransaction',
+    swift: 'public func encodeSignedTransaction(transaction: Data, signatures: [Data])throws -> Data {',
+    ts: ['encodeSignedTransaction(transaction: Uint8Array, witnesses: Uint8Array[]): Promise<Uint8Array>;'],
+  },
+  {
+    name: 'estimateTransactionSize',
+    swift: 'public func estimateTransactionSize(inputs: [Data], inputDestinations: [String], outputs: [Data], network: Network)throws -> UInt64 {',
+    ts: ['estimateTransactionSize(inputs: Uint8Array[], inputDestinations: string[], outputs: Uint8Array[], network: MlNetwork): Promise<number>;'],
+  },
+  {
+    name: 'encodeWitness',
+    swift: 'public func encodeWitness(sighashType: SignatureHashType, privateKey: Data, inputOwnerDestination: String, transaction: Data, inputUtxos: [Data?], inputIndex: UInt32, additionalInfo: TxAdditionalInfo, currentBlockHeight: UInt64, network: Network)throws -> Data {',
+    ts: ['encodeWitness(params: WitnessParams): Promise<Uint8Array>;'],
+  },
+  {
+    name: 'encodeWitnessHtlcSpend',
+    swift: 'public func encodeWitnessHtlcSpend(sighashType: SignatureHashType, privateKey: Data, inputOwnerDestination: String, transaction: Data, inputUtxos: [Data?], inputIndex: UInt32, secret: Data, additionalInfo: TxAdditionalInfo, currentBlockHeight: UInt64, network: Network)throws -> Data {',
+    ts: ['encodeWitnessHtlcSpend(params: WitnessParams): Promise<Uint8Array>;'],
+  },
+  {
+    name: 'encodeWitnessHtlcRefundSingleSig',
+    swift: 'public func encodeWitnessHtlcRefundSingleSig(sighashType: SignatureHashType, privateKey: Data, inputOwnerDestination: String, transaction: Data, inputUtxos: [Data?], inputIndex: UInt32, additionalInfo: TxAdditionalInfo, currentBlockHeight: UInt64, network: Network)throws -> Data {',
+    ts: ['encodeWitnessHtlcRefundSingleSig(params: WitnessParams): Promise<Uint8Array>;'],
+  },
 ];
 
 /** The HTLC params record: the vendored facade takes a hex secret hash and
@@ -95,9 +125,12 @@ const HTLC_PARAMS_TS_FIELDS = [
 ];
 
 /** Pinned sha256 over the joined normalized vendored signature lines, in
- *  the PINNED order. Recompute and update together with a vendored
- *  artifact upgrade only after re-reviewing every seam signature. */
-const PINNED_VENDOR_CHECKSUM = 'e0474caed1b25ae53f7f5e6c8bca888b07e400ebb4ccbbcb89ae95f1847d8e52';
+ *  the PINNED order: the transaction assembly seam, the order output, and
+ *  every witness carrier including the privateKey/secret-carrying HTLC
+ *  spend and refund encoders. Recompute and update together with a
+ *  vendored artifact upgrade only after re-reviewing every seam
+ *  signature. */
+const PINNED_VENDOR_CHECKSUM = '7d7f2c82e8bd0a95adda1f643cb8faecab8eaf39ff161a3df2db7f85136a6067';
 
 function normalize(line: string): string {
   return line.replace(/\s+/g, ' ').trim();
