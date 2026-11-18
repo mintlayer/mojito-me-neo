@@ -179,5 +179,5 @@ export type {
   CandleInterval, CardFeature, CardTier, Contact, DappsSummary, FeeSchedule, FeeTierId,
   MarketSummary, MlTxStatus, NftRow, SendQuote, SendQuoteLeg, SendResult, SendService,
   Portfolio, PricePoint, PriceProvider, PriceRange, PriceSnapshot, Profile, ProviderMode,
-  Providers, TxStatusInfo, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
+  Providers, TxStatusInfo, WaitlistMemberStatus, WaitlistProvider, WaitlistResult, WaitlistStatus, WalletData,
 } from './types';
