@@ -134,6 +134,23 @@ async function main() {
   });
   await assert.rejects(() => badClient.balance('bc1qtest'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
 
+  // Fractional amounts are typed parse errors: the number path requires an
+  // integer, the string path digits only. A fractional value slipping
+  // through would make the downstream BigInt() throw untyped. Negative
+  // integers stay legal (unconfirmed balances).
+  const fractionalClient = new BtcChainService('http://localhost:3100/api/bitcoin', {
+    fetch: scriptedFetch([
+      { status: 200, body: { confirmed: 12.5, unconfirmed: 0 } },
+      { status: 200, body: { confirmed: '12.5', unconfirmed: 0 } },
+      { status: 200, body: { confirmed: 0, unconfirmed: -2500 } },
+    ]),
+    delay: () => Promise.resolve(),
+    retries: 0,
+  });
+  await assert.rejects(() => fractionalClient.balance('bc1qtest'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+  await assert.rejects(() => fractionalClient.balance('bc1qtest'), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+  assert.deepEqual(await fractionalClient.balance('bc1qtest'), { confirmedSat: '0', unconfirmedSat: '-2500', totalSat: '-2500' });
+
   console.log('btcChainService: ok');
 }
 

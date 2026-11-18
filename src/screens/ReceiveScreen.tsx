@@ -47,6 +47,12 @@ export function ReceiveScreen({ onClose }: Sheet) {
   if (!chainGlyphs) return <Screen />;
   const chainKeys = addresses.data ? (Object.keys(addresses.data) as ChainName[]) : ['Mintlayer', 'Bitcoin'] as ChainName[];
 
+  // Not-ready window: while getAddresses() is in flight (vault open + gap
+  // scan in real mode) there is no address yet. The QR, address card, and
+  // copy/share actions are all gated on addressReady so an empty string
+  // never reaches the QR encoder (qrcode.create('') throws) and a button
+  // never claims a copy it did not make.
+  const addressReady = addresses.data !== null && addr !== '';
   const addressMissing = addresses.error !== null || (addresses.data !== null && addr === '');
 
   return (
@@ -70,6 +76,14 @@ export function ReceiveScreen({ onClose }: Sheet) {
         <View className="px-6 pt-8">
           <Callout tone={C.amber} glyph="!">
             <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('receive.address.none')}</Txt>
+          </Callout>
+        </View>
+      ) : !addressReady ? (
+        // Derivation still in flight: syncing state until the address
+        // exists, never a QR for an empty string.
+        <View className="px-6 pt-8">
+          <Callout tone={accent} glyph="ⓘ">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.syncing')}</Txt>
           </Callout>
         </View>
       ) : (

@@ -248,9 +248,11 @@ function asNumberOrNull(value: unknown): number | null {
 }
 
 /** Satoshis arrive as numbers or numeric strings; always stringified so no
- *  float math ever touches amounts. */
+ *  float math ever touches amounts. Numbers must be integers: a fractional
+ *  value is a backend contract violation and would make the downstream
+ *  BigInt() throw untyped. Negative integers stay legal (unconfirmed). */
 function asSatString(value: unknown): string {
-  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'number' && Number.isInteger(value)) return String(value);
   if (typeof value === 'string' && /^\d+$/.test(value)) return value;
   throw new IndexerError('parse', 'btc amount', undefined);
 }
