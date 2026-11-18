@@ -26,3 +26,13 @@ instead of describing callers that do not exist.
 carries) is test-only in M1; its production consumer is M3's BtcTxBuilder
 signing path. Deferred with that milestone rather than landed as a
 forward-declared API; the function doc says so.
+
+## D12. Shared per-tick address scan deferred
+
+Portfolio and activity each call `addressInfo` per derived address on every
+refresh cycle, so one tick issues two sequential scans. A shared per-tick
+scan carried on the home bundle would halve the request count. Deferred:
+the duplicate work is bounded by the gap scan, the 60 second cadence and
+the rate-limit-friendly sequential probing, so the simplification is not
+worth the state coupling yet. Revisit with M3 send bookkeeping, which needs
+fresh per-address summaries for coin selection anyway.

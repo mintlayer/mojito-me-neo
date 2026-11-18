@@ -4,7 +4,7 @@
 //   npx tsx src/data/ml/indexerClient.test.ts
 import { strict as assert } from 'node:assert/strict';
 
-import { IndexerClient, IndexerError, parseAmount, type FetchLike } from './IndexerClient';
+import { IndexerClient, IndexerError, MAX_RESPONSE_BYTES, parseAmount, type FetchLike } from './IndexerClient';
 
 /** Scripted transport: one queued response per request, in order. */
 type ScriptedResponse = {
@@ -33,13 +33,57 @@ const noDelay = (): Promise<void> => Promise.resolve();
 
 async function main() {
   // Amount-shape tolerance: pair, bare atom string, bare decimal string,
-  // Uint64 number.
+  // Uint64 number. Numbers must be safe integers and objects must carry an
+  // amount field: anything else is a typed parse error, never a silent zero.
   assert.deepEqual(parseAmount({ atoms: '11', decimal: '1.1' }), { atoms: '11', decimal: '1.1' });
   assert.deepEqual(parseAmount('123'), { atoms: '123' });
   assert.deepEqual(parseAmount('1.5'), { decimal: '1.5' });
   assert.deepEqual(parseAmount(64), { atoms: '64' });
   assert.deepEqual(parseAmount({ atoms: 64 }), { atoms: '64' });
   assert.throws(() => parseAmount(null), /parse/);
+  assert.throws(() => parseAmount(1.5), /parse/);
+  assert.throws(() => parseAmount(1e21), /parse/);
+  assert.throws(() => parseAmount(-4), /parse/);
+  assert.throws(() => parseAmount({}), /parse/);
+  assert.throws(() => parseAmount({ atoms: 1.5 }), /parse/);
+  assert.throws(() => parseAmount({ decimal: 2 }), /parse/);
+
+  // Base scheme guard: https always; plaintext only for the localhost dev
+  // fallbacks; a non-URL base is rejected outright.
+  new IndexerClient('https://indexer.test/api/v2', { fetch: scriptedFetch([]) });
+  new IndexerClient('http://localhost:13000/api/v2', { fetch: scriptedFetch([]) });
+  new IndexerClient('http://127.0.0.1:13000/api/v2', { fetch: scriptedFetch([]) });
+  new IndexerClient('http://[::1]:13000/api/v2', { fetch: scriptedFetch([]) });
+  assert.throws(() => new IndexerClient('http://indexer.test/api/v2', { fetch: scriptedFetch([]) }), /https/);
+  assert.throws(() => new IndexerClient('ftp://indexer.test', { fetch: scriptedFetch([]) }), /https/);
+  assert.throws(() => new IndexerClient('not a url', { fetch: scriptedFetch([]) }), /invalid base URL/);
+
+  // Response size caps: a declared content-length or a body over the cap is
+  // a typed parse error, never an unbounded JSON.parse.
+  const hugeClient = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: (name) => (name === 'content-length' ? String(MAX_RESPONSE_BYTES + 1) : null) },
+      text: async () => {
+        throw new Error('body must not be read when the header already exceeds the cap');
+      },
+    }),
+    delay: noDelay,
+    retries: 0,
+  });
+  await assert.rejects(() => hugeClient.tip(), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
+  const hugeBodyClient = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => 'x'.repeat(MAX_RESPONSE_BYTES + 1),
+    }),
+    delay: noDelay,
+    retries: 0,
+  });
+  await assert.rejects(() => hugeBodyClient.tip(), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
 
   // tip: block height tolerates number or numeric string.
   const tipCalls: { url: string }[] = [];

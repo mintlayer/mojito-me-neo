@@ -69,15 +69,16 @@ export function mergeNewestFirst(lists: string[][]): string[] {
   return out;
 }
 
-/** Short relative time ('2m', '1h', '3d'), the row `time` contract. */
+/** Short relative time ('2m', '1h', '3d'), the row `time` contract. The
+ *  unit suffixes ride the en dictionary like every other copy. */
 export function relativeTime(seconds: number | null, nowSeconds: number): string {
   if (seconds === null || nowSeconds <= seconds) return t('activity.time.now');
   const minutes = Math.floor((nowSeconds - seconds) / 60);
   if (minutes < 1) return t('activity.time.now');
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return t('activity.time.m', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
+  if (hours < 24) return t('activity.time.h', { count: hours });
+  return t('activity.time.d', { count: Math.floor(hours / 24) });
 }
 
 export class ActivityService {

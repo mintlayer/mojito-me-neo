@@ -134,10 +134,11 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     return accountPromise;
   }
 
-  /** One shared scan for portfolio, assets and NFTs, memoized briefly. */
-  async function loadHome(): Promise<HomeBundle> {
+  /** One shared scan for portfolio, assets and NFTs, memoized briefly. A
+   *  force call (pull-to-refresh) bypasses the cache window. */
+  async function loadHome(opts?: { force?: boolean }): Promise<HomeBundle> {
     requireIndexerBase();
-    if (homeCache !== null && Date.now() - homeCache.loadedAt < HOME_CACHE_MS) return homeCache;
+    if (!opts?.force && homeCache !== null && Date.now() - homeCache.loadedAt < HOME_CACHE_MS) return homeCache;
     const acct = await ensureAccount();
     if (!acct.balance || !acct.nfts) {
       // No indexer base (testnet pending A2): the home surfaces are offline.
@@ -244,8 +245,8 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
   }
 
   return {
-    getPortfolio: async () => (await loadHome()).portfolio,
-    getAssets: async () => (await loadHome()).assets,
+    getPortfolio: async (opts) => (await loadHome(opts)).portfolio,
+    getAssets: async (opts) => (await loadHome(opts)).assets,
     getAssetSymbols: async () => (await loadHome()).assets.map((row) => row.sym),
     getAssetBalances: async () => (await loadHome()).balances,
     getActivity: async (limit) => {
@@ -254,7 +255,7 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
       if (!acct.activity) throw new IndexerError('transport', 'indexer', undefined);
       return acct.activity.rows(limit);
     },
-    getNfts: async () => (await loadHome()).nfts,
+    getNfts: async (opts) => (await loadHome(opts)).nfts,
     getNetworks: async (): Promise<ChainName[]> => ['Bitcoin', 'Mintlayer'],
     getRanges: async () => [...RANGES],
     getProfile: async () => PROFILE,

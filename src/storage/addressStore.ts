@@ -18,6 +18,11 @@ export type AddressIndexState = Partial<Record<NetworkFlag, Partial<Record<Manag
 
 const STORAGE_KEY = STORAGE_KEYS.addressIndex;
 
+/** Sanity cap on persisted derivation indexes: entries above it are dropped
+ *  on load, so a tampered store cannot start an effectively unbounded
+ *  derive and probe loop. */
+const MAX_PERSISTED_INDEX = 10_000;
+
 // Process-lifetime copy for the Node gate and other tooling runtimes.
 let memory: AddressIndexState | null = null;
 
@@ -71,8 +76,8 @@ export async function loadAddressIndex(): Promise<AddressIndexState> {
       const indexes = perNetwork[chain];
       if (
         indexes &&
-        Number.isInteger(indexes.receiving) && indexes.receiving >= 0 &&
-        Number.isInteger(indexes.change) && indexes.change >= 0
+        Number.isInteger(indexes.receiving) && indexes.receiving >= 0 && indexes.receiving <= MAX_PERSISTED_INDEX &&
+        Number.isInteger(indexes.change) && indexes.change >= 0 && indexes.change <= MAX_PERSISTED_INDEX
       ) {
         (out[network] ??= {})[chain] = { receiving: indexes.receiving, change: indexes.change };
       }

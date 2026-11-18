@@ -126,7 +126,14 @@ export function formatUsd(decimal: string, opts?: FormatUsdOptions): string {
   // fraction scale so value/1e6 (or /1e3) lands on one fraction digit.
   const intDigits = int.replace(/^0+(?=\d)/, '').length;
   const sign = negative ? '-' : '';
-  if (intDigits > 6) return `$${sign}${divideMagnitude(int, frac, frac.length + 5)}M`;
-  if (intDigits > 3) return `$${sign}${divideMagnitude(int, frac, frac.length + 2)}K`;
+  const asM = (): string => `$${sign}${divideMagnitude(int, frac, frac.length + 5)}M`;
+  if (intDigits > 6) return asM();
+  if (intDigits > 3) {
+    const kText = divideMagnitude(int, frac, frac.length + 2);
+    // Rounding can overflow the K form into four integer digits
+    // ('999999' -> '1000.0K'); re-branch to the M form there.
+    if (kText.split('.')[0].length > 3) return asM();
+    return `$${sign}${kText}K`;
+  }
   return `$${formatAmount(decimal, { maxFrac: 2, trimZeros: false })}`;
 }

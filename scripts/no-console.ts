@@ -8,7 +8,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SCAN_ROOTS = ['modules/mojito-core', 'src/keys', 'src/storage', 'src/onboarding'];
+const SCAN_ROOTS = ['modules/mojito-core', 'src/keys', 'src/storage', 'src/data', 'src/onboarding'];
 
 const failures: string[] = [];
 

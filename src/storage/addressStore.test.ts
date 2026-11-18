@@ -46,13 +46,13 @@ async function main() {
   await saveAddressIndex('mainnet', 'ml', { receiving: 2, change: 1 });
   assert.deepEqual((await loadAddressIndex()).mainnet?.ml, { receiving: 2, change: 1 });
 
-  // Entries failing validation (negative or non-integer indexes) are
-  // dropped per chain, the valid ones stay.
+  // Entries failing validation (negative or non-integer indexes, or indexes
+  // above the sane cap) are dropped per chain, the valid ones stay.
   overrideAsyncStorageForTest(
     memoryApi(
       JSON.stringify({
         mainnet: { ml: { receiving: -1, change: 2 }, btc: { receiving: 1.5, change: 0 } },
-        testnet: { ml: { receiving: 4, change: 0 } },
+        testnet: { ml: { receiving: 4, change: 0 }, btc: { receiving: 10001, change: 0 } },
       }),
     ),
   );
@@ -60,6 +60,8 @@ async function main() {
   assert.equal(state.mainnet?.ml, undefined);
   assert.equal(state.mainnet?.btc, undefined);
   assert.deepEqual(state.testnet?.ml, { receiving: 4, change: 0 });
+  // A tampered index above the cap cannot survive a load.
+  assert.equal(state.testnet?.btc, undefined);
 
   // Missing store (null api): the dev memory fallback keeps a roundtrip.
   overrideAsyncStorageForTest(null);

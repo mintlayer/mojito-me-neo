@@ -38,6 +38,9 @@ export const en = {
   'activity.state.confirmed': 'Confirmed',
   'activity.state.confirmations': 'Confirmed · {count}',
   'activity.time.now': 'now',
+  'activity.time.m': '{count}m',
+  'activity.time.h': '{count}h',
+  'activity.time.d': '{count}d',
 
   // tabs
   'tabs.wallet': 'Wallet',

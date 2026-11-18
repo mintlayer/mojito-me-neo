@@ -4,7 +4,11 @@
 //   npx tsx src/data/polling.test.ts
 import { strict as assert } from 'node:assert/strict';
 
-import { PollCycle, RefreshScheduler, pollDelayMs } from './polling';
+import { PollCycle, RefreshScheduler, jitterMs, pollDelayMs } from './polling';
+
+/** Deterministic scheduling in the delay assertions below: the production
+ *  default adds +-10% jitter, the tests pin the exact base delays. */
+const identityJitter = (ms: number): number => ms;
 
 /** Manual clock: queued timers fire explicitly, delays are recorded. */
 function manualTimers() {
@@ -43,13 +47,30 @@ async function main() {
   assert.equal(pollDelayMs(1000, 9, true), 8000);
   assert.equal(pollDelayMs(1000, 2, false), 1000);
 
+  // Jitter: +-10% around the delay, driven by the injected random.
+  assert.equal(jitterMs(1000, () => 0), 900);
+  assert.equal(jitterMs(1000, () => 1), 1100);
+  assert.equal(jitterMs(1000, () => 0.5), 1000);
+  assert.equal(jitterMs(70_000, () => 0.25), 66_500);
+  {
+    const clock = manualTimers();
+    const cycle = new PollCycle(async () => undefined, {
+      intervalMs: 100,
+      timers: clock.timers,
+      jitter: (ms) => ms * 2,
+    });
+    cycle.start();
+    assert.equal(clock.pendingDelay(), 200);
+    cycle.stop();
+  }
+
   // Success loop: fires the fn every interval, no backoff on success.
   {
     const clock = manualTimers();
     let runs = 0;
     const cycle = new PollCycle(async () => {
       runs += 1;
-    }, { intervalMs: 100, timers: clock.timers });
+    }, { intervalMs: 100, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     assert.equal(clock.pendingDelay(), 100);
     clock.fireNext();
@@ -67,7 +88,7 @@ async function main() {
     let fail = true;
     const cycle = new PollCycle(async () => {
       if (fail) throw new Error('down');
-    }, { intervalMs: 100, backoff: true, timers: clock.timers });
+    }, { intervalMs: 100, backoff: true, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     clock.fireNext();
     await Promise.resolve();
@@ -91,7 +112,7 @@ async function main() {
     let runs = 0;
     const cycle = new PollCycle(async () => {
       runs += 1;
-    }, { intervalMs: 100, timers: clock.timers });
+    }, { intervalMs: 100, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     cycle.pause();
     assert.equal(clock.size, 0);
@@ -109,7 +130,7 @@ async function main() {
     let runs = 0;
     const cycle = new PollCycle(async () => {
       runs += 1;
-    }, { intervalMs: 50, timers: clock.timers });
+    }, { intervalMs: 50, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     cycle.stop();
     cycle.resume();
@@ -124,7 +145,7 @@ async function main() {
     let runs = 0;
     const cycle = new PollCycle(async () => {
       runs += 1;
-    }, { intervalMs: 100, timers: clock.timers });
+    }, { intervalMs: 100, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     await cycle.refreshNow();
     assert.equal(runs, 1);
@@ -143,7 +164,7 @@ async function main() {
     const cycle = new PollCycle(() => {
       runs += 1;
       return gate;
-    }, { intervalMs: 100, timers: clock.timers });
+    }, { intervalMs: 100, timers: clock.timers, jitter: identityJitter });
     cycle.start();
     clock.fireNext();
     assert.equal(runs, 1);

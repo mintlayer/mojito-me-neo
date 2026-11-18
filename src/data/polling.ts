@@ -19,6 +19,9 @@ const defaultTimers: PollTimers = {
 export type PollCycleOptions = {
   intervalMs: number;
   backoff?: boolean;
+  /** Delay shaping override; the default applies +-10% jitter so
+   *  synchronized installs do not poll the public backend in lockstep. */
+  jitter?: (ms: number) => number;
   onError?: (error: unknown) => void;
   timers?: PollTimers;
 };
@@ -32,6 +35,11 @@ export function pollDelayMs(intervalMs: number, consecutiveFailures: number, bac
   return intervalMs * factor;
 }
 
+/** +-10% jitter around one delay (injectable random for tests). */
+export function jitterMs(ms: number, random: () => number = Math.random): number {
+  return Math.round(ms * (0.9 + 0.2 * random()));
+}
+
 type PollState = 'stopped' | 'running' | 'paused';
 
 export class PollCycle {
@@ -40,6 +48,8 @@ export class PollCycle {
   private readonly intervalMs: number;
 
   private readonly backoff: boolean;
+
+  private readonly jitter: (ms: number) => number;
 
   private readonly onError?: (error: unknown) => void;
 
@@ -57,6 +67,7 @@ export class PollCycle {
     this.fn = fn;
     this.intervalMs = opts.intervalMs;
     this.backoff = opts.backoff ?? false;
+    this.jitter = opts.jitter ?? ((ms) => jitterMs(ms));
     this.onError = opts.onError;
     this.timers = opts.timers ?? defaultTimers;
   }
@@ -98,7 +109,7 @@ export class PollCycle {
 
   private schedule(delayMs: number): void {
     this.cancelTimer();
-    this.handle = this.timers.set(() => void this.tick(), delayMs);
+    this.handle = this.timers.set(() => void this.tick(), this.jitter(delayMs));
   }
 
   private cancelTimer(): void {

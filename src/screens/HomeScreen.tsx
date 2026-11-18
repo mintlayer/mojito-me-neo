@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Nav } from './types';
 import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
@@ -20,15 +20,22 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const { mode, price, pricesAreMock } = useProviders();
   const [tick, setTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  /** Set by pull-to-refresh so the next loads bypass the home bundle cache. */
+  const forceRef = useRef(false);
+  const consumeForce = (): boolean => {
+    const forced = forceRef.current;
+    forceRef.current = false;
+    return forced;
+  };
   const refresh = useCallback(async (): Promise<void> => {
     setTick((n) => n + 1);
   }, []);
   usePoll(refresh, { intervalMs: BALANCE_POLL_MS, active: active !== false });
 
-  const balance = useDataState((d) => d.getPortfolio(), tick);
-  const assets = useDataState((d) => d.getAssets(), tick);
+  const balance = useDataState((d) => d.getPortfolio({ force: consumeForce() }), tick);
+  const assets = useDataState((d) => d.getAssets({ force: consumeForce() }), tick);
   const activity = useDataState((d) => d.getActivity(20), tick);
-  const nfts = useDataState((d) => d.getNfts(), tick);
+  const nfts = useDataState((d) => d.getNfts({ force: consumeForce() }), tick);
   const networks = useData((d) => d.getNetworks());
   const ranges = useData((d) => d.getRanges());
   const profile = useData((d) => d.getProfile());
@@ -80,6 +87,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       refreshing={refreshing}
       refreshTitle={t('home.activity.refresh')}
       onRefresh={() => {
+        forceRef.current = true;
         setRefreshing(true);
         refresh();
       }}>

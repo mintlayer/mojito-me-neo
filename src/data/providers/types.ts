@@ -113,13 +113,14 @@ export interface BridgeProvider {
 }
 
 export interface WalletData {
-  // portfolio and home
-  getPortfolio(): Promise<Portfolio>;
-  getAssets(): Promise<AssetRow[]>;
+  // portfolio and home. The force flag bypasses the real-mode home bundle
+  // cache: pull-to-refresh must not resolve on seconds-old data.
+  getPortfolio(opts?: { force?: boolean }): Promise<Portfolio>;
+  getAssets(opts?: { force?: boolean }): Promise<AssetRow[]>;
   getAssetSymbols(): Promise<string[]>;
   getAssetBalances(): Promise<Record<string, string>>;
   getActivity(limit: number): Promise<ActivityRow[]>;
-  getNfts(): Promise<NftRow[]>;
+  getNfts(opts?: { force?: boolean }): Promise<NftRow[]>;
   getNetworks(): Promise<ChainName[]>;
   getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;

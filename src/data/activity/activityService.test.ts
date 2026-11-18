@@ -39,7 +39,7 @@ function mlClient(responses: Record<string, unknown>): IndexerClient {
 
 function btcClient(responses: Record<string, unknown>): BtcChainService {
   const fetch: BtcFetchLike = async (url) => {
-    const path = url.replace(/^http:\/\/btc\.test\/api\/bitcoin/, '');
+    const path = url.replace(/^https:\/\/btc.test\/api\/bitcoin/, '');
     const body = responses[path];
     if (body === undefined) throw new Error(`no fixture for ${path}`);
     return {
@@ -49,7 +49,7 @@ function btcClient(responses: Record<string, unknown>): BtcChainService {
       text: async () => JSON.stringify(body),
     };
   };
-  return new BtcChainService('http://btc.test/api/bitcoin', { fetch, delay: () => Promise.resolve() });
+  return new BtcChainService('https://btc.test/api/bitcoin', { fetch, delay: () => Promise.resolve() });
 }
 
 const USDT_TICKER = 'USDT';

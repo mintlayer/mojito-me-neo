@@ -58,6 +58,30 @@ const BACKOFF_BASE_MS = 500;
 const BACKOFF_CAP_MS = 8_000;
 /** Ceiling for a server-provided Retry-After so a hostile header cannot pin the wallet. */
 const RETRY_AFTER_CAP_MS = 30_000;
+
+/** Cap on one response body before JSON.parse: a hostile endpoint must not
+ *  read a multi-GB body into memory. 4 MiB is far above any documented
+ *  endpoint payload; shared with the BTC client so both transports agree. */
+export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+
+/** Cap on one parsed array (transactions, tokens, utxos): bounds the work
+ *  a single hostile response can force. */
+export const MAX_ARRAY_ITEMS = 5_000;
+
+/** Config guard: chain bases are https; plaintext is allowed only for the
+ *  documented localhost dev fallbacks, so a config regression fails fast
+ *  at construction instead of shipping plaintext traffic. */
+export function assertHttpsBase(base: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(base);
+  } catch {
+    throw new Error(`invalid base URL: ${base}`);
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(parsed.hostname)) return;
+  throw new Error(`base must use https (http only for localhost dev): ${base}`);
+}
 /** Walker bounds: a non-terminating listing is a parse error, not a loop. */
 export type WalkerCaps = { maxPages?: number; maxItems?: number };
 
@@ -69,20 +93,34 @@ function backoffMs(attempt: number): number {
   return Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt);
 }
 
-/** Absorb every documented amount shape into the atoms/decimal pair. */
+/** Absorb every documented amount shape into the atoms/decimal pair.
+ *  Numbers must be safe integers (Uint64 atom counts upstream); a 1e21
+ *  scale number would stringify into e-notation and explode downstream.
+ *  An object without atoms or decimal is a typed parse error, never a
+ *  silent zero. */
 export function parseAmount(raw: unknown): AmountJson {
   if (typeof raw === 'string') {
     return /^\d+$/.test(raw) ? { atoms: raw } : { decimal: raw };
   }
-  if (typeof raw === 'number' && Number.isFinite(raw)) {
-    // Uint64 fields may arrive as numbers; they are atom counts upstream.
+  if (typeof raw === 'number') {
+    if (!Number.isSafeInteger(raw) || raw < 0) throw new IndexerError('parse', 'amount', undefined);
     return { atoms: String(raw) };
   }
   if (raw !== null && typeof raw === 'object') {
     const record = raw as Record<string, unknown>;
     const out: AmountJson = {};
-    if (typeof record.atoms === 'string' || typeof record.atoms === 'number') out.atoms = String(record.atoms);
+    if (record.atoms !== undefined) {
+      if (typeof record.atoms === 'number') {
+        if (!Number.isSafeInteger(record.atoms) || record.atoms < 0) throw new IndexerError('parse', 'amount', undefined);
+        out.atoms = String(record.atoms);
+      } else if (typeof record.atoms === 'string') {
+        out.atoms = record.atoms;
+      } else {
+        throw new IndexerError('parse', 'amount', undefined);
+      }
+    }
     if (typeof record.decimal === 'string') out.decimal = record.decimal;
+    if (out.atoms === undefined && out.decimal === undefined) throw new IndexerError('parse', 'amount', undefined);
     return out;
   }
   throw new IndexerError('parse', 'amount', undefined);
@@ -119,8 +157,9 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function asArray(value: unknown): unknown[] {
+function asArray(value: unknown, max = MAX_ARRAY_ITEMS): unknown[] {
   if (!Array.isArray(value)) throw new IndexerError('parse', 'response', undefined);
+  if (value.length > max) throw new IndexerError('parse', 'response', undefined);
   return value;
 }
 
@@ -223,6 +262,7 @@ export class IndexerClient {
 
   constructor(base: string, opts?: IndexerClientOptions) {
     this.base = base.replace(/\/+$/, '');
+    assertHttpsBase(this.base);
     this.timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.retries = opts?.retries ?? DEFAULT_RETRIES;
     this.delay = opts?.delay ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -432,7 +472,12 @@ export class IndexerClient {
         clearTimeout(timer);
       }
       if (response.ok) {
+        const declared = response.headers.get('content-length');
+        if (declared !== null && /^\d+$/.test(declared) && Number(declared) > MAX_RESPONSE_BYTES) {
+          throw new IndexerError('parse', path, response.status);
+        }
         const text = await response.text();
+        if (text.length > MAX_RESPONSE_BYTES) throw new IndexerError('parse', path, response.status);
         try {
           return text.length === 0 ? null : (JSON.parse(text) as unknown);
         } catch {

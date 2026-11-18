@@ -64,6 +64,9 @@ async function main() {
   assert.equal(formatUsd('1234567.8', { compact: true }), '$1.2M');
   assert.equal(formatUsd('12345.6', { compact: true }), '$12.3K');
   assert.equal(formatUsd('999.999', { compact: true }), '$1,000.00');
+  // Rounding into four K digits re-branches to the M form.
+  assert.equal(formatUsd('999999', { compact: true }), '$1.0M');
+  assert.equal(formatUsd('999999.9', { compact: true }), '$1.0M');
 
   // Invalid inputs are rejected loudly, never silently coerced.
   assert.throws(() => decimalsToAtoms('1e9', 11), /not an exact decimal/);

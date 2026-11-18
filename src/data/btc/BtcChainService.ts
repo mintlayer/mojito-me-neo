@@ -4,7 +4,7 @@
 // third-party fallback is ever hardcoded here and callers surface the
 // unconfigured state instead. Shapes per the btc-api API.md, which mirrors
 // the Esplora contract, so a deployment swap cannot change the client.
-import { IndexerError } from '../ml/IndexerClient';
+import { assertHttpsBase, IndexerError, MAX_ARRAY_ITEMS, MAX_RESPONSE_BYTES } from '../ml/IndexerClient';
 
 export type FetchLike = (url: string, init: { signal: AbortSignal }) => Promise<{
   ok: boolean;
@@ -67,6 +67,7 @@ export class BtcChainService {
 
   constructor(base: string, opts?: BtcClientOptions) {
     this.base = base.replace(/\/+$/, '');
+    assertHttpsBase(this.base);
     this.timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.retries = opts?.retries ?? DEFAULT_RETRIES;
     this.delay = opts?.delay ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
@@ -162,7 +163,12 @@ export class BtcChainService {
         clearTimeout(timer);
       }
       if (response.ok) {
+        const declared = response.headers.get('content-length');
+        if (declared !== null && /^\d+$/.test(declared) && Number(declared) > MAX_RESPONSE_BYTES) {
+          throw new IndexerError('parse', path, response.status);
+        }
         const text = await response.text();
+        if (text.length > MAX_RESPONSE_BYTES) throw new IndexerError('parse', path, response.status);
         try {
           return text.length === 0 ? null : (JSON.parse(text) as unknown);
         } catch {
@@ -218,8 +224,9 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function asArray(value: unknown): unknown[] {
+function asArray(value: unknown, max = MAX_ARRAY_ITEMS): unknown[] {
   if (!Array.isArray(value)) throw new IndexerError('parse', 'btc response', undefined);
+  if (value.length > max) throw new IndexerError('parse', 'btc response', undefined);
   return value;
 }
 

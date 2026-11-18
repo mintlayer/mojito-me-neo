@@ -4,7 +4,7 @@
 import { strict as assert } from 'node:assert/strict';
 
 import { BtcChainService, type FetchLike } from './BtcChainService';
-import { IndexerError } from '../ml/IndexerClient';
+import { IndexerError, MAX_RESPONSE_BYTES } from '../ml/IndexerClient';
 
 function scriptedFetch(responses: { status: number; body: unknown }[]): FetchLike {
   let index = 0;
@@ -104,6 +104,27 @@ async function main() {
 
   // 429 retries with backoff, then the numeric tip height parses.
   assert.equal(await client.tipHeight(), 941320);
+
+  // Base scheme guard: https and the localhost dev fallbacks only.
+  new BtcChainService('https://btc.test/api/bitcoin', { fetch: scriptedFetch([]) });
+  new BtcChainService('http://localhost:3100/api/bitcoin', { fetch: scriptedFetch([]) });
+  assert.throws(() => new BtcChainService('http://btc.test/api/bitcoin', { fetch: scriptedFetch([]) }), /https/);
+
+  // A declared content-length over the response cap is a typed parse error
+  // and must not read the body at all.
+  const hugeClient = new BtcChainService('http://localhost:3100/api/bitcoin', {
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: (name) => (name === 'content-length' ? String(MAX_RESPONSE_BYTES + 1) : null) },
+      text: async () => {
+        throw new Error('body must not be read when the header already exceeds the cap');
+      },
+    }),
+    delay: () => Promise.resolve(),
+    retries: 0,
+  });
+  await assert.rejects(() => hugeClient.tipHeight(), (e: unknown) => e instanceof IndexerError && e.kind === 'parse');
 
   // Typed error on a non-JSON amount.
   const badClient = new BtcChainService('http://localhost:3100/api/bitcoin', {
