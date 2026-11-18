@@ -146,13 +146,24 @@ export interface BroadcastProvider {
   getBtcStatus(txId: string): Promise<TxStatusInfo>;
 }
 
-// Waitlist (missing-architecture gap 4, R4: local-only in v1, real backend before ship)
+// Waitlist (missing-architecture gap 4, R4: local-only in v1, real backend
+// before ship). M5 adds the confirmation-side calls: status() feeds the Card
+// confirmation state and the Settings row, leave() is the local wipe that
+// keeps the persistence user-controlled.
 export type WaitlistResult =
-  | { ok: true; position: number | null } // position when the backend reports one
+  | { ok: true; position: number | null } // position when the backend reports one; null on an idempotent rejoin
   | { ok: false; reason: 'invalid' | 'duplicate' | 'unavailable' };
+
+/** The joined member as the UI may see it: the email reaches the surface
+ *  only through maskEmail() redaction (spec M5 security note). */
+export type WaitlistMemberStatus = { joined: boolean; email: string | null; position: number | null };
 
 export interface WaitlistProvider {
   join(email: string): Promise<WaitlistResult>;
+  status(): Promise<WaitlistMemberStatus>;
+  /** Local wipe of the joined entry; see the provider selection in
+   *  WaitlistProvider.ts for the contract note on remote removal. */
+  leave(): Promise<void>;
 }
 
 // Bridge (missing-architecture gap 5, R5: bridge_v2 api-server integration)

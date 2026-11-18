@@ -2,7 +2,7 @@
 // state, idempotent per email. The real backend MUST replace this before any
 // production ship; the ship-blocking TODO lives in missing-architecture gap 4.
 import { WAITLIST } from '../../data';
-import type { WaitlistProvider, WaitlistResult } from '../providers/types';
+import type { WaitlistMemberStatus, WaitlistProvider, WaitlistResult } from '../providers/types';
 
 const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{2,}$/;
 
@@ -24,5 +24,17 @@ export function createLocalWaitlistProvider(): WaitlistProvider {
     return { ok: true, position: nextPosition++ };
   };
 
-  return { join };
+  const status = async (): Promise<WaitlistMemberStatus> => {
+    const joined = members.size > 0;
+    return joined
+      ? { joined: true, email: [...members][members.size - 1], position: nextPosition - 1 }
+      : { joined: false, email: null, position: null };
+  };
+
+  const leave = async (): Promise<void> => {
+    members.clear();
+    nextPosition = WAITLIST.taken + 1;
+  };
+
+  return { join, status, leave };
 }
