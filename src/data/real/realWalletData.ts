@@ -13,7 +13,7 @@
 // share one scan.
 import type { ChainName } from '../../theme';
 import { t } from '../../i18n';
-import { ML_DECIMALS, atomsToDecimal, formatAmount, formatUsd } from '../../money';
+import { ML_DECIMALS, atomsToDecimal, decimalsToAtoms, formatAmount, formatUsd } from '../../money';
 import { IndexerError } from '../ml/IndexerClient';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
 import type { AccountServices, RealAccountContext, RealAccountConfig } from './account';
@@ -218,7 +218,45 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
         chains: cfg.btcBase ? 2 : 1,
       };
     },
-    getMarket: async () => MARKET,
+    // M4: the market header derives from the R1 price provider (still the
+    // mock source, so the figures stay indicative and the screens disclose
+    // pricesAreMock); high, low and volume derive from the 1d candles the
+    // same source serves. No fixture row leaks into the header.
+    getMarket: async (pair) => {
+      const [snapshots, candles] = await Promise.all([price.getSnapshots(['ML', 'BTC']), price.getCandles(pair, '1d')]);
+      const ml = snapshots.find((s) => s.tokenId === 'ML');
+      const btc = snapshots.find((s) => s.tokenId === 'BTC');
+      if (!ml) return MARKET;
+      const highDecimal = candles.reduce((acc, c) => (BigInt(decimalsToAtoms(c.h, 11)) > BigInt(decimalsToAtoms(acc, 11)) ? c.h : acc), candles[0]?.h ?? '0');
+      const lowDecimal = candles.reduce((acc, c) => (BigInt(decimalsToAtoms(c.l, 11)) < BigInt(decimalsToAtoms(acc, 11)) ? c.l : acc), candles[0]?.h ?? '0');
+      const volumeAtoms = candles.reduce((acc, c) => acc + BigInt(decimalsToAtoms(c.v, 11)), 0n);
+      const btcRatio = btc && ml.usd !== '0' ? (Number(ml.usd) / Number(btc.usd)).toFixed(7) : null;
+      return {
+        pair,
+        last: formatUsd(ml.usd),
+        change: ml.change24hPct,
+        btc: btcRatio !== null ? `≈ ${btcRatio} BTC` : '',
+        high: formatUsd(highDecimal),
+        low: formatUsd(lowDecimal),
+        volume: `24h vol ${formatUsd(atomsToDecimal(volumeAtoms.toString(), 11), { compact: true })}`,
+        price: Number(ml.usd),
+      };
+    },
+    // F6: tickers are not unique, so placement disambiguates on the full
+    // id list instead of guessing the first row.
+    getTokenIds: async (ticker) => {
+      const indexer = requireIndexer();
+      return indexer.tokensByTicker(ticker);
+    },
+    getTokenMeta: async (tokenId) => {
+      const acct = await ensureAccount();
+      if (!acct.balance) return null;
+      try {
+        return await acct.balance.tokenMeta(tokenId);
+      } catch {
+        return null;
+      }
+    },
     getOrderBook: async () => ({ asks: [...ASKS], bids: [...BIDS] }),
     getTimeframes: async () => [...TIMEFRAMES],
     getHtlcSteps: async () => [...HTLC_STEPS],

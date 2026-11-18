@@ -207,6 +207,12 @@ export interface WalletData {
   getMarket(pair: string): Promise<MarketSummary>;
   getOrderBook(pair: string): Promise<{ asks: BookLevel[]; bids: BookLevel[] }>;
   getTimeframes(): Promise<CandleInterval[]>;
+  /** Token ids served for one ticker; tickers are not unique (F6), so the
+   *  list can carry more than one id and callers must disambiguate
+   *  honestly instead of guessing (M4 order placement). */
+  getTokenIds(ticker: string): Promise<string[]>;
+  /** Ticker and decimals of one token id; null when unindexed. */
+  getTokenMeta(tokenId: string): Promise<{ ticker: string | null; decimals: number } | null>;
   // swap
   getHtlcSteps(): Promise<HtlcStep[]>;
   getSwapStats(): Promise<SwapStat[]>;

@@ -95,29 +95,29 @@ export const SWAP_STATS = [
 
 /* ── Bridge ──────────────────────────────────────────────── */
 
+// M4 (F14, R5): the real bridge scope is exactly Ethereum and Mintlayer;
+// the EVM demo chains of the M0 design (Arbitrum, Polygon, BNB) are gone
+// and the E2M direction is disabled with explanatory copy (R5: no EVM
+// signer; scoped decision open, never silently dropped).
 export const BRIDGE_CHAINS = [
   { name: 'Mintlayer', sym: 'ML' },
-  { name: 'Bitcoin', sym: 'BTC' },
   { name: 'Ethereum', sym: 'ETH' },
-  { name: 'Arbitrum', sym: 'ARB' },
-  { name: 'Polygon', sym: 'POL' },
-  { name: 'BNB', sym: 'BNB' },
 ] satisfies { name: ChainName; sym: string }[];
 
-/** Arbitrum-side mint contract shown in the route and the bridge fixture. */
+/** Ethereum-side mint contract shown in the route and the bridge fixture. */
 export const BRIDGE_CONTRACT = '0xA1c2…F39e';
 
 export const BRIDGE_ROUTE = [
-  { label: 'Lock on Mintlayer', detail: 'mojito.mlbridge.v2', icon: 'lock', eta: '~15s' },
-  { label: 'Validator attestation', detail: '7 of 11 signatures', icon: 'shield', eta: '~45s' },
-  { label: 'Mint on Arbitrum', detail: `${BRIDGE_CONTRACT} (mUSDT)`, icon: 'flash', eta: '~5s' },
+  { label: 'Lock on Mintlayer', detail: 'ml deposit to the bridge treasury', icon: 'lock', eta: '~15s' },
+  { label: 'Validator attestation', detail: 'agent majority signs the intent', icon: 'shield', eta: '~12 confirmations' },
+  { label: 'Mint on Ethereum', detail: `${BRIDGE_CONTRACT} (wrapped asset)`, icon: 'flash', eta: '~1 min' },
 ] satisfies { label: string; detail: string; icon: IconName; eta: string }[];
 
 export const BRIDGE_QUOTE = [
   ['Bridge fee', '0.15% · $0.75'],
   ['Est. time', '~65 sec'],
   ['You receive', '499.25 USDT'],
-  ['Gas (ARB)', '0.00012 ETH'],
+  ['Gas (ETH)', '0.00012 ETH'],
 ] satisfies [string, string][];
 
 /* ── Card ────────────────────────────────────────────────── */

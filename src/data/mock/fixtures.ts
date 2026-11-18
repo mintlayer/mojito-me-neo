@@ -57,6 +57,12 @@ export function createFixtureWalletData(): WalletData {
     getMarket: async () => MARKET,
     getOrderBook: async () => ({ asks: [...ASKS], bids: [...BIDS] }),
     getTimeframes: async () => [...TIMEFRAMES],
+    // Mock mode carries a single fixture id so order placement stays
+    // demoable without pretending to resolve a real on-chain token (F6:
+    // real tickers are ambiguous and the real mode answers from the
+    // indexer instead).
+    getTokenIds: async (ticker) => [ticker],
+    getTokenMeta: async (tokenId) => ({ ticker: tokenId, decimals: tokenId === 'USDT' ? 6 : 0 }),
     getHtlcSteps: async () => [...HTLC_STEPS],
     getSwapStats: async () => SWAP_STATS,
     getBridgeChains: async () => [...BRIDGE_CHAINS],
