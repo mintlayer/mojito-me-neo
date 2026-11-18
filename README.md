@@ -19,7 +19,7 @@ Real in M4:
 
 - **Order book**: Dex depth rows come from GET /order/pair/{base}_{quote}/book with keyset cursor pagination and an invalid-cursor page-1 restart; stale and error states are explicit, never fixture rows in real mode.
 - **Orders**: place (confirm sheet with the exact amounts and a slippage guard against the book mid), fill and conclude run the bindings order encoders with the F11 witness mix (no-signature on the order input, signed payer inputs); the order id derives through the bindings from the create tx inputs, and fill and conclude inputs carry the account nonce and block height per the vendored wallet-bindings v0.1.0 signatures (pinned by src/trade/bindingsParity.test.ts).
-- **Atomic swap**: the ML-side HTLC flow (lock, claim, refund, secret extraction) per the docs guide; sessions persist across restarts with the secret hash only (the preimage never persists and never logs; the keep-open warning explains what is at stake). The BTC counterparty leg is the scripted demo (see scripts/e2e-testnet.mjs) with the shorter-timelock rule enforced by UI guards.
+- **Atomic swap**: the ML-side HTLC flow (lock, claim, refund, secret extraction) per the docs guide; sessions persist across restarts with the secret hash only (the preimage never persists and never logs; the keep-open warning explains what is at stake), and the lock bytes are stored before the broadcast so a crash cannot strand the refund. The BTC counterparty leg is the scripted demo (see scripts/e2e-testnet.mjs); the timelock guard returns with real offers (plans/mojito-neo/decisions.md).
 - **Bridge**: quotes and status ride the bridge_v2 api-server per R5 (per-token fees per direction, the Mintlayer treasury deposit address, m2e deposit confirmations); E2M stays disabled with explanatory copy (no EVM signer, scoped decision open). M2E initiation is honestly gated until the deposit intent encoder and the ML submission route exist. The EVM demo fixtures (Arbitrum, Polygon, BNB) are removed from the bridge chains and pickers in this milestone.
 
 M3 (still accurate): BTC sends are end-to-end real on scure against the configured btc-api base; ML sends prepare and sign over the bindings interface but honestly refuse to broadcast (R3, action item A1); the send lifecycle tracks pending to confirmed with fresh-address rotation.
@@ -241,7 +241,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs thirty-six things:
+`npm run check` runs thirty-seven things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -275,33 +275,54 @@ npx tsx src/theme.test.ts
     the real-mode construction seams.
 16. **`src/data/providers/broadcast.test.ts`**: the gap-3 broadcast provider: mock deterministic
     ids, 403-to-disabled and transport-to-network mappings, BTC POST tx shape, status reads.
-17. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+17. **`src/data/providers/bridge.test.ts`**: the bridge_v2 api provider: quote and fee parsing
+    per direction, the treasury deposit address, status mapping and the E2M and initiation
+    typed gates, all over a scripted transport.
+18. **`src/trade/orderBookService.test.ts`**: the live depth aggregation: cursor-paginated
+    pages, the num/denom price rational, the invalid-cursor page-1 restart and the honest
+    null last-fill.
+19. **`src/trade/orders.test.ts`**: order create/fill/conclude over the bindings double: the
+    witness mix, order id extraction, nonce and height inputs, the fill guards (frozen,
+    concluded, overbid, off-band price) and the lying-broadcast refusals.
+20. **`src/trade/htlc.test.ts`**: the HTLC flows: lock output parameters, the build/broadcast
+    split (nothing broadcasts until the prepared lock is confirmed), the claim witness with
+    the secret, the refund timelock refusal, lying-broadcast refusals and the secret
+    extraction round-trip.
+21. **`src/trade/swapSession.test.ts`**: the swap session machine: transitions (including the
+    offered -> locked broadcast step), persistence round-trip, corrupt-row dropping,
+    legacy-column stripping and the no-preimage guarantee.
+22. **`src/trade/priceGuards.test.ts`**: the slippage band, minimum fill floor, amount sanity
+    and the swap timelock rule margin, with typed NaN results.
+23. **`src/trade/bindingsParity.test.ts`**: the vendored-signature parity pin: every seam
+    function (including the privateKey and secret carriers) line-pinned against the vendored
+    Swift plus the checksum that fails on any vendor upgrade.
+24. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
     NFKD normalization, wordlist integrity, supplied-entropy generation.
-18. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+25. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
     blobs, receiving blobs and addresses, plus the custom-path scan.
-19. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+26. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
     account paths.
-20. **`src/send/validation.test.ts`**: send address validation (mtc1/tmt1/bc1/tb1, wrong-network
+27. **`src/send/validation.test.ts`**: send address validation (mtc1/tmt1/bc1/tb1, wrong-network
     detection, non-standard HRP rejection) and exact amount parsing against published vectors.
-21. **`src/send/mlTxBuilder.test.ts`**: the ML planner and assembler: selection determinism, the
+28. **`src/send/mlTxBuilder.test.ts`**: the ML planner and assembler: selection determinism, the
     implicit-fee invariant, token-remainder sizing on the real output list, signer loopback.
-22. **`src/send/btcTxBuilder.test.ts`**: the BTC builder: plan-fee equals signed-fee on the BIP84
+29. **`src/send/btcTxBuilder.test.ts`**: the BTC builder: plan-fee equals signed-fee on the BIP84
     vectors, multi-origin signing, confirmed-input policy, typed dust and insufficient funds.
-23. **`src/send/TxTracker.test.ts`**: the pending-to-confirmed lifecycle with injected timers:
+30. **`src/send/TxTracker.test.ts`**: the pending-to-confirmed lifecycle with injected timers:
     poll cadence, attempt caps, terminal stop, flaky-read tolerance.
-24. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
+31. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
     funding across every managed address with fresh branch 1 change, typed busy refusal,
     broadcast-answer verification, fee pinning, quote purity, post-broadcast warning, the
     origin walk over long change histories and the failed-send change release.
-25. **`src/data/mock/mockSend.test.ts`**: the R3 demo send path: fixture fee tiers, the same
+32. **`src/data/mock/mockSend.test.ts`**: the R3 demo send path: fixture fee tiers, the same
     address and amount validation rejections and deterministic demo-labelled ids.
-26. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+33. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
     release semantics, xpub parity.
-27. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
-    modules (keys, storage, data, onboarding).
-28. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-29. **`tsc --noEmit`**: strict TypeScript.
-30. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+34. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+    modules (keys, send, storage, data, onboarding, trade, screens).
+35. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+36. **`tsc --noEmit`**: strict TypeScript.
+37. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
