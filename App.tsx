@@ -8,7 +8,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import './global.css';
 
 import { t } from './src/i18n';
-import { ProvidersProvider } from './src/data/providers/context';
+import { ProvidersProvider, useProviders } from './src/data/providers/context';
 import { type NetworkFlag } from './src/config/endpoints';
 import { loadAppSettings, saveAppSettings } from './src/storage/appSettings';
 import { VaultKeyInvalidatedError } from './modules/mojito-core';
@@ -16,7 +16,7 @@ import { walletVault, type VaultMeta, type WalletVaultHandle } from './src/stora
 import { pinStore } from './src/storage/pinStore';
 import { detectBio } from './src/onboarding/ui/useBioScan';
 import { C, alpha } from './src/theme';
-import { AppBackground, Icon, IconName, Txt } from './src/ui';
+import { AppBackground, Chip, Icon, IconName, Txt } from './src/ui';
 import { Onboarding, type OnboardingResult, UnlockScreen } from './src/onboarding';
 import type { Bio } from './src/onboarding/ui';
 import { Splash } from './src/screens/intro';
@@ -117,6 +117,8 @@ type AppSession = {
 };
 
 function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkChange: (testnet: boolean) => void }) {
+  const { mode, pricesAreMock } = useProviders();
+  const insets = useSafeAreaInsets();
   const [splashDone, setSplashDone] = useState(false);
   /** Whether the vault-existence check finished; drives onboarding vs lock. */
   const [ready, setReady] = useState(false);
@@ -399,6 +401,18 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
           )}
 
           {!overlay && <TabBar tab={tab} onChange={setTab} />}
+
+          {/* Persistent demo marker: mock mode serves fixture everything,
+              real mode still carries mock prices per R1. Shell-level so
+              every fixture-backed tab carries the same honest note. */}
+          {(mode === 'mock' || pricesAreMock) && (
+            <View
+              pointerEvents="none"
+              className="absolute left-0 right-0 items-center"
+              style={{ bottom: Math.max(insets.bottom, 12) + 8 + 64 + 10, zIndex: 31 }}>
+              <Chip dot={false}>{t(mode === 'mock' ? 'home.demoData' : 'home.demoPrices')}</Chip>
+            </View>
+          )}
         </>
       )}
 

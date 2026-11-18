@@ -49,7 +49,7 @@ async function main() {
       (status === 404 && body && typeof body === 'object' && 'error' in body);
     check(`GET /address/${VECTOR_ADDRESS}`, ok, `http ${status}`);
   } catch (e) {
-    check('GET /address/{vector}', false, String(e));
+    check(`GET /address/${VECTOR_ADDRESS}`, false, String(e));
   }
 
   // 3. Feerate: a bare JSON string of atoms per kB (cached server-side 30s).

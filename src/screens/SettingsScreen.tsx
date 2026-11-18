@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { Sheet } from './types';
 import Constants from 'expo-constants';
 import { Alert, Linking, Pressable, View } from 'react-native';
-import { t, type I18nKey } from '../i18n';
+import { t } from '../i18n';
 import { useData } from '../data/providers/context';
 import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
@@ -18,10 +18,11 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   // (ProvidersProvider rebuilds on change), not a local flag.
   const [security, setSecurity] = useState({ biometric: true, autoLock: true });
   const [flags, setFlags] = useState({ notifs: true, hideBal: false });
-  const [currency, setCurrency] = useState<(typeof CURRENCIES)[number]>('USD');
-  const [appearance, setAppearance] = useState<AppearanceId>('dark');
   const [dex, setDex] = useState<DexId>('mintlayer');
-  const [sheet, setSheet] = useState<'currency' | 'appearance' | 'dex' | null>(null);
+  // Currency and Appearance have no backend in M2: their rows render the
+  // USD/dark defaults as coming-soon status instead of opening silent no-op
+  // pickers.
+  const [sheet, setSheet] = useState<'dex' | null>(null);
   /** Which security control is waiting for its disable step-up. */
   const [confirm, setConfirm] = useState<'biometric' | 'autoLock' | null>(null);
   /** Device biometric capability; null until the probe lands. The enable
@@ -152,9 +153,10 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
           <Card variant="inset" accent={C.amber} className="mt-2.5 p-4 rounded-[16px]">
             <Txt className="text-[14px] font-semibold">{t('settings.security.confirmTitle')}</Txt>
             <Txt className="text-[12px] text-text2 mt-1 leading-[17px]">
-              {t('settings.security.confirmBody', {
-                feature: t(confirm === 'autoLock' ? 'settings.security.autolock' : 'settings.security.biometrics'),
-              })}
+              {t(
+                confirm === 'autoLock' ? 'settings.security.confirmBodyLock' : 'settings.security.confirmBody',
+                { feature: t(confirm === 'autoLock' ? 'settings.security.autolock' : 'settings.security.biometrics') },
+              )}
             </Txt>
             <View className="items-center mt-5">
               <PinDots value={confirmLock.val} error={confirmLock.err} />
@@ -220,14 +222,17 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         <ListRow icon="bell" iconColor={C.amber} label={t('settings.notifications')} sub={t('settings.notificationsSub')} divider>
           <Toggle on={flags.notifs} onChange={set('notifs')} />
         </ListRow>
-        <ListRow icon="settings" label={t('settings.currency')} sub={currency} trailing="→" divider onPress={() => setSheet('currency')} />
+        <ListRow
+          icon="settings"
+          label={t('settings.currency')}
+          sub={`USD · ${t('settings.comingSoon')}`}
+          divider
+        />
         <ListRow
           icon="settings"
           label={t('settings.appearance')}
-          sub={t(APPEARANCE_LABEL_KEYS[appearance])}
-          trailing="→"
+          sub={`${t('settings.appearance.dark')} · ${t('settings.comingSoon')}`}
           divider
-          onPress={() => setSheet('appearance')}
         />
       </Section>
 
@@ -253,23 +258,6 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </Txt>
 
       <PickerSheet
-        open={sheet === 'currency'}
-        onClose={() => setSheet(null)}
-        title={t('settings.currency')}
-        options={CURRENCIES}
-        value={currency}
-        onSelect={setCurrency}
-      />
-      <PickerSheet
-        open={sheet === 'appearance'}
-        onClose={() => setSheet(null)}
-        title={t('settings.appearance')}
-        options={APPEARANCES}
-        value={appearance}
-        onSelect={setAppearance}
-        labels={{ dark: t('settings.appearance.dark'), light: t('settings.appearance.light'), system: t('settings.appearance.system') }}
-      />
-      <PickerSheet
         open={sheet === 'dex'}
         onClose={() => setSheet(null)}
         title={t('settings.dex')}
@@ -282,17 +270,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
   );
 }
 
-const CURRENCIES = ['USD', 'EUR', 'GBP', 'BTC'] as const;
-
-// Selectable values stay internal ids; the display copy comes from i18n.
-type AppearanceId = 'dark' | 'light' | 'system';
-const APPEARANCES: readonly AppearanceId[] = ['dark', 'light', 'system'];
-
-const APPEARANCE_LABEL_KEYS: Record<AppearanceId, I18nKey> = {
-  dark: 'settings.appearance.dark',
-  light: 'settings.appearance.light',
-  system: 'settings.appearance.system',
-};
+// Display preferences are the USD/dark defaults in M2; the pickers return
+// with their backends.
 
 type DexId = 'mintlayer' | 'auto';
 const DEXES: readonly DexId[] = ['mintlayer', 'auto'];

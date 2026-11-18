@@ -158,8 +158,13 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     const builds: AssetBuild[] = [];
     const usedSymbols = new Set<string>();
     const pushAsset = (row: AssetRow, decimal: string) => {
-      if (usedSymbols.has(row.sym)) row.sym = `${row.sym} 2`;
-      usedSymbols.add(row.sym);
+      // Same-ticker assets (two tokens sharing a ticker) get a numbered
+      // suffix so the display symbol, and with it the React key, stays
+      // unique; a fixed " 2" would collide with the next duplicate.
+      let sym = row.sym;
+      for (let n = 2; usedSymbols.has(sym); n++) sym = `${row.sym} ${n}`;
+      row.sym = sym;
+      usedSymbols.add(sym);
       builds.push({ row, decimal });
     };
 

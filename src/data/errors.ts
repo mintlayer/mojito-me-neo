@@ -19,7 +19,9 @@ export function dataErrorCopy(e: unknown): string {
     // never an offline accusation against a working connection.
     if (e.kind === 'transport' && indexerUnconfigured()) return t('errors.indexer.testnet');
     return e.kind === 'http'
-      ? t('errors.indexer.http', { status: e.status ?? 0 })
+      ? e.status !== undefined
+        ? t('errors.indexer.http', { status: e.status })
+        : t('errors.indexer.httpGeneric')
       : t('errors.indexer.network');
   }
   if (e instanceof PriceUnavailableError) return t('errors.price.unavailable');

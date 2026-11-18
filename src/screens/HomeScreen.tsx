@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import type { Nav } from './types';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData, useDataState, useProviders } from '../data/providers/context';
 import { dataErrorCopy } from '../data/errors';
@@ -8,7 +8,7 @@ import { currentNetwork, endpointsFor } from '../config/endpoints';
 import { usePoll } from '../data/polling';
 import type { AssetRow, NftRow, PriceRange } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
-import { AreaChart, Avatar, Btn, Callout, Card, ChainBadge, Chip, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
+import { AreaChart, Avatar, Btn, Callout, Card, ChainBadge, Enter, Float, Icon, IconBtn, IconName, Label, ListRow, LivePill, Screen, Segmented, Sparkline, TokenIcon, Txt, toneColor, tile } from '../ui';
 
 // Polling cadence per the M2 spec: balances and activity refresh every 60 s
 // while the wallet screen is foregrounded; focus and pull-to-refresh refresh
@@ -18,25 +18,24 @@ const BALANCE_POLL_MS = 60_000;
 const STALE_AFTER_MS = 180_000;
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock, active }: Nav) {
-  const { mode, price, pricesAreMock } = useProviders();
+  const { mode, price } = useProviders();
   const [tick, setTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  /** Set by pull-to-refresh so the next loads bypass the home bundle cache. */
-  const forceRef = useRef(false);
-  const consumeForce = (): boolean => {
-    const forced = forceRef.current;
-    forceRef.current = false;
-    return forced;
-  };
-  const refresh = useCallback(async (): Promise<void> => {
+  /** The tick that must bypass the home bundle cache. Pull-to-refresh sets
+   *  both states together, so every load below threads its force flag
+   *  explicitly instead of consuming one shared ref in hook order. */
+  const [forceTick, setForceTick] = useState(0);
+  const refresh = useCallback(async (opts?: { force?: boolean }): Promise<void> => {
+    if (opts?.force) setForceTick((n) => n + 1);
     setTick((n) => n + 1);
   }, []);
   usePoll(refresh, { intervalMs: BALANCE_POLL_MS, active: active !== false });
 
-  const balance = useDataState((d) => d.getPortfolio({ force: consumeForce() }), tick);
-  const assets = useDataState((d) => d.getAssets({ force: consumeForce() }), tick);
+  const force = forceTick === tick;
+  const balance = useDataState((d) => d.getPortfolio({ force }), tick);
+  const assets = useDataState((d) => d.getAssets({ force }), tick);
   const activity = useDataState((d) => d.getActivity(20), tick);
-  const nfts = useDataState((d) => d.getNfts({ force: consumeForce() }), tick);
+  const nfts = useDataState((d) => d.getNfts({ force }), tick);
   const networks = useData((d) => d.getNetworks());
   const ranges = useData((d) => d.getRanges());
   const profile = useData((d) => d.getProfile());
@@ -76,7 +75,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       icon: deferred ? 'lock' : 'arrow_dn',
       labelKey: 'home.actions.receive',
       color: deferred ? C.text3 : C.text0,
-      press: deferred ? undefined : onOpenReceive,
+      // A locked tile still answers taps: the hint says what unlocks it,
+      // instead of a silent no-op.
+      press: deferred
+        ? () => Alert.alert(t('home.actions.receive'), t('home.receive.locked'))
+        : onOpenReceive,
       locked: deferred,
       hintKey: deferred ? 'home.backup.banner' : undefined,
     },
@@ -98,16 +101,14 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   const lastSync = Math.max(balance.loadedAt, assets.loadedAt, activity.loadedAt, nfts.loadedAt);
   const stale = !offline && !syncing && lastSync > 0 && Date.now() - lastSync > STALE_AFTER_MS;
   const staleMinutes = lastSync > 0 ? Math.max(1, Math.round((Date.now() - lastSync) / 60_000)) : 0;
-  const showDemoChip = mode === 'mock' || pricesAreMock;
 
   return (
     <Screen
       refreshing={refreshing}
       refreshTitle={t('home.activity.refresh')}
       onRefresh={() => {
-        forceRef.current = true;
         setRefreshing(true);
-        refresh();
+        void refresh({ force: true });
       }}>
       <View className="px-5 flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
@@ -117,11 +118,6 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <Txt className="text-[13px] font-semibold">{profile.name} ▾</Txt>
           </View>
         </View>
-        {showDemoChip && (
-          <View className="flex-1 items-start pl-2">
-            <Chip dot={false}>{t('home.demoData')}</Chip>
-          </View>
-        )}
         <View className="flex-row gap-2">
           {onLock && <IconBtn name="lock" label={t('home.lock')} onPress={onLock} />}
           <IconBtn name="settings" label={t('settings.title')} onPress={onOpenSettings} />
@@ -162,7 +158,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             icon="shield"
             action={
               <Pressable onPress={onBackUp} className="px-3 py-1.5 rounded-[9px]" style={{ backgroundColor: C.amber }}>
-                <Txt className="text-[11px] font-bold" style={{ color: '#1a1208' }}>
+                <Txt className="text-[11px] font-bold" style={{ color: C.onAmber }}>
                   {t('home.backup.cta')}
                 </Txt>
               </Pressable>
@@ -198,7 +194,11 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
           ) : balance.data === null ? (
             <View>
               <Label>{t('home.balance.total')}</Label>
-              <Txt className="text-[38px] font-bold tracking-tightest text-text3 mt-1.5">······</Txt>
+              <Txt
+                className="text-[38px] font-bold tracking-tightest text-text3 mt-1.5"
+                accessibilityLabel={t('home.balance.loading')}>
+                ······
+              </Txt>
             </View>
           ) : (
             <View>
@@ -240,7 +240,12 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
               <View className="flex-row justify-between mt-1">
                 {ranges.map((r) => (
-                  <Pressable key={r} onPress={() => setRange(r)}>
+                  <Pressable
+                    key={r}
+                    onPress={() => setRange(r)}
+                    accessibilityRole="button"
+                    accessibilityLabel={t(`home.ranges.${r}` as I18nKey)}
+                    accessibilityState={{ selected: r === range }}>
                     <Txt mono className="text-[10px]" style={{ color: r === range ? C.amber : C.text3 }}>
                       {t(`home.ranges.${r}` as I18nKey)}
                     </Txt>
@@ -355,7 +360,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
                 sub={<Txt mono className="text-[11px] text-text2 mt-0.5">{r.sub}</Txt>}
                 divider={i > 0}
                 trailing={
-                  <View className="items-end">
+                  <View className="items-end max-w-[110px]">
                     <Txt mono className="text-[11px] text-text2">
                       {r.time}
                     </Txt>
