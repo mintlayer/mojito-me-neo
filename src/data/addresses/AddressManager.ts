@@ -40,6 +40,16 @@ export interface AddressManager {
   currentReceivingAddress(chain: ManagedChain): Promise<string>;
   /** Next change address for send bookkeeping (consumed by M3). */
   allocateChangeAddress(chain: ManagedChain): Promise<string>;
+  /** The next change address without advancing or persisting (quotes:
+   *  a fee preview must not burn derivation indexes). */
+  peekChangeAddress(chain: ManagedChain): Promise<string>;
+  /** Undo the last change allocation (failed send cleanup): the counter
+   *  steps back and persists so a failed attempt does not burn a change
+   *  index. Serialized callers only (the send mutex owns the window). */
+  releaseChangeAddress(chain: ManagedChain): Promise<void>;
+  /** The persisted derivation counters: the send funding origin walk reads
+   *  them so every allocated change index stays reachable. */
+  indexes(chain: ManagedChain): Promise<ChainIndexes>;
   /** Every known receiving (up to and including current) and change address. */
   allAddresses(chain: ManagedChain): Promise<string[]>;
 }
@@ -138,6 +148,23 @@ export function createAddressManager(opts: AddressManagerOptions): AddressManage
       chains[chain].indexes = next;
       await save(opts.network, chain, next);
       return opts.derive[chain](1, indexes.change);
+    },
+
+    async peekChangeAddress(chain: ManagedChain): Promise<string> {
+      const indexes = await indexesOf(chain);
+      return opts.derive[chain](1, indexes.change);
+    },
+
+    async releaseChangeAddress(chain: ManagedChain): Promise<void> {
+      const indexes = await indexesOf(chain);
+      if (indexes.change === 0) return;
+      const next = { ...indexes, change: indexes.change - 1 };
+      chains[chain].indexes = next;
+      await save(opts.network, chain, next);
+    },
+
+    async indexes(chain: ManagedChain): Promise<ChainIndexes> {
+      return { ...(await indexesOf(chain)) };
     },
 
     async allAddresses(chain: ManagedChain): Promise<string[]> {

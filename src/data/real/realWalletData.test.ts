@@ -6,6 +6,7 @@
 //   npx tsx src/data/real/realWalletData.test.ts
 import { strict as assert } from 'node:assert/strict';
 
+import { createRealAccountContext } from './account';
 import { createRealWalletData } from './realWalletData';
 import { deriveMlAccount, mlAddressAt } from '../../keys/mlAccounts';
 import { btcAddressAt, deriveBtcAccount } from '../../keys/BtcKeyring';
@@ -76,12 +77,13 @@ async function main() {
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = stubFetch as unknown as typeof fetch;
-  const data = createRealWalletData({
+  const context = createRealAccountContext({
     network: 'mainnet',
     indexerBase: INDEXER_BASE,
     btcBase: BTC_BASE,
     deriveXpubs: async () => ({ mlXpub: mlAccount.xpub, btcXpub: btcAccount.xpub }),
   });
+  const data = createRealWalletData(context);
   try {
     // BTC sums across both funded addresses: 150000000 + 2500 + 100000000
     // sats = 2.500025 BTC, tolerating the missing total key on every body.
@@ -98,6 +100,10 @@ async function main() {
     assert.ok(btcRow, 'btc asset row missing');
     assert.equal(btcRow.amt, 2.500025);
     assert.equal(btcRow.value, 2.500025 * 96420.32);
+    // The unconfirmed 2500 sat receipt rides the row as pending disclosure:
+    // the send path refuses unconfirmed external receipts, so the amount
+    // must not read as fully spendable.
+    assert.equal(btcRow.pending, '0.000025');
     const mlRow = assets.find((row) => row.sym === 'ML');
     assert.ok(mlRow, 'ml asset row missing');
     assert.equal(mlRow.amt, 1.23);

@@ -1,6 +1,7 @@
 // Provider switch self-check: mock mode returns today's fixture shapes;
-// real mode answers the fixture seams, and the service gates cover the
-// data calls themselves.
+// real mode builds the real services (fixture-backed seams only where a
+// milestone is still deferred), and the service gates cover the data calls
+// themselves.
 //   npx tsx src/data/providers/providers.test.ts
 import { strict as assert } from 'node:assert/strict';
 
@@ -54,7 +55,9 @@ async function main() {
 
   const broadcast = await providers.broadcast.broadcastMl('deadbeef');
   assert.ok(/^[0-9a-f]{64}$/.test(broadcast.txId));
-  assert.equal(await providers.broadcast.getMlStatus(broadcast.txId), 'pending');
+  assert.deepEqual(await providers.broadcast.getMlStatus(broadcast.txId), { state: 'pending' });
+  const btcBroadcast = await providers.broadcast.broadcastBtc('deadbeef');
+  assert.ok(/^[0-9a-f]{64}$/.test(btcBroadcast.txId));
 
   const handle = await providers.bridge.initiate({
     route: 'M2E', token: 'USDT', amount: '500.00', destAddr: '0xabc',

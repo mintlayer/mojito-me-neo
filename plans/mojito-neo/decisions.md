@@ -54,3 +54,33 @@ consumer: `feerate`, the UTXO listings and the BTC `utxos`/`txStatus`/
 with the M4 market and activity paging. The client module headers cite this
 entry instead of narrating callers that do not exist, and M3/M4 must consume
 or trim these methods when their consumers land.
+
+## D14. QR encoding uses react-native-qrcode-svg, not the spec's pure-TS encoder
+
+The M3 spec's deliverable 1 asked for a hand-rolled pure TypeScript QR encoder
+(`src/qr/QrCode.ts`, ECC M) with a reference-decoder round-trip test. Shipped
+instead: the `react-native-qrcode-svg` library at error correction level H.
+
+Rationale: a QR encoder is exactly the kind of byte-level state machine a
+hand-rolled copy gets subtly wrong (mask selection, version negotiation,
+padding), and a bug there produces codes that scan unreliably or encode the
+wrong payload. The battle-tested library removes that entire failure class,
+and ECC H keeps the code decodable under the center badge overlay the receive
+screen renders. The price is one well-audited dependency instead of a
+maintained in-tree deliverable, and the ECC M to H drift (more redundancy,
+no functional change). The pure-TS deliverable and its round-trip test are
+dropped, not deferred; if the dependency ever has to go, reintroduce the
+deliverable with its reference-decoder test in the same change.
+
+## D15. ScanSheet and expo-camera deferred past M3
+
+The M3 spec's deliverable 2 (a scan sheet for pasting-free recipient entry)
+is not shipped: there is no camera dependency and no ScanSheet. The send
+screen's QR button shows an honest alert ("Camera scanning ships with the
+next milestone; paste an address for now") and paste remains the entry path.
+
+Rationale: a camera permission surface is a native build and store-review
+cost that a paste-first send flow does not need yet, and shipping it half
+wired would be worse than an honest alert. The `scan.*` i18n keys land with
+the sheet, not before. Revisit when the milestone that owns scanning picks
+the camera library.

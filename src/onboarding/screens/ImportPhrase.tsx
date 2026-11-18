@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { TextInput, View } from 'react-native';
-import * as Clipboard from 'expo-clipboard';
+import { scrubClipboard } from '../../storage/clipboard';
 import { t } from '../../i18n';
 import { PHRASE_LENGTHS } from '../data';
 import { isWordlistWord, normalizeWords, validateMnemonic } from '../../keys/bip39';
@@ -66,7 +66,7 @@ export function ImportPhrase({ ctx }: { ctx: Ctx }) {
     setActive(Math.min(parts.length, L - 1));
     // A pasted phrase must not linger in the clipboard, where keyboards and
     // clipboard managers can read it, so scrub it as soon as the words land.
-    Clipboard.setStringAsync('').catch(() => undefined);
+    scrubClipboard();
   };
 
   const setWord = (i: number, raw: string) => {

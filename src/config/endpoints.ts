@@ -26,6 +26,10 @@ export type EndpointsConfig = {
   waitlistBase: string | null;
   /** bridge_v2 frontend API (F14: deployed base, integration lands in M4). */
   bridgeBase: string | null;
+  /** Mintlayer explorer base for tx links; null on testnet pending A2/R6. */
+  explorerBase: string | null;
+  /** BTC explorer base for tx links (public mempool.space endpoints). */
+  btcExplorerBase: string | null;
 };
 
 const MAINNET: EndpointsConfig = {
@@ -36,6 +40,8 @@ const MAINNET: EndpointsConfig = {
   priceBase: null,
   waitlistBase: null,
   bridgeBase: 'https://api.bridge.mintlayer.org/api/v1',
+  explorerBase: 'https://explorer.mintlayer.org',
+  btcExplorerBase: 'https://mempool.space',
 };
 
 // PENDING action item A2 (R6): the Mintlayer-operated testnet indexer URL is
@@ -49,6 +55,8 @@ const TESTNET: EndpointsConfig = {
   priceBase: null,
   waitlistBase: null,
   bridgeBase: 'https://api.bridge.mintlayer.org/api/v1',
+  explorerBase: null,
+  btcExplorerBase: 'https://mempool.space/testnet',
 };
 
 const NETWORKS: Record<NetworkFlag, EndpointsConfig> = { mainnet: MAINNET, testnet: TESTNET };

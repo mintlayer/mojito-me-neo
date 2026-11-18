@@ -18,7 +18,7 @@ const BALANCE_POLL_MS = 60_000;
 const STALE_AFTER_MS = 180_000;
 
 export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, deferred, onBackUp, onLock, active }: Nav) {
-  const { mode, price } = useProviders();
+  const { price, txTracker } = useProviders();
   const [tick, setTick] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   /** The tick that must bypass the home bundle cache. Pull-to-refresh sets
@@ -30,6 +30,10 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
     setTick((n) => n + 1);
   }, []);
   usePoll(refresh, { intervalMs: BALANCE_POLL_MS, active: active !== false });
+
+  // M3: a tracked send flipping pending to confirmed bumps the cycle so the
+  // activity list (which reads the chain, the source of truth) picks it up.
+  useEffect(() => txTracker.subscribe(() => void refresh()), [txTracker, refresh]);
 
   const force = forceTick === tick;
   const balance = useDataState((d) => d.getPortfolio({ force }), tick);
@@ -61,15 +65,15 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
 
   const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean; hintKey?: I18nKey }[] = [
     {
-      // Real mode has no broadcast route (R3 pending), so Send is gated
-      // exactly like the deferred Receive tile: a disabled tile with honest
-      // copy instead of a flow that would end in a fabricated success.
-      icon: mode === 'real' ? 'lock' : 'arrow_up',
+      // M3 un-gates Send: the flow runs on real builders where the chain
+      // allows it (BTC end-to-end on scure; ML on the bindings facade) and
+      // states its honest availability inside the send screen (R3 switch,
+      // device-pending signing), instead of a disabled tile guessing for
+      // every chain at once.
+      icon: 'arrow_up',
       labelKey: 'home.actions.send',
-      color: mode === 'real' ? C.text3 : C.text0,
-      press: mode === 'real' ? undefined : onOpenSend,
-      locked: mode === 'real',
-      hintKey: mode === 'real' ? 'home.actions.sendUnavailable' : undefined,
+      color: C.text0,
+      press: onOpenSend,
     },
     {
       icon: deferred ? 'lock' : 'arrow_dn',
@@ -438,9 +442,17 @@ function TokenRow({ asset }: { asset: AssetRow }) {
         {unavailable ? (
           <Txt className="text-[11px] text-text2 mt-0.5">{t('home.tokens.btcUnavailable')}</Txt>
         ) : (
-          <Txt mono className="text-[11px] text-text2 mt-0.5">
-            {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
-          </Txt>
+          <>
+            <Txt mono className="text-[11px] text-text2 mt-0.5">
+              {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
+            </Txt>
+            {/* Pending-aware copy (send honesty): the send path refuses
+                unconfirmed external receipts, so an amount that includes a
+                pending receipt says so instead of reading as spendable. */}
+            {asset.pending !== undefined && asset.pending !== '0' ? (
+              <Txt className="text-[10.5px] text-text2 mt-0.5">{t('home.tokens.pendingBalance', { pending: asset.pending })}</Txt>
+            ) : null}
+          </>
         )}
       </View>
       <Sparkline data={asset.spark} color={asset.change >= 0 ? C.green : C.red} width={48} height={22} />

@@ -14,19 +14,11 @@
 import type { ChainName } from '../../theme';
 import { t } from '../../i18n';
 import { ML_DECIMALS, atomsToDecimal, formatAmount, formatUsd } from '../../money';
-import { IndexerClient, IndexerError } from '../ml/IndexerClient';
-import { BtcChainService } from '../btc/BtcChainService';
-import { BalanceService } from '../ml/BalanceService';
-import { NftService } from '../ml/NftService';
-import { ActivityService } from '../activity/ActivityService';
-import { createAddressManager, type AddressManager } from '../addresses/AddressManager';
-import { mlAddressAt } from '../../keys/mlAccounts';
-import { btcAddressAt } from '../../keys/BtcKeyring';
-import { loadAddressIndex, saveAddressIndex } from '../../storage/addressStore';
-import type { NetworkFlag } from '../../config/endpoints';
+import { IndexerError } from '../ml/IndexerClient';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
+import type { AccountServices, RealAccountContext, RealAccountConfig } from './account';
 import {
-  CHAIN_GLYPH, CONTACTS, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
+  CHAIN_GLYPH, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
   TIMEFRAMES, WAITLIST, ASKS, BIDS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE,
 } from '../../data';
 import { truncateMiddle } from '../../ui/format';
@@ -36,22 +28,7 @@ import { createFixturePriceProvider } from '../mock/priceFixtures';
 /** How long one home bundle (portfolio, assets, nfts) is shared between calls. */
 const HOME_CACHE_MS = 5_000;
 
-export type RealWalletDataConfig = {
-  network: NetworkFlag;
-  indexerBase: string | null;
-  btcBase: string | null;
-  /** Opens the vault once to derive the public account xpubs (M1 keyrings).
-   *  Public material only: xpub blobs and addresses, never the seed. */
-  deriveXpubs: () => Promise<{ mlXpub: Uint8Array; btcXpub: string }>;
-};
-
-type AccountContext = {
-  manager: AddressManager;
-  balance: BalanceService | null;
-  nfts: NftService | null;
-  activity: ActivityService | null;
-  btc: BtcChainService | null;
-};
+export type RealWalletDataConfig = RealAccountConfig;
 
 type AssetBuild = { row: AssetRow; decimal: string };
 
@@ -64,81 +41,18 @@ type HomeBundle = {
   loadedAt: number;
 };
 
-export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
+export function createRealWalletData(context: RealAccountContext): WalletData {
   const fixtureData = createFixtureWalletData();
   const price = createFixturePriceProvider();
-
-  let accountPromise: Promise<AccountContext> | null = null;
+  const cfg = context.cfg;
+  const ensureAccount = context.ensureAccount;
+  const requireIndexer = context.requireIndexer;
   let homeCache: HomeBundle | null = null;
-
-  /** The home surfaces need the indexer; without a base (testnet pending
-   *  action item A2) they fail typed-offline before any vault access. */
-  function requireIndexerBase(): void {
-    if (!cfg.indexerBase) throw new IndexerError('transport', 'indexer', undefined);
-  }
-
-  async function ensureAccount(): Promise<AccountContext> {
-    if (accountPromise === null) {
-      accountPromise = (async (): Promise<AccountContext> => {
-        const { mlXpub, btcXpub } = await cfg.deriveXpubs();
-        const indexer = cfg.indexerBase ? new IndexerClient(cfg.indexerBase) : null;
-        const btc = cfg.btcBase ? new BtcChainService(cfg.btcBase) : null;
-        const manager = createAddressManager({
-          network: cfg.network,
-          load: loadAddressIndex,
-          save: saveAddressIndex,
-          derive: {
-            ml: (branch, index) => mlAddressAt(mlXpub, branch, index, cfg.network),
-            btc: (branch, index) => btcAddressAt({ xpub: btcXpub, network: cfg.network }, branch, index),
-          },
-          probe: {
-            // Sequential probe per address; the client maps the documented
-            // fresh-address 404 to unused, so the scan exits at the gap.
-            ml: indexer
-              ? async (address) => {
-                  try {
-                    await indexer.addressInfo(address);
-                    return true;
-                  } catch (e) {
-                    if (e instanceof IndexerError && e.status === 404) return false;
-                    throw e;
-                  }
-                }
-              : undefined,
-            btc: btc
-              ? async (address) => {
-                  const stats = await btc.addressStats(address);
-                  return stats.chain.txCount > 0 || stats.mempool.txCount > 0;
-                }
-              : undefined,
-          },
-        });
-        const balance = indexer ? new BalanceService(indexer, () => manager.allAddresses('ml')) : null;
-        const nfts = indexer ? new NftService(indexer) : null;
-        const activity = indexer
-          ? new ActivityService({
-              ml: {
-                client: indexer,
-                addresses: () => manager.allAddresses('ml'),
-                tokenMeta: (tokenId) => balance!.tokenMeta(tokenId),
-              },
-              btc: btc ? { client: btc, addresses: () => manager.allAddresses('btc') } : undefined,
-            })
-          : null;
-        return { manager, balance, nfts, activity, btc };
-      })().catch((e) => {
-        // Reset so a transient failure (locked session) can succeed later.
-        accountPromise = null;
-        throw e;
-      });
-    }
-    return accountPromise;
-  }
 
   /** One shared scan for portfolio, assets and NFTs, memoized briefly. A
    *  force call (pull-to-refresh) bypasses the cache window. */
   async function loadHome(opts?: { force?: boolean }): Promise<HomeBundle> {
-    requireIndexerBase();
+    requireIndexer();
     if (!opts?.force && homeCache !== null && Date.now() - homeCache.loadedAt < HOME_CACHE_MS) return homeCache;
     const acct = await ensureAccount();
     if (!acct.balance || !acct.nfts) {
@@ -169,9 +83,10 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     };
 
     const mlDecimal = atomsToDecimal(portfolio.coinAtoms, ML_DECIMALS);
-    pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML')), mlDecimal);
+    pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML'), false, { decimals: ML_DECIMALS }), mlDecimal);
 
     let btcDecimal = '0';
+    let btcPending: string | undefined;
     // Unconfigured btc-api base (F13): the BTC amount is unknown, not zero,
     // so the row renders an explicit unavailable state and the total stays
     // honest about what it excludes. A configured backend that fails keeps
@@ -183,14 +98,21 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
         // Sum confirmed and unconfirmed sats over every derived address
         // (receiving and change), mirroring the ML BalanceService: the
         // current receiving address is the first unused one, so funds on
-        // earlier addresses would otherwise read as zero.
+        // earlier addresses would otherwise read as zero. The unconfirmed
+        // share is surfaced separately: the send path refuses unconfirmed
+        // external receipts, so the row must not read as spendable.
         const addresses = await acct.manager.allAddresses('btc');
         let sat = 0n;
+        let pendingSat = 0n;
         for (const address of addresses) {
           const btcBalance = await acct.btc.balance(address);
           sat += BigInt(btcBalance.confirmedSat) + BigInt(btcBalance.unconfirmedSat);
+          pendingSat += BigInt(btcBalance.unconfirmedSat);
         }
         btcDecimal = atomsToDecimal(sat.toString(), 8);
+        // Esplora serves a negative unconfirmed figure while an outgoing
+        // mempool spend nets against it: only an inflight receipt is copy.
+        btcPending = pendingSat > 0n ? atomsToDecimal(pendingSat.toString(), 8) : undefined;
       } catch (e) {
         // Any configured-backend failure (transport, http after retries, a
         // parse rule) degrades to the zero BTC row while the ML surfaces
@@ -199,7 +121,13 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
         if (!(e instanceof IndexerError)) throw e;
       }
     }
-    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable), btcDecimal);
+    pushAsset(
+      assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable, {
+        decimals: 8,
+        pending: btcPending,
+      }),
+      btcDecimal,
+    );
 
     for (const entry of portfolio.tokens) {
       if (nftIds.has(entry.tokenId)) continue; // NFT units live on the NFTs tab.
@@ -214,6 +142,8 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
           decimal,
           snapshots.get(entry.tokenId) ?? null,
           await sparkFor(price, ticker ?? entry.tokenId),
+          false,
+          { decimals: meta.decimals, tokenId: entry.tokenId },
         ),
         decimal,
       );
@@ -241,7 +171,7 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     return bundle;
   }
 
-  async function nftRows(nfts: NftService, ids: string[]): Promise<NftRow[]> {
+  async function nftRows(nfts: NonNullable<AccountServices['nfts']>, ids: string[]): Promise<NftRow[]> {
     const rows: NftRow[] = [];
     for (const id of ids) {
       const info = await nfts.metadata(id);
@@ -264,7 +194,7 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     getAssetSymbols: async () => (await loadHome()).assets.map((row) => row.sym),
     getAssetBalances: async () => (await loadHome()).balances,
     getActivity: async (limit) => {
-      requireIndexerBase();
+      requireIndexer();
       const acct = await ensureAccount();
       if (!acct.activity) throw new IndexerError('transport', 'indexer', undefined);
       return acct.activity.rows(limit);
@@ -301,7 +231,7 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     getCardFeatures: async () => fixtureData.getCardFeatures(),
     getCardTiers: async () => fixtureData.getCardTiers(),
     getFees: async () => FEES,
-    getContacts: async () => [...CONTACTS],
+    getContacts: async () => [], // contacts are a mock-only affordance (M3 spec moves them past v2); real mode ships none
     getAddresses: async () => {
       const acct = await ensureAccount();
       const [ml, btc] = await Promise.all([
@@ -326,6 +256,7 @@ function assetRow(
   snapshot: PriceSnapshot | null,
   spark: number[],
   unavailable = false,
+  extra?: { decimals: number; tokenId?: string; pending?: string },
 ): AssetRow {
   const amt = Number(decimal);
   const price = snapshot ? Number(snapshot.usd) : 0;
@@ -339,6 +270,9 @@ function assetRow(
     value: amt * price,
     spark,
     unavailable: unavailable || undefined,
+    decimals: extra?.decimals,
+    tokenId: extra?.tokenId,
+    pending: extra?.pending,
   };
 }
 

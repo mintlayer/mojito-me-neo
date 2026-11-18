@@ -5,6 +5,7 @@
 import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
 import type { StepState } from '../../ui/StepState';
+import type { TxTracker } from '../../send/TxTracker';
 
 export type ProviderMode = 'mock' | 'real';
 
@@ -18,6 +19,16 @@ export type AssetRow = {
    *  value are unknown, not zero. The row renders an explicit unavailable
    *  state and contributes nothing to the total. */
   unavailable?: boolean;
+  /** Send precision (M3): exact decimals for the amount parser; absent in
+   *  fixture rows, where the screen falls back to the chain default. */
+  decimals?: number;
+  /** On-chain token id for MLS-01 sends; absent for coin rows. */
+  tokenId?: string;
+  /** Exact decimal string of the unconfirmed balance included in `amt`
+   *  (BTC row): the send path refuses unconfirmed external receipts, so
+   *  the row discloses the pending share instead of presenting the whole
+   *  amount as spendable. */
+  pending?: string;
 };
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };
@@ -61,6 +72,45 @@ export type FeeTierId = 'economy' | 'standard' | 'fast';
 export type FeeSchedule = Record<FeeTierId, { cost: number }>;
 export type Contact = { name: string; address: string };
 
+/** One per-tier fee quote for the send screen (spec M3: live estimates;
+ *  ML quotes carry atoms/kB, BTC quotes sat/vB; the fallback flag marks a
+ *  fixed rate used because the estimates backend is unreachable). */
+export type SendQuoteLeg = {
+  feeDecimal: string;
+  feeAtoms: string;
+  /** ML: transaction size in bytes; BTC: vsize. */
+  sizeBytes: number;
+  rateAtomsPerKb?: string;
+  satPerVbyte?: string;
+  rateIsFallback?: boolean;
+  changeAtoms?: string;
+};
+
+export type SendQuote = Record<FeeTierId, SendQuoteLeg>;
+
+export type SendResult = {
+  txId: string;
+  kind: 'ml' | 'btc';
+  /** True when the id comes from the mock broadcaster (R3 demo path). */
+  demo: boolean;
+  /** True when the broadcast succeeded but post-send bookkeeping (activity
+   *  tracking or fresh-address rotation) failed locally: the transaction is
+   *  on the network, so this must never read as a failed send. */
+  warning?: boolean;
+};
+
+/** The send seam screens consume (real in real mode, mock demo otherwise). */
+export interface SendService {
+  canBroadcast(chain: 'ml' | 'btc'): boolean;
+  quoteMl(params: { to: string; amountDecimal: string; decimals: number; tokenId?: string }): Promise<SendQuote>;
+  sendMl(params: { to: string; amountDecimal: string; decimals: number; tier: FeeTierId; tokenId?: string }): Promise<SendResult>;
+  quoteBtc(params: { to: string; amountDecimal: string }): Promise<SendQuote>;
+  /** satPerVbyte pins the reviewed rate: the send re-checks the live
+   *  estimate and refuses typed when it rose past what the user reviewed,
+   *  so the signed fee is the reviewed fee (or the send fails safe). */
+  sendBtc(params: { to: string; amountDecimal: string; tier: FeeTierId; satPerVbyte?: string; rateIsFallback?: boolean }): Promise<SendResult>;
+}
+
 // Profile
 export type Profile = { name: string; initial: string; address: string; chains: number };
 
@@ -83,12 +133,23 @@ export interface PriceProvider {
   getCandles(pair: string, interval: CandleInterval): Promise<Candle[]>;
 }
 
-// Broadcast (missing-architecture gap 3, R3: testnet-only mock in v1)
+// Broadcast (missing-architecture gap 3, R3: mock is the v1 demo path;
+// the real ML route stays config-gated behind broadcastBase, BTC rides the
+// configured btc-api POST tx which exists per F13)
 export type MlTxStatus = 'pending' | 'confirmed' | 'not-found';
+
+export type TxStatusInfo = {
+  state: MlTxStatus;
+  /** Mintlayer block id once confirmed; absent while pending. */
+  blockId?: string;
+  confirmations?: number;
+};
 
 export interface BroadcastProvider {
   broadcastMl(signedTxHex: string): Promise<{ txId: string }>;
-  getMlStatus(txId: string): Promise<MlTxStatus>;
+  broadcastBtc(signedTxHex: string): Promise<{ txId: string }>;
+  getMlStatus(txId: string): Promise<TxStatusInfo>;
+  getBtcStatus(txId: string): Promise<TxStatusInfo>;
 }
 
 // Waitlist (missing-architecture gap 4, R4: local-only in v1, real backend before ship)
@@ -157,6 +218,8 @@ export interface Providers {
   data: WalletData;
   price: PriceProvider;
   broadcast: BroadcastProvider;
+  send: SendService;
+  txTracker: TxTracker;
   waitlist: WaitlistProvider;
   bridge: BridgeProvider;
   mode: ProviderMode;

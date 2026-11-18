@@ -12,7 +12,10 @@
 // AbortController timeout, and the injected fetch/delay keep both clients
 // testable offline against fixture responses.
 
-export type FetchLike = (url: string, init: { signal: AbortSignal; headers?: Record<string, string> }) => Promise<{
+export type FetchLike = (
+  url: string,
+  init: { signal: AbortSignal; headers?: Record<string, string>; method?: string; body?: string },
+) => Promise<{
   ok: boolean;
   status: number;
   headers: { get(name: string): string | null };
@@ -92,6 +95,16 @@ export function asNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+/** Tx-hex contract shared by both broadcast boundaries (the ML submission
+ *  endpoint and the Esplora POST tx): non-empty, even length, hex digits.
+ *  One check keeps the two boundaries honest about the same contract; each
+ *  boundary maps the failure to its own typed error around this throw. */
+export function assertTxHex(value: string, endpoint: string): void {
+  if (value.length === 0 || value.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(value)) {
+    throw new TransportError('parse', endpoint, undefined);
+  }
+}
+
 export type RequestJsonConfig = {
   base: string;
   path: string;
@@ -106,12 +119,26 @@ export type RequestJsonConfig = {
   /** Capped Retry-After hook for backends that honor the header (ML);
    *  absent means plain exponential backoff (BTC). */
   retryAfterMs?: (headers: { get(name: string): string | null }) => number | undefined;
+  /** Request method; GET is the read shape every existing caller uses. */
+  method?: 'GET' | 'POST';
+  /** Raw request body for POST (hex payloads ride as exact text). */
+  body?: string;
+  /** Content-Type for POST bodies. */
+  contentType?: string;
+  /** Response body shape: JSON (default) or plain text (broadcast ids). */
+  expect?: 'json' | 'text';
 };
 
-/** One GET with timeout, typed errors and 429/5xx retry with backoff. */
+/** One request with timeout, typed errors and 429/5xx retry with backoff.
+ *  The failure policy is identical for reads and POST writes: transport
+ *  failures and 5xx retry, everything else fails typed with the endpoint
+ *  label, and raw bodies never surface. */
 export async function requestJson(cfg: RequestJsonConfig): Promise<unknown> {
   const qs = cfg.query && Object.keys(cfg.query).length > 0 ? `?${new URLSearchParams(cfg.query).toString()}` : '';
   const url = `${cfg.base}${cfg.path}${qs}`;
+  const expectText = cfg.expect === 'text';
+  const headers = cfg.body === undefined ? undefined : { 'Content-Type': cfg.contentType ?? 'text/plain' };
+  const method = cfg.method;
   let lastError: TransportError | null = null;
   for (let attempt = 0; attempt <= cfg.retries; attempt++) {
     if (attempt > 0) {
@@ -122,7 +149,7 @@ export async function requestJson(cfg: RequestJsonConfig): Promise<unknown> {
     const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
     let response: Awaited<ReturnType<FetchLike>>;
     try {
-      response = await cfg.fetchImpl(url, { signal: controller.signal });
+      response = await cfg.fetchImpl(url, { signal: controller.signal, headers, method, body: cfg.body });
     } catch {
       // Transport failure or our own timeout abort: typed, retriable.
       lastError = new TransportError('transport', cfg.path, undefined);
@@ -137,6 +164,7 @@ export async function requestJson(cfg: RequestJsonConfig): Promise<unknown> {
       }
       const text = await response.text();
       if (text.length > MAX_RESPONSE_BYTES) throw new TransportError('parse', cfg.path, response.status);
+      if (expectText) return text;
       try {
         return text.length === 0 ? null : (JSON.parse(text) as unknown);
       } catch {

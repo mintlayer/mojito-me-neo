@@ -12,7 +12,7 @@ export type Sheet = {
   onLock?: () => void;
   /** Signs out: wipes the vault, the PIN and the session (Settings only). */
   onSignOut?: () => void;
-  /** Session biometric mode; SendScreen reads it for the auth copy. */
+  /** Session biometric mode (unlock and security surfaces read it). */
   bio?: Bio;
   /** Recovery-phrase length from the vault meta (Settings only). */
   wordCount?: number;

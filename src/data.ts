@@ -148,6 +148,8 @@ export const FEES = {
   fast: { cost: 0.00024 },
 };
 
+// Mock-mode demo contacts only (M3 spec moves contacts past v2): real mode
+// ships an empty contact list and the send screen hides the chips there.
 export const CONTACTS = [
   { name: 'Alice', address: 'mtc1qkv9d8t4xu2nx5pqxe2u3a8mw0g7e0a' },
   { name: 'Eng wallet', address: '0x9c3FA84B0EE2F71a0c1d8B6F421Bd' },

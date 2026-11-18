@@ -37,7 +37,7 @@ import type {
   BridgeQuoteRequest,
   BridgeState,
   BroadcastProvider,
-  MlTxStatus,
+  TxStatusInfo,
   WalletData,
 } from '../providers/types';
 import { createFixturePriceProvider } from './priceFixtures';
@@ -74,20 +74,21 @@ export function createFixtureWalletData(): WalletData {
   };
 }
 
-/** Mock broadcast (R3 option D): a deterministic fake tx id after a delay. */
+/** Mock broadcast (R3 option D): a deterministic fake tx id after a delay,
+ *  status stays pending so the demo shows the tracked pending state. */
 export function createFixtureBroadcastProvider(): BroadcastProvider {
-  const broadcastMl = async (signedTxHex: string): Promise<{ txId: string }> => {
+  const broadcast = async (signedTxHex: string): Promise<{ txId: string }> => {
     if (!/^[0-9a-f]+$/i.test(signedTxHex) || signedTxHex.length === 0) {
       throw new Error('invalid signed transaction hex');
     }
     await delay(400);
     return { txId: fakeTxId(signedTxHex) };
   };
-  const getMlStatus = async (_txId: string): Promise<MlTxStatus> => {
+  const getMlStatus = async (_txId: string): Promise<TxStatusInfo> => {
     await delay(200);
-    return 'pending';
+    return { state: 'pending' as const };
   };
-  return { broadcastMl, getMlStatus };
+  return { broadcastMl: broadcast, broadcastBtc: broadcast, getMlStatus, getBtcStatus: getMlStatus };
 }
 
 /** Simulated bridge walk (missing-architecture gap 5): quotes from fixtures. */

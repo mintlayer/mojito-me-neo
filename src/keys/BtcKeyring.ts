@@ -88,9 +88,8 @@ export async function btcReceiveAddresses(
 
 /**
  * Extended private key at a path under the account (m/branch/index), for the
- * M3 signing path (decisions.md D11): no production caller in M1, only the
- * parity tests; it lands with M3's BtcTxBuilder and must not grow callers
- * before then.
+ * signing path (decisions.md D11): the M3 BtcTxBuilder derives input keys
+ * with it inside the KeySession closure and never caches or logs the key.
  */
 export function btcPrivateKeyAt(
   words: string[],
@@ -100,6 +99,23 @@ export function btcPrivateKeyAt(
   passphrase?: string,
 ): Uint8Array {
   const hd = accountHd(network, mnemonicToSeedSync(words, passphrase)).derive(`m/${branch}/${index}`);
+  if (!hd.privateKey) throw new Error('btc key derivation failed');
+  return hd.privateKey;
+}
+
+/**
+ * Same child key as btcPrivateKeyAt, straight from the 64-byte seed (the
+ * KeySession closure shape): m/84'/<coin>'/0'/<branch>/<index>. Secrets
+ * never leave the closure; the point commitment (public key) is derivable
+ * separately from the persisted xpub when inputs must be matched.
+ */
+export function btcPrivateKeyFromSeed(
+  seed: Uint8Array,
+  network: BtcNetwork,
+  branch: BtcBranch,
+  index: number,
+): Uint8Array {
+  const hd = accountHd(network, seed).derive(`m/${branch}/${index}`);
   if (!hd.privateKey) throw new Error('btc key derivation failed');
   return hd.privateKey;
 }

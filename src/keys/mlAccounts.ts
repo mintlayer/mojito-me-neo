@@ -229,3 +229,42 @@ export async function mlReceiveAddresses(
   }
   return out;
 }
+
+/**
+ * Watch-only account straight from the 64-byte BIP39 seed (the KeySession
+ * closure shape, M3 signing path): returns the public xpub blob only. Same
+ * derivation as deriveMlAccount; the private form of this helper below is
+ * the only place child keys leave a seed, always inside the closure.
+ */
+export function mlXpubFromSeed(
+  seed: Uint8Array,
+  network: MlDerivationNetwork,
+): { xpub: Uint8Array; coinType: MlCoinType } {
+  const coinType = COIN_TYPES[network];
+  const account = HDKey.fromMasterSeed(seed).derive(defaultAccountPath(coinType));
+  if (!account.chainCode || !account.publicKey) throw new Error('account derivation failed');
+  const blobLevels = [BIP44_PURPOSE, coinType, ACCOUNT_INDEX].map((level) => u32be(level | HARDENED));
+  return { xpub: extendedBlob(blobLevels, account.chainCode, account.publicKey), coinType };
+}
+
+/**
+ * Child private key at a receiving (0) or change (1) index, from the seed.
+ * Caller contract (src/keys/session.ts): seed bytes and the returned key
+ * never leave the withSeed closure; the key feeds bindings.encodeWitness,
+ * it is never logged, cached or returned.
+ */
+export function mlPrivateKeyFromSeed(
+  seed: Uint8Array,
+  network: MlDerivationNetwork,
+  branch: MlBranch,
+  index: number,
+): Uint8Array {
+  const coinType = COIN_TYPES[network];
+  const child = HDKey.fromMasterSeed(seed).derive(`${defaultAccountPath(coinType)}/${branch}/${index}`);
+  if (!child.privateKey) throw new Error('child key derivation failed');
+  return child.privateKey;
+}
+
+function defaultAccountPath(coinType: MlCoinType): string {
+  return `m/${BIP44_PURPOSE}'/${coinType}'/${ACCOUNT_INDEX}'`;
+}
