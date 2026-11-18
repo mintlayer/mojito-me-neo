@@ -150,7 +150,7 @@ async function main() {
     assert.equal(plan.rateAtomsPerKb, '1000');
     assert.equal(plan.selection.length, 1);
 
-    const unsigned = await builder.build({ ...plan, fromAddresses: [VECTOR_ADDRESS], to: toAddress, changeAddress });
+    const unsigned = await builder.build({ ...plan, to: toAddress, changeAddress });
     const decoded = parseOutputs(unsigned.transaction).text;
     assert.ok(decoded.includes(`T:${atoms(5n)}:${toAddress}`), 'recipient output present');
     assert.ok(decoded.includes(`T:${plan.changeAtoms}:${changeAddress}`), 'change output present');
@@ -201,7 +201,7 @@ async function main() {
     });
     assert.equal(plan.selection.find((input) => input.tokenId === TOKEN_ID)?.atoms, atoms(5n), 'the whole indivisible token utxo is selected');
     assert.ok(plan.selection.some((input) => input.tokenId === null), 'a coin input pays the fee');
-    const unsigned = await builder.build({ ...plan, fromAddresses: [VECTOR_ADDRESS], to: toAddress, changeAddress });
+    const unsigned = await builder.build({ ...plan, to: toAddress, changeAddress });
     const decoded = parseOutputs(unsigned.transaction).text;
     assert.ok(decoded.includes(`K:${TOKEN_ID}:${atoms(2n)}:${toAddress}`), 'token transfer output present');
     assert.ok(decoded.includes(`K:${TOKEN_ID}:${atoms(3n)}:${changeAddress}`), 'token remainder returns to the change address');
@@ -230,7 +230,7 @@ async function main() {
     const bindings = fakeBindings();
     const builder = new MlTxBuilder(bindings, fakeIndexer([utxoB, utxoA], '1000'), 'mainnet');
     const plan = await builder.plan({ fromAddresses: [VECTOR_ADDRESS], to: toAddress, amountAtoms: atoms(600n), tier: 'standard' });
-    const unsigned = await builder.build({ ...plan, fromAddresses: [VECTOR_ADDRESS], to: toAddress, changeAddress });
+    const unsigned = await builder.build({ ...plan, to: toAddress, changeAddress });
 
     const signer = new MlTxSigner(bindings, 'mainnet');
     const session: Pick<KeySession, 'withSeed'> = { withSeed: async (fn) => fn(seed) };

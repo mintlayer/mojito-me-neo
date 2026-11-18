@@ -5,6 +5,7 @@
 import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
 import type { StepState } from '../../ui/StepState';
+import type { TxTracker } from '../../send/TxTracker';
 
 export type ProviderMode = 'mock' | 'real';
 
@@ -60,6 +61,33 @@ export type CardTier = { name: string; stake: string; cashback: string; active?:
 export type FeeTierId = 'economy' | 'standard' | 'fast';
 export type FeeSchedule = Record<FeeTierId, { cost: number }>;
 export type Contact = { name: string; address: string };
+
+/** One per-tier fee quote for the send screen (spec M3: live estimates;
+ *  ML quotes carry atoms/kB, BTC quotes sat/vB; the fallback flag marks a
+ *  fixed rate used because the estimates backend is unreachable). */
+export type SendQuoteLeg = {
+  feeDecimal: string;
+  feeAtoms: string;
+  /** ML: transaction size in bytes; BTC: vsize. */
+  sizeBytes: number;
+  rateAtomsPerKb?: string;
+  satPerVbyte?: string;
+  rateIsFallback?: boolean;
+  changeAtoms?: string;
+};
+
+export type SendQuote = Record<FeeTierId, SendQuoteLeg>;
+
+export type SendResult = { txId: string; kind: 'ml' | 'btc'; /** True when the id comes from the mock broadcaster (R3 demo path). */ demo: boolean };
+
+/** The send seam screens consume (real in real mode, mock demo otherwise). */
+export interface SendService {
+  canBroadcast(chain: 'ml' | 'btc'): boolean;
+  quoteMl(params: { to: string; amountDecimal: string; decimals: number; tokenId?: string }): Promise<SendQuote>;
+  sendMl(params: { to: string; amountDecimal: string; decimals: number; tier: FeeTierId; tokenId?: string }): Promise<SendResult>;
+  quoteBtc(params: { to: string; amountDecimal: string }): Promise<SendQuote>;
+  sendBtc(params: { to: string; amountDecimal: string; tier: FeeTierId }): Promise<SendResult>;
+}
 
 // Profile
 export type Profile = { name: string; initial: string; address: string; chains: number };
@@ -168,6 +196,8 @@ export interface Providers {
   data: WalletData;
   price: PriceProvider;
   broadcast: BroadcastProvider;
+  send: SendService;
+  txTracker: TxTracker;
   waitlist: WaitlistProvider;
   bridge: BridgeProvider;
   mode: ProviderMode;

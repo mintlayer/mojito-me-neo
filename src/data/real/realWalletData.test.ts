@@ -6,6 +6,7 @@
 //   npx tsx src/data/real/realWalletData.test.ts
 import { strict as assert } from 'node:assert/strict';
 
+import { createRealAccountContext } from './account';
 import { createRealWalletData } from './realWalletData';
 import { deriveMlAccount, mlAddressAt } from '../../keys/mlAccounts';
 import { btcAddressAt, deriveBtcAccount } from '../../keys/BtcKeyring';
@@ -76,12 +77,13 @@ async function main() {
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = stubFetch as unknown as typeof fetch;
-  const data = createRealWalletData({
+  const context = createRealAccountContext({
     network: 'mainnet',
     indexerBase: INDEXER_BASE,
     btcBase: BTC_BASE,
     deriveXpubs: async () => ({ mlXpub: mlAccount.xpub, btcXpub: btcAccount.xpub }),
   });
+  const data = createRealWalletData(context);
   try {
     // BTC sums across both funded addresses: 150000000 + 2500 + 100000000
     // sats = 2.500025 BTC, tolerating the missing total key on every body.

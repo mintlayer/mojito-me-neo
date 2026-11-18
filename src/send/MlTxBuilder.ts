@@ -231,10 +231,11 @@ export class MlTxBuilder {
   }
 
   /** Assemble the unsigned transaction for the reviewed plan. The change
-   *  address comes from the caller (AddressManager branch 1); fromAddresses
-   *  stays in the signature per the spec contract but selection rides in the
-   *  plan result, so review and build can never diverge. */
-  async build(params: MlPlanResult & { fromAddresses: string[]; to: string; changeAddress: string }): Promise<UnsignedMlTx> {
+   *  address comes from the caller (AddressManager branch 1). The contract's
+   *  fromAddresses parameter is dropped deliberately: the selection rides in
+   *  the plan result, so review and build can never diverge and no stale
+   *  address list can reintroduce a silent re-selection. */
+  async build(params: MlPlanResult & { to: string; changeAddress: string }): Promise<UnsignedMlTx> {
     if (params.selection.length === 0) throw new SendError('rejected', 'plan selection is empty');
     const inputs: Uint8Array[] = [];
     for (const selected of params.selection) {
