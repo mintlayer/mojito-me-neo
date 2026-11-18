@@ -1,0 +1,415 @@
+// ML-side HTLC lifecycle (spec M4 deliverable 3, F10 atomic swap model):
+// lock Mintlayer with the secret hash, claim by revealing the preimage,
+// refund after the timelock, and extract a revealed secret from a signed
+// claim transaction. The counterparty BTC side is the demo counterpart
+// (scripts/e2e-testnet.mjs documents the scripted flow); this module owns
+// the Mintlayer legs.
+//
+// Secret handling (spec security note): the preimage is generated with
+// MojitoCore.secureRandom by the caller (createSwapSecret), held in memory
+// inside the session closure and never persisted and never logged; only
+// SHA-256(secret) crosses the wire and storage. TIMELOCK_RULE guards the
+// initiate path: the BTC timelock must be shorter than the ML one.
+//
+// Honest states: every transaction assembles and signs through the
+// MintlayerBindings seam, so without the native call-through the flows
+// reject with the device-pending bindings error, never a fabricated
+// success.
+import { hex as hexOf } from '@scure/base';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { sha256 } from '@noble/hashes/sha2.js';
+
+import type { MintlayerBindings, MlNetwork } from '../../modules/mojito-core';
+import type { IndexerClient } from '../data/ml/IndexerClient';
+import type { BroadcastProvider } from '../data/providers/types';
+import type { MlTransaction } from '../data/ml/types';
+import type { KeySession } from '../keys/session';
+import { mlAddressAt, mlPrivateKeyFromSeed, mlXpubFromSeed, type MlBranch } from '../keys/mlAccounts';
+import { selectMlInputs } from '../send/MlTxBuilder';
+import { BroadcastError } from '../data/providers/BroadcastProvider';
+
+/** F10: the Bitcoin timelock must be shorter than the Mintlayer one. */
+export const TIMELOCK_RULE = 'btc timelock must be shorter than the mintlayer timelock (F10)';
+
+export type HtlcOffer = {
+  role: 'initiator' | 'counterparty';
+  giveChain: 'ml' | 'btc';
+  giveAtoms: string;
+  wantAtoms: string;
+  /** SHA-256 of the preimage; the preimage itself never rides an offer. */
+  secretHash: Uint8Array;
+  timelockSeconds: number;
+};
+
+export type HtlcSpend = { address: string; pubkey: Uint8Array };
+
+export interface HtlcFlows {
+  /** Lock the offer's giveAtoms on Mintlayer with the counterparty's spend
+   *  key and our refund path (the initiator leg of the swap). */
+  initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string): Promise<{ txId: string; htlcOutpoint: { id: Uint8Array; index: number } }>;
+  /** Spend an HTLC with the revealed secret (the counterparty claim leg). */
+  claim(htlcTxId: string, secret: Uint8Array, spend: HtlcSpend): Promise<{ txId: string }>;
+  /** Reclaim after the timelock expiry (refund path, single sig). */
+  refund(htlcTxId: string): Promise<{ txId: string }>;
+  /** Extract a revealed preimage from a signed claim transaction. The raw
+   *  bytes come from the caller: the public Mintlayer indexer serves no raw
+   *  transaction route, so a txId-only signature cannot honestly fetch what
+   *  the bindings extraction consumes (the demo script and the BTC claim
+   *  path both carry the bytes; see scripts/e2e-testnet.mjs). */
+  extractSecret(rawSignedTx: Uint8Array, htlcOutpoint: { id: Uint8Array; index: number }): Promise<Uint8Array>;
+}
+
+export type HtlcFlowsConfig = {
+  network: MlNetwork;
+  bindings: MintlayerBindings;
+  indexer: Pick<IndexerClient, 'transaction' | 'feerate' | 'spendableUtxos' | 'tip'>;
+  broadcast: BroadcastProvider;
+  addresses: () => Promise<string[]>;
+  allocateChangeAddress: () => Promise<string>;
+  releaseFailedChange: () => Promise<void>;
+  withSession: <T>(fn: (session: KeySession) => Promise<T>) => Promise<T>;
+};
+
+const STANDARD_TIER_IN_TOP_MB = 1;
+const ORIGIN_WALK_LIMIT = 512;
+
+export class HtlcError extends Error {
+  constructor(
+    readonly reason: 'rejected' | 'busy' | 'not-expired' | 'no-htlc-output' | 'broadcast-disabled',
+    detail?: string,
+  ) {
+    super(detail ?? `htlc flow rejected: ${reason}`);
+    this.name = 'HtlcError';
+  }
+}
+
+export type HtlcDescriptor = {
+  txId: string;
+  outputIndex: number;
+  atoms: string;
+  secretHash: Uint8Array;
+  spendAddress: string;
+  spendPubkey: Uint8Array;
+  refundAddress: string;
+  refundTimelock: number;
+};
+
+export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
+  let inFlight = false;
+  function serialize<T>(fn: () => Promise<T>): Promise<T> {
+    if (inFlight) return Promise.reject(new HtlcError('busy'));
+    inFlight = true;
+    return fn().finally(() => {
+      inFlight = false;
+    });
+  }
+
+  function requireAtomAmount(value: string): string {
+    if (!/^\d+$/.test(value) || BigInt(value) === 0n) throw new HtlcError('rejected', 'amount must be a positive atom string');
+    return value;
+  }
+
+  async function fetchUtxos() {
+    const lists = [];
+    for (const address of await cfg.addresses()) lists.push(...(await cfg.indexer.spendableUtxos(address)));
+    return lists;
+  }
+
+  async function utxoInput(sourceIdHex: string, index: number): Promise<Uint8Array> {
+    const sourceId = hexOf.decode(sourceIdHex);
+    if (sourceId.length !== 32) throw new HtlcError('rejected', 'outpoint source id must be 32 bytes');
+    const outpointSource = await cfg.bindings.encodeOutpointSourceId(sourceId, 'transaction');
+    return cfg.bindings.encodeInputForUtxo(outpointSource, index);
+  }
+
+  async function sign(
+    transaction: Uint8Array,
+    inputs: { address: string }[],
+    spentOutputs: Uint8Array[],
+    session: KeySession,
+    inclusionHeight: number,
+    secret?: Uint8Array,
+  ): Promise<string> {
+    return session.withSeed(async (seed) => {
+      const { xpub } = mlXpubFromSeed(seed, cfg.network as 'mainnet' | 'testnet');
+      const witnesses: Uint8Array[] = [];
+      for (let inputIndex = 0; inputIndex < inputs.length; inputIndex++) {
+        const origin = await resolveOrigin(xpub, inputs[inputIndex].address);
+        const privateKey = mlPrivateKeyFromSeed(seed, cfg.network as 'mainnet' | 'testnet', origin.branch, origin.index);
+        const params = {
+          sighashType: 'all' as const,
+          privateKey,
+          address: inputs[inputIndex].address,
+          transaction,
+          inputUtxos: spentOutputs,
+          inputIndex,
+          inclusionHeight,
+          network: cfg.network,
+          ...(secret !== undefined && inputs.length === 1 ? { secret } : {}),
+        };
+        witnesses.push(
+          inputs.length === 1 && secret !== undefined
+            ? await cfg.bindings.encodeWitnessHtlcSpend(params)
+            : await cfg.bindings.encodeWitness(params),
+        );
+      }
+      const signed = await cfg.bindings.encodeSignedTransaction(transaction, witnesses);
+      return bytesToHex(signed);
+    });
+  }
+
+  async function resolveOrigin(xpub: Uint8Array, address: string): Promise<{ branch: MlBranch; index: number }> {
+    for (const branch of [0, 1] as MlBranch[]) {
+      for (let index = 0; index < ORIGIN_WALK_LIMIT; index++) {
+        if ((await mlAddressAt(xpub, branch, index, cfg.network as 'mainnet' | 'testnet')) === address) {
+          return { branch, index };
+        }
+      }
+    }
+    throw new HtlcError('rejected', 'input address does not derive from this wallet');
+  }
+
+  async function broadcast(signedHex: string): Promise<string> {
+    try {
+      const result = await cfg.broadcast.broadcastMl(signedHex);
+      return result.txId;
+    } catch (e) {
+      if (e instanceof BroadcastError && e.failure === 'disabled') throw new HtlcError('broadcast-disabled');
+      throw e;
+    }
+  }
+
+  /** Describe an on-chain HTLC output through the bindings decode seam:
+   *  the indexer gives the output position, the bindings decode restores
+   *  the lock parameters the claim and refund legs must rebuild. */
+  async function describeHtlc(htlcTxId: string): Promise<HtlcDescriptor> {
+    let tx: MlTransaction;
+    try {
+      tx = await cfg.indexer.transaction(htlcTxId);
+    } catch {
+      throw new HtlcError('no-htlc-output', `htlc transaction ${htlcTxId} is not readable`);
+    }
+    const outputIndex = tx.outputs.findIndex((output: { type: string }) => output.type === 'Htlc');
+    if (outputIndex < 0) throw new HtlcError('no-htlc-output', `transaction ${htlcTxId} carries no HTLC output`);
+    // The decode seam restores the lock parameters from the raw
+    // transaction; bindings stub rejections surface as the honest
+    // device-pending state, never a guessed descriptor.
+    const json = await cfg.bindings.decodeTransactionToJson(hexOf.decode(htlcTxId), cfg.network);
+    const parsed = JSON.parse(json) as {
+      outputs?: { htlc?: { atoms?: string; secret_hash?: string; spend_address?: string; spend_pubkey?: string; refund_address?: string; refund_timelock?: number } }[];
+    };
+    const htlc = parsed.outputs?.[outputIndex]?.htlc;
+    if (!htlc?.atoms || htlc.secret_hash === undefined || htlc.spend_address === undefined) {
+      throw new HtlcError('no-htlc-output', 'the bindings decode did not restore the lock parameters');
+    }
+    return {
+      txId: htlcTxId,
+      outputIndex,
+      atoms: htlc.atoms,
+      secretHash: hexOf.decode(htlc.secret_hash),
+      spendAddress: htlc.spend_address,
+      spendPubkey: hexOf.decode(htlc.spend_pubkey ?? ''),
+      refundAddress: htlc.refund_address ?? '',
+      refundTimelock: htlc.refund_timelock ?? 0,
+    };
+  }
+
+  return {
+    async initiate({ giveAtoms, secretHash, timelockSeconds }, spend, refundAddress) {
+      return serialize(async () => {
+        requireAtomAmount(giveAtoms);
+        if (secretHash.length !== 32) throw new HtlcError('rejected', 'the secret hash must be 32 bytes (SHA-256)');
+        if (!Number.isInteger(timelockSeconds) || timelockSeconds <= 0) throw new HtlcError('rejected', 'the refund timelock must be a positive second count');
+        const utxos = await fetchUtxos();
+        const changeAddress = await cfg.allocateChangeAddress();
+        try {
+          const rate = await cfg.indexer.feerate(STANDARD_TIER_IN_TOP_MB);
+          const selection = await selectMlInputs({
+            utxos,
+            sendAtoms: giveAtoms,
+            to: changeAddress,
+            tokenId: null,
+            rateAtomsPerKb: rate,
+            sizeOf: async (inputs, planned) => {
+              const inputBytes: Uint8Array[] = [];
+              const destinations: string[] = [];
+              for (const selected of inputs) {
+                inputBytes.push(await utxoInput(selected.utxo.outpoint.sourceId, selected.utxo.outpoint.index));
+                destinations.push(selected.address);
+              }
+              const outputBytes: Uint8Array[] = [
+                await cfg.bindings.encodeOutputHtlc({
+                  atoms: '0',
+                  secretHash,
+                  spendAddress: spend.address,
+                  spendPubkey: spend.pubkey,
+                  refundAddress,
+                  refundTimelock: timelockSeconds,
+                }),
+                ...(await Promise.all(
+                  planned.slice(1).map((leg) => cfg.bindings.encodeOutputTransfer('0', leg.address, cfg.network)),
+                )),
+              ];
+              return cfg.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
+            },
+          });
+
+          const inputs: Uint8Array[] = [];
+          const spentOutputs: Uint8Array[] = [];
+          for (const selected of selection.selection) {
+            inputs.push(await utxoInput(selected.utxo.outpoint.sourceId, selected.utxo.outpoint.index));
+            spentOutputs.push(
+              selected.tokenId === null
+                ? await cfg.bindings.encodeOutputTransfer(selected.atoms, selected.address, cfg.network)
+                : await cfg.bindings.encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network),
+            );
+          }
+          const outputs: Uint8Array[] = [
+            await cfg.bindings.encodeOutputHtlc({
+              atoms: giveAtoms,
+              secretHash,
+              spendAddress: spend.address,
+              spendPubkey: spend.pubkey,
+              refundAddress,
+              refundTimelock: timelockSeconds,
+            }),
+          ];
+          if (selection.changeAtoms !== '0') {
+            outputs.push(await cfg.bindings.encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
+          }
+
+          const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+          const tip = await cfg.indexer.tip();
+          const signedHex = await cfg.withSession((session) => sign(transaction, selection.selection, spentOutputs, session, tip.blockHeight + 1));
+          const txId = await broadcast(signedHex);
+          // The HTLC outpoint rides the lock tx id and its output index
+          // (the HTLC output is assembled at index 0 of this flow).
+          return { txId, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
+        } catch (e) {
+          await cfg.releaseFailedChange();
+          throw e;
+        }
+      });
+    },
+
+    async claim(htlcTxId, secret, spend) {
+      return serialize(async () => {
+        if (secret.length !== 32) throw new HtlcError('rejected', 'the preimage must be 32 bytes');
+        const descriptor = await describeHtlc(htlcTxId);
+        const fee = await claimFee(htlcTxId, spend.address);
+        const payout = BigInt(descriptor.atoms) - fee;
+        if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the claim fee');
+        const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
+        const htlcOutputBytes = await cfg.bindings.encodeOutputHtlc({
+          atoms: descriptor.atoms,
+          secretHash: descriptor.secretHash,
+          spendAddress: descriptor.spendAddress,
+          spendPubkey: descriptor.spendPubkey,
+          refundAddress: descriptor.refundAddress,
+          refundTimelock: descriptor.refundTimelock,
+        });
+        const inputs = [htlcInput];
+        const outputs = [await cfg.bindings.encodeOutputTransfer(payout.toString(), spend.address, cfg.network)];
+        const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+        const tip = await cfg.indexer.tip();
+        // The HTLC spend witness signs against the HTLC output (the spent
+        // output of the single input) and reveals the preimage (F10).
+        const signedHex = await cfg.withSession((session) =>
+          signWithKey(transaction, spend.address, [htlcOutputBytes], session, tip.blockHeight + 1, secret, 'htlc-spend'),
+        );
+        return { txId: await broadcast(signedHex) };
+      });
+    },
+
+    async refund(htlcTxId) {
+      return serialize(async () => {
+        const descriptor = await describeHtlc(htlcTxId);
+        // Refunds unlock at the timelock expiry; the lock timestamp plus
+        // the timelock must already be in the past, otherwise the refund
+        // would be rejected by the chain: honest typed refusal first.
+        const tx = await cfg.indexer.transaction(htlcTxId);
+        const lockedAt = tx.timestamp ?? 0;
+        if (lockedAt + descriptor.refundTimelock > Math.floor(Date.now() / 1000)) {
+          throw new HtlcError('not-expired', 'the refund unlocks after the timelock expiry');
+        }
+        const fee = await claimFee(htlcTxId, descriptor.refundAddress);
+        const payout = BigInt(descriptor.atoms) - fee;
+        if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the refund fee');
+        const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
+        const htlcOutputBytes = await cfg.bindings.encodeOutputHtlc({
+          atoms: descriptor.atoms,
+          secretHash: descriptor.secretHash,
+          spendAddress: descriptor.spendAddress,
+          spendPubkey: descriptor.spendPubkey,
+          refundAddress: descriptor.refundAddress,
+          refundTimelock: descriptor.refundTimelock,
+        });
+        const inputs = [htlcInput];
+        const outputs = [await cfg.bindings.encodeOutputTransfer(payout.toString(), descriptor.refundAddress, cfg.network)];
+        const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+        const tip = await cfg.indexer.tip();
+        const signedHex = await cfg.withSession((session) =>
+          signWithKey(transaction, descriptor.refundAddress, [htlcOutputBytes], session, tip.blockHeight + 1, undefined, 'htlc-refund'),
+        );
+        return { txId: await broadcast(signedHex) };
+      });
+    },
+
+    async extractSecret(rawSignedTx, htlcOutpoint) {
+      return cfg.bindings.extractHtlcSecret(rawSignedTx, false, htlcOutpoint.id, htlcOutpoint.index);
+    },
+  };
+
+  /** Claim and refund build against a fee estimate of the same shape: one
+   *  HTLC input, one payout output, standard tier rate. */
+  async function claimFee(htlcTxId: string, destination: string): Promise<bigint> {
+    const rate = await cfg.indexer.feerate(STANDARD_TIER_IN_TOP_MB);
+    const input = await utxoInput(htlcTxId, 0);
+    const output = await cfg.bindings.encodeOutputTransfer('0', destination, cfg.network);
+    const size = await cfg.bindings.estimateTransactionSize([input], [destination], [output], cfg.network);
+    const kbCeil = BigInt(Math.max(1, Math.ceil(size / 1000)));
+    const rateBig = BigInt(/^\d+$/.test(rate) ? rate : '0');
+    return kbCeil * (rateBig > 1n ? rateBig : 1n);
+  }
+
+  /** Single-input HTLC signing over the dedicated witness encoders (the
+   *  normal encodeWitness path cannot carry the preimage). */
+  async function signWithKey(
+    transaction: Uint8Array,
+    address: string,
+    spentOutputs: Uint8Array[],
+    session: KeySession,
+    inclusionHeight: number,
+    secret: Uint8Array | undefined,
+    kind: 'htlc-spend' | 'htlc-refund',
+  ): Promise<string> {
+    return session.withSeed(async (seed) => {
+      const { xpub } = mlXpubFromSeed(seed, cfg.network as 'mainnet' | 'testnet');
+      const origin = await resolveOrigin(xpub, address);
+      const privateKey = mlPrivateKeyFromSeed(seed, cfg.network as 'mainnet' | 'testnet', origin.branch, origin.index);
+      const params = {
+        sighashType: 'all' as const,
+        privateKey,
+        address,
+        transaction,
+        inputUtxos: spentOutputs,
+        inputIndex: 0,
+        inclusionHeight,
+        network: cfg.network,
+        ...(secret !== undefined ? { secret } : {}),
+      };
+      const witness =
+        kind === 'htlc-spend'
+          ? await cfg.bindings.encodeWitnessHtlcSpend(params)
+          : await cfg.bindings.encodeWitnessHtlcRefundSingleSig(params);
+      const signed = await cfg.bindings.encodeSignedTransaction(transaction, [witness]);
+      return bytesToHex(signed);
+    });
+  }
+}
+
+/** SHA-256 of the swap preimage (the only form that crosses the wire or
+ *  storage; the preimage itself never persists and never logs). */
+export function secretHashOf(secret: Uint8Array): Uint8Array {
+  return sha256(secret);
+}

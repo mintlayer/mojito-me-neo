@@ -61,6 +61,9 @@ export type WitnessParams = {
   privateKey: Uint8Array; address: string; transaction: Uint8Array;
   inputUtxos: (Uint8Array | null)[]; inputIndex: number;
   additionalInfo?: { tokenId: string }; inclusionHeight: number; network: MlNetwork;
+  /** F10 reveal field consumed by encodeWitnessHtlcSpend only (M4 atomic
+   *  swap claim): the preimage that satisfies the HTLC hash. */
+  secret?: Uint8Array;
 };
 
 export type OrderParams = {
