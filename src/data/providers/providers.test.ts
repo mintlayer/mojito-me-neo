@@ -54,7 +54,9 @@ async function main() {
 
   const broadcast = await providers.broadcast.broadcastMl('deadbeef');
   assert.ok(/^[0-9a-f]{64}$/.test(broadcast.txId));
-  assert.equal(await providers.broadcast.getMlStatus(broadcast.txId), 'pending');
+  assert.deepEqual(await providers.broadcast.getMlStatus(broadcast.txId), { state: 'pending' });
+  const btcBroadcast = await providers.broadcast.broadcastBtc('deadbeef');
+  assert.ok(/^[0-9a-f]{64}$/.test(btcBroadcast.txId));
 
   const handle = await providers.bridge.initiate({
     route: 'M2E', token: 'USDT', amount: '500.00', destAddr: '0xabc',

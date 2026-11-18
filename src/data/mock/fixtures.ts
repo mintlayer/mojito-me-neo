@@ -37,7 +37,6 @@ import type {
   BridgeQuoteRequest,
   BridgeState,
   BroadcastProvider,
-  MlTxStatus,
   TxStatusInfo,
   WalletData,
 } from '../providers/types';
