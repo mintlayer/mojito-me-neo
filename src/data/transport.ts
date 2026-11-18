@@ -95,6 +95,16 @@ export function asNumberOrNull(value: unknown): number | null {
   return null;
 }
 
+/** Tx-hex contract shared by both broadcast boundaries (the ML submission
+ *  endpoint and the Esplora POST tx): non-empty, even length, hex digits.
+ *  One check keeps the two boundaries honest about the same contract; each
+ *  boundary maps the failure to its own typed error around this throw. */
+export function assertTxHex(value: string, endpoint: string): void {
+  if (value.length === 0 || value.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(value)) {
+    throw new TransportError('parse', endpoint, undefined);
+  }
+}
+
 export type RequestJsonConfig = {
   base: string;
   path: string;

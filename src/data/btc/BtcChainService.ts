@@ -13,7 +13,7 @@
 // from ../transport.ts; this module owns only the Esplora parse layer and
 // its error labels. It imports no error type from the ML client.
 import {
-  asArray, asNumberOrNull, asRecord, assertHttpsBase, MAX_ARRAY_ITEMS, requestJson,
+  asArray, asNumberOrNull, asRecord, assertHttpsBase, assertTxHex, MAX_ARRAY_ITEMS, requestJson,
   TransportError, type FetchLike,
 } from '../transport';
 
@@ -163,9 +163,7 @@ export class BtcChainService {
    *  0x per the Esplora contract; the backend answers the txid as plain
    *  text. A non-64-hex answer is a parse error, never a silent success. */
   async broadcastTx(signedTxHex: string): Promise<string> {
-    if (!/^[0-9a-f]+$/i.test(signedTxHex) || signedTxHex.length === 0 || signedTxHex.length % 2 !== 0) {
-      throw new TransportError('parse', '/tx', undefined);
-    }
+    assertTxHex(signedTxHex, '/tx');
     const raw = await this.request('/tx', {
       method: 'POST',
       body: signedTxHex,

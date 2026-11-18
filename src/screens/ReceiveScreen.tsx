@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
+import { scrubClipboard } from '../storage/clipboard';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
@@ -51,13 +52,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
       if (wipeTimer.current !== null) clearTimeout(wipeTimer.current);
       wipeTimer.current = setTimeout(() => {
         wipeTimer.current = null;
-        // The installed expo-clipboard (57) ships no clear API, so the wipe
-        // is the supported equivalent: an empty string write leaves nothing
-        // readable to paste.
-        Clipboard.setStringAsync('').catch(() => {
-          // A failed wipe (rare OS refusal) must not surface as an error
-          // dialog after a successful copy.
-        });
+        scrubClipboard();
       }, 60_000);
     } catch {
       Alert.alert(t('receive.copyError.title'), t('receive.copyError.body'));

@@ -31,8 +31,10 @@ export type RealAccountContext = {
   cfg: RealAccountConfig;
   /** Single shared construction (manager, clients, services). */
   ensureAccount: () => Promise<AccountServices>;
-  /** Fail fast when the indexer is unconfigured (testnet pending A2). */
-  requireIndexerBase: () => void;
+  /** Type guard for the unconfigured indexer (testnet pending A2): throws
+   *  typed when absent, hands back the client otherwise, so callers never
+   *  re-check null behind the guard. */
+  requireIndexer: () => IndexerClient;
   indexer: IndexerClient | null;
   btc: BtcChainService | null;
 };
@@ -50,8 +52,9 @@ export function createRealAccountContext(cfg: RealAccountConfig): RealAccountCon
   const indexer = cfg.indexerBase ? new IndexerClient(cfg.indexerBase) : null;
   const btc = cfg.btcBase ? new BtcChainService(cfg.btcBase) : null;
 
-  function requireIndexerBase(): void {
-    if (!cfg.indexerBase) throw new IndexerError('transport', 'indexer', undefined);
+  function requireIndexer(): IndexerClient {
+    if (indexer === null) throw new IndexerError('transport', 'indexer', undefined);
+    return indexer;
   }
 
   async function ensureAccount() {
@@ -110,7 +113,7 @@ export function createRealAccountContext(cfg: RealAccountConfig): RealAccountCon
     return accountPromise;
   }
 
-  return { cfg, ensureAccount, requireIndexerBase, indexer, btc };
+  return { cfg, ensureAccount, requireIndexer, indexer, btc };
 }
 
 export type { AddressManager };

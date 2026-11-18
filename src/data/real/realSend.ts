@@ -14,7 +14,6 @@
 //   real and runs in the Node gate.
 import { MlTxBuilder, type MlPlanResult } from '../../send/MlTxBuilder';
 import type { MlUtxo } from '../ml/types';
-import { IndexerError } from '../ml/IndexerClient';
 import { MlTxSigner } from '../../send/MlTxSigner';
 import { BtcTxBuilder, parsePinnedRate, type BtcPinnedRate, type BtcSendResult } from '../../send/BtcTxBuilder';
 import { SendError } from '../../send/errors';
@@ -125,9 +124,7 @@ export function createRealSend(cfg: RealSendConfig): SendService {
   }
 
   async function mlBuilder(): Promise<{ builder: MlTxBuilder; indexer: NonNullable<RealAccountContext['indexer']> }> {
-    context.requireIndexerBase();
-    const indexer = context.indexer;
-    if (indexer === null) throw new IndexerError('transport', 'indexer', undefined);
+    const indexer = context.requireIndexer();
     return { builder: new MlTxBuilder(requireBindings(), indexer, mlNetwork), indexer };
   }
 

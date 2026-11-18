@@ -18,6 +18,7 @@ import { TxTracker } from '../../send/TxTracker';
 import { SendError } from '../../send/errors';
 import type { BtcChainService, BtcUtxo } from '../btc/BtcChainService';
 import { BroadcastError } from '../providers/BroadcastProvider';
+import { IndexerClient, IndexerError } from '../ml/IndexerClient';
 import type { BroadcastProvider } from '../providers/types';
 import type { NetworkFlag } from '../../config/endpoints';
 import type { RealAccountContext } from './account';
@@ -87,7 +88,9 @@ async function harness(opts?: {
       deriveXpubs: async () => ({ mlXpub: new Uint8Array(32), btcXpub }),
     },
     ensureAccount: async () => ({ manager, balance: null, nfts: null, activity: null, btc: btc as BtcChainService }),
-    requireIndexerBase: () => {},
+    requireIndexer: (): IndexerClient => {
+      throw new IndexerError('transport', 'indexer', undefined);
+    },
     indexer: null,
     btc: null,
   };

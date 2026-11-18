@@ -27,8 +27,9 @@ import type { IndexerClient } from '../data/ml/IndexerClient';
 import type { MlUtxo } from '../data/ml/types';
 import { SendError } from './errors';
 
-/** Indexer seam: only the two read routes the planner consumes. */
-export type MlChainReader = Pick<IndexerClient, 'spendableUtxos' | 'feerate' | 'tip'>;
+/** Indexer seam: only the two read routes the builder consumes (the tip
+ *  read stays with realSend, which holds the full IndexerClient). */
+export type MlChainReader = Pick<IndexerClient, 'spendableUtxos' | 'feerate'>;
 
 /** GET /feerate window per tier (F8); the uplift multiplier stays 1 in v1. */
 const TIER_IN_TOP_MB: Record<FeeTierId, number> = { economy: 5, standard: 1, fast: 1 };

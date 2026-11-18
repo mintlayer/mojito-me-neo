@@ -115,12 +115,12 @@ export class BtcTxBuilder {
     tier: FeeTierId;
     pinnedRate?: BtcPinnedRate;
   }): Promise<BtcFeePlan> {
-    const { tx, inputSat, weight } = await this.buildUnsigned(params);
+    const { tx, inputSat, weight, rate, fallback } = await this.buildUnsigned(params);
     const feeSat = tx.fee;
     return {
       tier: params.tier,
-      satPerVbyte: this.currentRate.toString(),
-      rateIsFallback: this.currentRateFallback,
+      satPerVbyte: rate.toString(),
+      rateIsFallback: fallback,
       feeSat: feeSat.toString(),
       // Weight units to vsize (ceil/4): the estimator already counts the
       // witness marker weight, so the plan matches the signed vsize.
@@ -165,10 +165,6 @@ export class BtcTxBuilder {
     };
   }
 
-  private currentRate = 1n;
-
-  private currentRateFallback = false;
-
   /** Shared selection: dust guard, rate resolution, UTXO fetch across the
    *  managed wallet addresses, public address to path mapping, scure
    *  selection with an auto change output. Inputs may come from any managed
@@ -201,8 +197,6 @@ export class BtcTxBuilder {
       throw new SendError('broadcast-failed', 'fee rate source answered an unusable value');
     }
     const rate = BigInt(Math.ceil(satPerVbyte));
-    this.currentRate = rate;
-    this.currentRateFallback = fallback;
 
     const origins = await this.walletOrigins(params.accountXpub);
     // Change and older receiving UTXOs are only reachable through the full

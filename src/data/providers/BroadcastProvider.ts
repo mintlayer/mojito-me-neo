@@ -10,7 +10,7 @@
 // the screen can copy honestly (disabled = this network cannot broadcast,
 // failed = the backend refused or answered unusable data, network = the
 // request never completed). Raw server bodies never surface.
-import { assertHttpsBase, requestJson, TransportError, type FetchLike } from '../transport';
+import { assertHttpsBase, assertTxHex, requestJson, TransportError, type FetchLike } from '../transport';
 import { IndexerClient } from '../ml/IndexerClient';
 import { BtcChainService } from '../btc/BtcChainService';
 import { createFixtureBroadcastProvider } from '../mock/fixtures';
@@ -47,7 +47,11 @@ export type BroadcastProviderConfig = {
 const HEX64 = /^[0-9a-f]{64}$/;
 
 function guardHex(chain: BroadcastChain, signedTxHex: string): void {
-  if (!/^[0-9a-f]+$/i.test(signedTxHex) || signedTxHex.length === 0 || signedTxHex.length % 2 !== 0) {
+  // The shared tx-hex contract (transport.ts); this boundary maps the
+  // failure to its own typed broadcast error.
+  try {
+    assertTxHex(signedTxHex, 'broadcast');
+  } catch {
     throw new BroadcastError(chain, 'failed', undefined, 'signed transaction hex is malformed');
   }
 }

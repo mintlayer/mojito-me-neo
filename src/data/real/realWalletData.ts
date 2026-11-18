@@ -46,13 +46,13 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
   const price = createFixturePriceProvider();
   const cfg = context.cfg;
   const ensureAccount = context.ensureAccount;
-  const requireIndexerBase = context.requireIndexerBase;
+  const requireIndexer = context.requireIndexer;
   let homeCache: HomeBundle | null = null;
 
   /** One shared scan for portfolio, assets and NFTs, memoized briefly. A
    *  force call (pull-to-refresh) bypasses the cache window. */
   async function loadHome(opts?: { force?: boolean }): Promise<HomeBundle> {
-    requireIndexerBase();
+    requireIndexer();
     if (!opts?.force && homeCache !== null && Date.now() - homeCache.loadedAt < HOME_CACHE_MS) return homeCache;
     const acct = await ensureAccount();
     if (!acct.balance || !acct.nfts) {
@@ -194,7 +194,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
     getAssetSymbols: async () => (await loadHome()).assets.map((row) => row.sym),
     getAssetBalances: async () => (await loadHome()).balances,
     getActivity: async (limit) => {
-      requireIndexerBase();
+      requireIndexer();
       const acct = await ensureAccount();
       if (!acct.activity) throw new IndexerError('transport', 'indexer', undefined);
       return acct.activity.rows(limit);

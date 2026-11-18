@@ -30,6 +30,12 @@ function feeSymbol(chain: AddressChain, tokenSym: string, tokenId?: string): str
   return isTokenSend(chain, tokenId) ? 'ML' : tokenSym;
 }
 
+/** ETA copy key per chain and tier: the BTC and ML estimator buckets are
+ *  worded differently, so the prefix is chain-specific at both call sites. */
+function etaKey(chain: AddressChain, tier: FeeTierId): I18nKey {
+  return ((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + tier) as I18nKey;
+}
+
 /** Review total on exact digit strings (money.ts, no float arithmetic):
  *  both legs convert to atoms, add on BigInt and render back. Token sends
  *  total the token leg only; their fee is its own ML row. */
@@ -264,7 +270,6 @@ export function SendScreen({ onClose, network = 'mainnet' }: Sheet) {
           : leg.rateAtomsPerKb !== undefined
             ? t('send.fee.rate', { rate: leg.rateAtomsPerKb })
             : undefined;
-    const etaKey = (chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + feeTier;
     const total = leg !== undefined ? reviewTotal(amount, leg.feeDecimal, decimals, isTokenSend(chain, token.tokenId)) : amount;
     const totalText = `${total} ${token.sym}`;
     // Token sends pay the fee in ML coin, so both rows name the unit to
@@ -276,7 +281,7 @@ export function SendScreen({ onClose, network = 'mainnet' }: Sheet) {
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{truncateMiddle(address, 14, 10)}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
       [feeRowLabel, feeText],
-      [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(etaKey as I18nKey)}</Txt>],
+      [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(etaKey(chain, feeTier))}</Txt>],
     ];
     if (rateText !== undefined) rows.push([t('send.fee.rateLabel'), rateText]);
     rows.push([totalRowLabel, totalText]);
@@ -479,7 +484,7 @@ export function SendScreen({ onClose, network = 'mainnet' }: Sheet) {
             // Combined label: tier, cost and arrival in one string, so
             // screen readers get the whole decision instead of a bare
             // color-only tier name.
-            const tileLabel = `${t(`send.fee.${k}` as I18nKey)}, ${feeText}, ${t(((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + k) as I18nKey)}`;
+            const tileLabel = `${t(`send.fee.${k}` as I18nKey)}, ${feeText}, ${t(etaKey(chain, k))}`;
             return (
               <Pressable
                 key={k}
@@ -493,7 +498,7 @@ export function SendScreen({ onClose, network = 'mainnet' }: Sheet) {
                   {t(`send.fee.${k}` as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text2 mt-0.5">
-                  {t(((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + k) as I18nKey)}
+                  {t(etaKey(chain, k))}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
                   {feeText}
