@@ -16,11 +16,12 @@ import { MlTxBuilder, type MlPlanResult } from '../../send/MlTxBuilder';
 import type { MlUtxo } from '../ml/types';
 import { IndexerError } from '../ml/IndexerClient';
 import { MlTxSigner } from '../../send/MlTxSigner';
-import { BtcTxBuilder, parsePinnedRate, type BtcPinnedRate } from '../../send/BtcTxBuilder';
+import { BtcTxBuilder, parsePinnedRate, type BtcPinnedRate, type BtcSendResult } from '../../send/BtcTxBuilder';
 import { SendError } from '../../send/errors';
 import { validateAddress, parseSendAmount } from '../../send/validation';
 import { TxTracker } from '../../send/TxTracker';
 import type { KeySession } from '../../keys/session';
+import type { AddressManager, ManagedChain } from '../addresses/AddressManager';
 import type { BroadcastProvider, FeeTierId, SendQuote, SendResult, SendService } from '../providers/types';
 import { BroadcastError } from '../providers/BroadcastProvider';
 import type { MintlayerBindings } from '../../../modules/mojito-core';
@@ -93,6 +94,21 @@ export function createRealSend(cfg: RealSendConfig): SendService {
       return { txId: localTxId, kind, demo: false, warning: true };
     }
     return { txId: localTxId, kind, demo: false };
+  }
+
+  /** Release the change allocation of a failed send attempt: the allocated
+   *  address never reached the ledger, so the counter steps back and the
+   *  index stays available (a long history of failed attempts must not
+   *  strand funds past the reachable derivation range). If the transaction
+   *  actually landed despite the refusal, address reuse stays safe: UTXOs
+   *  are tracked per outpoint and one derivation origin maps the address. */
+  async function releaseFailedChange(manager: AddressManager, chain: ManagedChain): Promise<void> {
+    try {
+      await manager.releaseChangeAddress(chain);
+    } catch {
+      // The send failure itself is the error to surface, not a cleanup
+      // problem on top of it.
+    }
   }
 
   /** Public xpubs, derived once per service instance (public material,
@@ -180,21 +196,26 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         // Address allocation happens inside the serialized section, after
         // every await of the plan, so two sends can never share an index.
         const changeAddress = await acct.manager.allocateChangeAddress('ml');
-        const unsigned = await builder.build({ ...plan, to, changeAddress });
-        const tip = await indexer.tip();
-        const signer = new MlTxSigner(requireBindings(), mlNetwork);
-        const signedHex = await withSession((session) => signer.sign(unsigned, session, tip.blockHeight + 1));
-        let result: { txId: string };
         try {
-          result = await broadcast.broadcastMl(signedHex);
+          const unsigned = await builder.build({ ...plan, to, changeAddress });
+          const tip = await indexer.tip();
+          const signer = new MlTxSigner(requireBindings(), mlNetwork);
+          const signedHex = await withSession((session) => signer.sign(unsigned, session, tip.blockHeight + 1));
+          let result: { txId: string };
+          try {
+            result = await broadcast.broadcastMl(signedHex);
+          } catch (e) {
+            throw mapBroadcastError(e);
+          }
+          // The unsigned tx id survives signing (witnesses are separate), so
+          // it is the locally computed id the broadcast answer must match.
+          return await finishSend('ml', result.txId, unsigned.txId, async () => {
+            await acct.manager.freshReceivingAddress('ml');
+          });
         } catch (e) {
-          throw mapBroadcastError(e);
+          await releaseFailedChange(acct.manager, 'ml');
+          throw e;
         }
-        // The unsigned tx id survives signing (witnesses are separate), so
-        // it is the locally computed id the broadcast answer must match.
-        return finishSend('ml', result.txId, unsigned.txId, async () => {
-          await acct.manager.freshReceivingAddress('ml');
-        });
       });
     },
 
@@ -210,7 +231,15 @@ export function createRealSend(cfg: RealSendConfig): SendService {
       // section, so the reviewed change address is the sent one.
       const fromAddresses = await acct.manager.allAddresses('btc');
       const changeAddress = await acct.manager.peekChangeAddress('btc');
-      const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
+      const builder = new BtcTxBuilder({
+        network: context.cfg.network,
+        utxos: acct.btc,
+        rateSource: btcRateSource,
+        changeAddress,
+        // The walk follows the persisted counters: a long change history
+        // must not fall off the fixed origin ceiling even for a quote.
+        walkCounters: () => acct.manager.indexes('btc'),
+      });
       const { btcXpub } = await publicXpubs();
       const tiers: FeeTierId[] = ['economy', 'standard', 'fast'];
       const quotes = {} as Record<FeeTierId, SendQuote[FeeTierId]>;
@@ -257,30 +286,47 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         // Allocation stays inside the serialized section, so a concurrent
         // send can never share this change address or race the counter.
         const changeAddress = await acct.manager.allocateChangeAddress('btc');
-        const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
-        const { btcXpub } = await publicXpubs();
-        const signed = await withSession((session) =>
-          session.withSeed((seed) =>
-            builder.buildAndSign({
-              seed,
-              accountXpub: btcXpub,
-              fromAddresses,
-              to,
-              amountSat: BigInt(amount.atoms),
-              tier: params.tier,
-              pinnedRate: pinned,
-            }),
-          ),
-        );
-        let result: { txId: string };
-        try {
-          result = await broadcast.broadcastBtc(signed.hex);
-        } catch (e) {
-          throw mapBroadcastError(e);
-        }
-        return finishSend('btc', result.txId, signed.txid, async () => {
-          await acct.manager.freshReceivingAddress('btc');
+        const builder = new BtcTxBuilder({
+          network: context.cfg.network,
+          utxos: acct.btc,
+          rateSource: btcRateSource,
+          changeAddress,
+          // The walk follows the persisted counters: change UTXOs stay
+          // spendable past the fixed origin ceiling (send #500+ must not
+          // strand the wallet's own change).
+          walkCounters: () => acct.manager.indexes('btc'),
         });
+        const { btcXpub } = await publicXpubs();
+        let signed: BtcSendResult;
+        try {
+          signed = await withSession((session) =>
+            session.withSeed((seed) =>
+              builder.buildAndSign({
+                seed,
+                accountXpub: btcXpub,
+                fromAddresses,
+                to,
+                amountSat: BigInt(amount.atoms),
+                tier: params.tier,
+                pinnedRate: pinned,
+              }),
+            ),
+          );
+          let result: { txId: string };
+          try {
+            result = await broadcast.broadcastBtc(signed.hex);
+          } catch (e) {
+            throw mapBroadcastError(e);
+          }
+          return await finishSend('btc', result.txId, signed.txid, async () => {
+            await acct.manager.freshReceivingAddress('btc');
+          });
+        } catch (e) {
+          // The allocated change address never reached the ledger: release
+          // it so a failed send does not burn the change index.
+          await releaseFailedChange(acct.manager, 'btc');
+          throw e;
+        }
       });
     },
   };

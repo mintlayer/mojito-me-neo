@@ -297,6 +297,47 @@ async function main() {
     assert.equal(parsed.getOutputAddress(0), BIP84_RECEIVING_0);
   }
 
+  // 11. The origin walk follows the injected persisted counters: a change
+  //     address above the fixed 512 ceiling maps and stays spendable (the
+  //     long send history case), while without the counters the same
+  //     wallet fails closed instead of spending an unmapped input.
+  {
+    const changeHigh = addressAt(1, 600);
+    const freshChange = addressAt(1, 601);
+    const funded = { [changeHigh]: [utxo(TXID_A, 0, '100000')] };
+    const rate = { satPerVbyte: 1, fallback: false };
+    await assert.rejects(
+      () => builderFor(funded, rate, freshChange).buildAndSign({
+        seed,
+        accountXpub: account.xpub,
+        fromAddresses: [changeHigh],
+        to: BIP84_RECEIVING_0,
+        amountSat: 40000n,
+        tier: 'standard',
+      }),
+      (e: unknown) => e instanceof SendError && e.kind === 'rejected',
+      'without the counters the walk ceiling keeps the address unmapped',
+    );
+    const builder = new BtcTxBuilder({
+      network: 'mainnet',
+      utxos: { async utxos(address) { return funded[address] ?? []; } },
+      rateSource: async () => rate,
+      changeAddress: freshChange,
+      walkCounters: async () => ({ receiving: 0, change: 600 }),
+    });
+    const result = await builder.buildAndSign({
+      seed,
+      accountXpub: account.xpub,
+      fromAddresses: [changeHigh],
+      to: BIP84_RECEIVING_0,
+      amountSat: 40000n,
+      tier: 'standard',
+    });
+    const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(result.hex, 'hex')));
+    assert.equal(parsed.inputsLength, 1, 'the change UTXO above the fixed ceiling is selected');
+    assert.equal(parsed.getOutputAddress(0), BIP84_RECEIVING_0);
+  }
+
   console.log('btcTxBuilder.test: ok');
 }
 

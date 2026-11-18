@@ -354,6 +354,11 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
     has risen above the reviewed rate: the send refuses with the fee-changed copy and the flow
     asks for a fresh review. At or below the reviewed rate, the signed fee is exactly the
     reviewed fee.
+17. **Long change history stays spendable, failures do not burn indexes.** With a simulated
+    store state that puts the BTC change counter past the fixed derivation walk ceiling (send
+    #500+), a send drawing on that change address still succeeds. A failed send (underfunded
+    amount or refused broadcast) leaves the change counter untouched, so the next successful
+    send allocates exactly one change index.
 
 ---
 

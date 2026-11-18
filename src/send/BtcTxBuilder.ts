@@ -50,9 +50,15 @@ export function parsePinnedRate(satPerVbyte: string): number {
  *  an output full nodes refuse to relay. */
 export const BTC_DUST_SAT = 294n;
 
-/** Walk bound for matching addresses to derivation paths; aligned with the
- *  AddressManager scan ceiling so every reachable wallet index maps. */
+/** Walk bound for matching addresses to derivation paths when no counter
+ *  source is injected: aligned with the AddressManager scan ceiling so the
+ *  reachable-by-scan wallet indexes map. */
 const ORIGIN_WALK_LIMIT = 512;
+
+/** Headroom the origin walk adds over the injected persisted counters: it
+ *  covers allocations made after the counter read (a serialized send can
+ *  have advanced the change index moments earlier). */
+const ORIGIN_WALK_HEADROOM = 16;
 
 export type BtcFeePlan = {
   tier: FeeTierId;
@@ -89,6 +95,12 @@ export class BtcTxBuilder {
       utxos: BtcUtxoSource;
       rateSource: BtcRateSource;
       changeAddress: string;
+      /** The persisted derivation counters (AddressManager.indexes): the
+       *  origin walk extends past the fixed limit to every index the wallet
+       *  may already have allocated, so change and older receiving UTXOs
+       *  stay spendable after long send histories. Absent, the fixed walk
+       *  limit applies. */
+      walkCounters?: () => Promise<{ receiving: number; change: number }>;
     },
   ) {
     this.net = opts.network === 'mainnet' ? NETWORK : TEST_NETWORK;
@@ -226,24 +238,32 @@ export class BtcTxBuilder {
     return { tx: selection.tx, inputSat, weight: selection.weight, rate, fallback, inputOrigins };
   }
 
-  private originsCache: { xpub: string; map: Map<string, WalletOrigin> } | null = null;
+  private originsCache: { xpub: string; receivingBound: number; changeBound: number; map: Map<string, WalletOrigin> } | null = null;
 
   /** Map wallet addresses to origins over the public account xpub: the
-   *  receiving (0) and change (1) branches up to the documented walk limit.
-   *  Public derivation only; no seed, no network. Memoized per xpub. */
+   *  receiving (0) and change (1) branches, each walked past the fixed
+   *  limit when the injected persisted counters reach further. Public
+   *  derivation only; no seed, no network. Memoized per xpub and bounds. */
   private async walletOrigins(accountXpub: string): Promise<Map<string, WalletOrigin>> {
-    if (this.originsCache !== null && this.originsCache.xpub === accountXpub) return this.originsCache.map;
+    const counters = this.opts.walkCounters === undefined ? null : await this.opts.walkCounters();
+    const boundOf = (counter: number): number => Math.max(ORIGIN_WALK_LIMIT, counter + ORIGIN_WALK_HEADROOM);
+    const receivingBound = boundOf(counters === null ? 0 : counters.receiving);
+    const changeBound = boundOf(counters === null ? 0 : counters.change);
+    const cache = this.originsCache;
+    if (cache !== null && cache.xpub === accountXpub && cache.receivingBound === receivingBound && cache.changeBound === changeBound) {
+      return cache.map;
+    }
     const account = HDKey.fromExtendedKey(accountXpub);
     const out = new Map<string, WalletOrigin>();
     for (const branch of [0, 1] as BtcBranch[]) {
-      for (let index = 0; index < ORIGIN_WALK_LIMIT; index++) {
+      for (let index = 0; index < (branch === 0 ? receivingBound : changeBound); index++) {
         const child = account.derive(`m/${branch}/${index}`);
         if (child.publicKey === null) continue;
         const pay = p2wpkh(child.publicKey, this.net);
         if (pay.address !== undefined) out.set(pay.address, { branch, index, script: pay.script });
       }
     }
-    this.originsCache = { xpub: accountXpub, map: out };
+    this.originsCache = { xpub: accountXpub, receivingBound, changeBound, map: out };
     return out;
   }
 

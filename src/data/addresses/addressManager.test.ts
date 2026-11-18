@@ -118,6 +118,18 @@ async function main() {
     assert.equal(await manager.peekChangeAddress('ml'), 'ml-1-2');
     assert.equal(await manager.peekChangeAddress('ml'), 'ml-1-2', 'peek is stable');
     assert.deepEqual(store.read()[NETWORK]?.ml, { receiving: 0, change: 2 }, 'peek did not persist');
+    // indexes exposes the persisted counters (the send origin walk reads
+    // them) without mutating anything.
+    assert.deepEqual(await manager.indexes('ml'), { receiving: 0, change: 2 });
+    // releaseChangeAddress steps the counter back and persists (failed send
+    // cleanup), with a floor at zero.
+    await manager.releaseChangeAddress('ml');
+    assert.deepEqual(await manager.indexes('ml'), { receiving: 0, change: 1 });
+    assert.equal(await manager.peekChangeAddress('ml'), 'ml-1-1', 'the released index is the next allocation');
+    assert.deepEqual(store.read()[NETWORK]?.ml, { receiving: 0, change: 1 }, 'release persisted');
+    await manager.releaseChangeAddress('ml');
+    await manager.releaseChangeAddress('ml');
+    assert.deepEqual(await manager.indexes('ml'), { receiving: 0, change: 0 }, 'release floors at zero');
   }
 
   // Chains are independent and the state is per network.

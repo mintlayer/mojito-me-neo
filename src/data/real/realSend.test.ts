@@ -17,6 +17,7 @@ import type { KeySession } from '../../keys/session';
 import { TxTracker } from '../../send/TxTracker';
 import { SendError } from '../../send/errors';
 import type { BtcChainService, BtcUtxo } from '../btc/BtcChainService';
+import { BroadcastError } from '../providers/BroadcastProvider';
 import type { BroadcastProvider } from '../providers/types';
 import type { NetworkFlag } from '../../config/endpoints';
 import type { RealAccountContext } from './account';
@@ -41,6 +42,7 @@ type Harness = {
   releaseBroadcast: () => void;
   scriptBroadcastAnswer: (txId: string) => void;
   breakBookkeeping: () => void;
+  failBroadcastOnce: () => void;
 };
 
 /** One real send service over an in-memory store, a scripted BTC client and
@@ -93,6 +95,7 @@ async function harness(opts?: {
   let releaseFn: (() => void) | null = null;
   let scriptedAnswer: string | null = null;
   let bookkeepingBroken = false;
+  let failNextBroadcast = false;
   const broadcastHexes: string[] = [];
   const provider: BroadcastProvider = {
     async broadcastMl() {
@@ -100,6 +103,10 @@ async function harness(opts?: {
     },
     async broadcastBtc(hex) {
       broadcastHexes.push(hex);
+      if (failNextBroadcast) {
+        failNextBroadcast = false;
+        throw new BroadcastError('btc', 'network', undefined, undefined);
+      }
       if (holdBroadcast) await new Promise<void>((resolve) => { releaseFn = resolve; });
       const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(hex, 'hex')));
       return { txId: scriptedAnswer ?? parsed.id };
@@ -151,6 +158,9 @@ async function harness(opts?: {
     },
     breakBookkeeping: () => {
       bookkeepingBroken = true;
+    },
+    failBroadcastOnce: () => {
+      failNextBroadcast = true;
     },
   };
 }
@@ -223,6 +233,7 @@ async function main() {
       'a mismatched broadcast answer is a typed rejection',
     );
     assert.equal(h.btcIndexes().receiving, 0, 'no rotation happened for the rejected send');
+    assert.equal(h.btcIndexes().change, 0, 'no change index burned for the rejected send');
   }
 
   // 4. Fee pinning: the reviewed rate signs; a fresh estimate above it
@@ -270,6 +281,46 @@ async function main() {
     assert.equal(result.warning, true, 'broadcast tx reads as success with a warning');
     assert.match(result.txId, /^[0-9a-f]{64}$/);
     assert.deepEqual(h.btcIndexes(), { receiving: 0, change: 1 }, 'rotation failed before persisting');
+  }
+
+  // 7. Change index above the fixed origin walk ceiling is still spendable:
+  //    the service hands the builder the persisted counters, so a wallet
+  //    with 600 allocated change addresses funds from change 599.
+  {
+    const changeHigh = await changeAt(599);
+    const h = await harness({
+      btcIndexes: { receiving: 0, change: 600 },
+      funded: { [changeHigh]: [utxo(TXID_A, 0, '100000')] },
+    });
+    const result = await h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard' });
+    assert.match(result.txId, /^[0-9a-f]{64}$/);
+    const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(h.broadcastHexes[0], 'hex')));
+    assert.equal(parsed.inputsLength, 1, 'the high change UTXO is selected and signed');
+    assert.equal(h.btcIndexes().change, 601, 'exactly one allocation past the long history');
+  }
+
+  // 8. A failed send does not consume the change index: selection failures
+  //    and broadcast refusals both release the allocation, and the next
+  //    send allocates exactly once.
+  {
+    const recv0 = await btcAddressAt({ xpub: xpub12, network: 'mainnet' }, 0, 0);
+    const h = await harness({ funded: { [recv0]: [utxo(TXID_A, 0, '10000')] } });
+    await assert.rejects(
+      () => h.send.sendBtc({ to: recipient, amountDecimal: '0.0009', tier: 'standard' }),
+      (e: unknown) => e instanceof SendError && e.kind === 'insufficient-funds',
+      'underfunded send fails typed',
+    );
+    assert.equal(h.btcIndexes().change, 0, 'the failed selection released the change allocation');
+    h.failBroadcastOnce();
+    await assert.rejects(
+      () => h.send.sendBtc({ to: recipient, amountDecimal: '0.00005', tier: 'standard' }),
+      (e: unknown) => e instanceof SendError && e.kind === 'timeout',
+      'broadcast network failure maps typed',
+    );
+    assert.equal(h.btcIndexes().change, 0, 'the failed broadcast released the change allocation');
+    const done = await h.send.sendBtc({ to: recipient, amountDecimal: '0.00005', tier: 'standard' });
+    assert.match(done.txId, /^[0-9a-f]{64}$/);
+    assert.equal(h.btcIndexes().change, 1, 'the successful send allocated exactly one change index');
   }
 
   console.log('realSend.test: ok');
