@@ -6,6 +6,10 @@ import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
 import type { StepState } from '../../ui/StepState';
 import type { TxTracker } from '../../send/TxTracker';
+import type { OrderBookService } from '../../trade/OrderBookService';
+import type { OrderFlows } from '../../trade/orders';
+import type { HtlcFlows } from '../../trade/htlc';
+import type { SwapSessionStore } from '../../trade/swapSession';
 
 export type ProviderMode = 'mock' | 'real';
 
@@ -165,8 +169,18 @@ export interface WaitlistProvider {
 export type BridgeRouteDirection = 'E2M' | 'M2E';
 export type BridgeQuoteRequest = { route: BridgeRouteDirection; token: string; amount: string; destAddr: string };
 export type BridgeQuote = {
-  feePct: string; feeAmount: string; minAmount: string;
-  etaSeconds: number; destContractOrAddress: string;
+  feePct: string;
+  feeAmount: string;
+  /** Documented minimum (fixture); the bridge_v2 API documents none, so the
+   *  real provider answers null and the screen hides the row. */
+  minAmount?: string | null;
+  /** Documented seconds ETA (fixture); the real API reports confirmations
+   *  instead, so this is absent on real quotes. */
+  etaSeconds?: number;
+  /** Real API: the m2e deposit confirmations the master waits for. */
+  confirmationsRequired?: number;
+  /** M2E: the Mintlayer treasury deposit address to fund (F14). */
+  destContractOrAddress: string;
 };
 export type BridgeHandle = { id: string; createdAt: number };
 export type BridgeState = 'awaiting-deposit' | 'attesting' | 'minted' | 'released' | 'expired' | 'failed';
@@ -226,4 +240,16 @@ export interface Providers {
   /** True while USD figures come from the mock price provider (R1): the UI
    *  labels them as indicative mock data instead of presenting real prices. */
   pricesAreMock: boolean;
+
+  // Trade seams (spec M4): real in real mode over the bindings and the
+  // indexer, demo-labelled in mock mode (createMockSend pattern), so the
+  // screens stay mode-agnostic and the demo chip stays honest.
+  /** Live order book (DexScreen depth rows); the fixture book in mock. */
+  orderBook: OrderBookService;
+  /** On-chain order flows (place, fill, conclude); demo pipeline in mock. */
+  orders: OrderFlows;
+  /** ML-side HTLC swap flows; demo pipeline in mock. */
+  htlc: HtlcFlows;
+  /** Persisted swap sessions (restart-survivable). */
+  swapSessions: SwapSessionStore;
 }

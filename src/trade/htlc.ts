@@ -61,7 +61,10 @@ export interface HtlcFlows {
 
 export type HtlcFlowsConfig = {
   network: MlNetwork;
-  bindings: MintlayerBindings;
+  /** The bindings facade loader (MojitoCore): a thunk because the facade
+   *  pulls the native bridge, which the Node gate must not load (the
+   *  realSend config carries the same lazy seam). */
+  loadBindings: () => MintlayerBindings;
   indexer: Pick<IndexerClient, 'transaction' | 'feerate' | 'spendableUtxos' | 'tip'>;
   broadcast: BroadcastProvider;
   addresses: () => Promise<string[]>;
@@ -95,6 +98,11 @@ export type HtlcDescriptor = {
 };
 
 export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
+  let bindings: MintlayerBindings | null = null;
+  function b(): MintlayerBindings {
+    if (bindings === null) bindings = cfg.loadBindings();
+    return bindings;
+  }
   let inFlight = false;
   function serialize<T>(fn: () => Promise<T>): Promise<T> {
     if (inFlight) return Promise.reject(new HtlcError('busy'));
@@ -118,8 +126,8 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
   async function utxoInput(sourceIdHex: string, index: number): Promise<Uint8Array> {
     const sourceId = hexOf.decode(sourceIdHex);
     if (sourceId.length !== 32) throw new HtlcError('rejected', 'outpoint source id must be 32 bytes');
-    const outpointSource = await cfg.bindings.encodeOutpointSourceId(sourceId, 'transaction');
-    return cfg.bindings.encodeInputForUtxo(outpointSource, index);
+    const outpointSource = await b().encodeOutpointSourceId(sourceId, 'transaction');
+    return b().encodeInputForUtxo(outpointSource, index);
   }
 
   async function sign(
@@ -149,11 +157,11 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         };
         witnesses.push(
           inputs.length === 1 && secret !== undefined
-            ? await cfg.bindings.encodeWitnessHtlcSpend(params)
-            : await cfg.bindings.encodeWitness(params),
+            ? await b().encodeWitnessHtlcSpend(params)
+            : await b().encodeWitness(params),
         );
       }
-      const signed = await cfg.bindings.encodeSignedTransaction(transaction, witnesses);
+      const signed = await b().encodeSignedTransaction(transaction, witnesses);
       return bytesToHex(signed);
     });
   }
@@ -194,7 +202,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     // The decode seam restores the lock parameters from the raw
     // transaction; bindings stub rejections surface as the honest
     // device-pending state, never a guessed descriptor.
-    const json = await cfg.bindings.decodeTransactionToJson(hexOf.decode(htlcTxId), cfg.network);
+    const json = await b().decodeTransactionToJson(hexOf.decode(htlcTxId), cfg.network);
     const parsed = JSON.parse(json) as {
       outputs?: { htlc?: { atoms?: string; secret_hash?: string; spend_address?: string; spend_pubkey?: string; refund_address?: string; refund_timelock?: number } }[];
     };
@@ -238,7 +246,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
                 destinations.push(selected.address);
               }
               const outputBytes: Uint8Array[] = [
-                await cfg.bindings.encodeOutputHtlc({
+                await b().encodeOutputHtlc({
                   atoms: '0',
                   secretHash,
                   spendAddress: spend.address,
@@ -247,10 +255,10 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
                   refundTimelock: timelockSeconds,
                 }),
                 ...(await Promise.all(
-                  planned.slice(1).map((leg) => cfg.bindings.encodeOutputTransfer('0', leg.address, cfg.network)),
+                  planned.slice(1).map((leg) => b().encodeOutputTransfer('0', leg.address, cfg.network)),
                 )),
               ];
-              return cfg.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
+              return b().estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
             },
           });
 
@@ -260,12 +268,12 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
             inputs.push(await utxoInput(selected.utxo.outpoint.sourceId, selected.utxo.outpoint.index));
             spentOutputs.push(
               selected.tokenId === null
-                ? await cfg.bindings.encodeOutputTransfer(selected.atoms, selected.address, cfg.network)
-                : await cfg.bindings.encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network),
+                ? await b().encodeOutputTransfer(selected.atoms, selected.address, cfg.network)
+                : await b().encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network),
             );
           }
           const outputs: Uint8Array[] = [
-            await cfg.bindings.encodeOutputHtlc({
+            await b().encodeOutputHtlc({
               atoms: giveAtoms,
               secretHash,
               spendAddress: spend.address,
@@ -275,10 +283,10 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
             }),
           ];
           if (selection.changeAtoms !== '0') {
-            outputs.push(await cfg.bindings.encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
+            outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
 
-          const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+          const transaction = await b().encodeTransaction(inputs, outputs, 0);
           const tip = await cfg.indexer.tip();
           const signedHex = await cfg.withSession((session) => sign(transaction, selection.selection, spentOutputs, session, tip.blockHeight + 1));
           const txId = await broadcast(signedHex);
@@ -300,7 +308,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the claim fee');
         const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
-        const htlcOutputBytes = await cfg.bindings.encodeOutputHtlc({
+        const htlcOutputBytes = await b().encodeOutputHtlc({
           atoms: descriptor.atoms,
           secretHash: descriptor.secretHash,
           spendAddress: descriptor.spendAddress,
@@ -309,8 +317,8 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
           refundTimelock: descriptor.refundTimelock,
         });
         const inputs = [htlcInput];
-        const outputs = [await cfg.bindings.encodeOutputTransfer(payout.toString(), spend.address, cfg.network)];
-        const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+        const outputs = [await b().encodeOutputTransfer(payout.toString(), spend.address, cfg.network)];
+        const transaction = await b().encodeTransaction(inputs, outputs, 0);
         const tip = await cfg.indexer.tip();
         // The HTLC spend witness signs against the HTLC output (the spent
         // output of the single input) and reveals the preimage (F10).
@@ -336,7 +344,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the refund fee');
         const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
-        const htlcOutputBytes = await cfg.bindings.encodeOutputHtlc({
+        const htlcOutputBytes = await b().encodeOutputHtlc({
           atoms: descriptor.atoms,
           secretHash: descriptor.secretHash,
           spendAddress: descriptor.spendAddress,
@@ -345,8 +353,8 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
           refundTimelock: descriptor.refundTimelock,
         });
         const inputs = [htlcInput];
-        const outputs = [await cfg.bindings.encodeOutputTransfer(payout.toString(), descriptor.refundAddress, cfg.network)];
-        const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+        const outputs = [await b().encodeOutputTransfer(payout.toString(), descriptor.refundAddress, cfg.network)];
+        const transaction = await b().encodeTransaction(inputs, outputs, 0);
         const tip = await cfg.indexer.tip();
         const signedHex = await cfg.withSession((session) =>
           signWithKey(transaction, descriptor.refundAddress, [htlcOutputBytes], session, tip.blockHeight + 1, undefined, 'htlc-refund'),
@@ -356,7 +364,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     },
 
     async extractSecret(rawSignedTx, htlcOutpoint) {
-      return cfg.bindings.extractHtlcSecret(rawSignedTx, false, htlcOutpoint.id, htlcOutpoint.index);
+      return b().extractHtlcSecret(rawSignedTx, false, htlcOutpoint.id, htlcOutpoint.index);
     },
   };
 
@@ -365,8 +373,8 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
   async function claimFee(htlcTxId: string, destination: string): Promise<bigint> {
     const rate = await cfg.indexer.feerate(STANDARD_TIER_IN_TOP_MB);
     const input = await utxoInput(htlcTxId, 0);
-    const output = await cfg.bindings.encodeOutputTransfer('0', destination, cfg.network);
-    const size = await cfg.bindings.estimateTransactionSize([input], [destination], [output], cfg.network);
+    const output = await b().encodeOutputTransfer('0', destination, cfg.network);
+    const size = await b().estimateTransactionSize([input], [destination], [output], cfg.network);
     const kbCeil = BigInt(Math.max(1, Math.ceil(size / 1000)));
     const rateBig = BigInt(/^\d+$/.test(rate) ? rate : '0');
     return kbCeil * (rateBig > 1n ? rateBig : 1n);
@@ -400,9 +408,9 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       };
       const witness =
         kind === 'htlc-spend'
-          ? await cfg.bindings.encodeWitnessHtlcSpend(params)
-          : await cfg.bindings.encodeWitnessHtlcRefundSingleSig(params);
-      const signed = await cfg.bindings.encodeSignedTransaction(transaction, [witness]);
+          ? await b().encodeWitnessHtlcSpend(params)
+          : await b().encodeWitnessHtlcRefundSingleSig(params);
+      const signed = await b().encodeSignedTransaction(transaction, [witness]);
       return bytesToHex(signed);
     });
   }

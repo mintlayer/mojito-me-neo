@@ -230,7 +230,7 @@ function harness(opts?: { orders?: OrderRow[]; detail?: OrderRow; utxos?: MlUtxo
   };
   const flows = createOrderFlows({
     network: 'mainnet',
-    bindings,
+    loadBindings: () => bindings,
     indexer: indexer as never,
     broadcast,
     addresses: async () => {

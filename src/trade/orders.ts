@@ -95,7 +95,10 @@ export interface OrderFlows {
 
 export type OrderFlowsConfig = {
   network: MlNetwork;
-  bindings: MintlayerBindings;
+  /** The bindings facade loader (MojitoCore): a thunk because the facade
+   *  pulls the native bridge, which the Node gate must not load (the
+   *  realSend config carries the same lazy seam). */
+  loadBindings: () => MintlayerBindings;
   indexer: Pick<IndexerClient, 'orders' | 'order' | 'feerate' | 'spendableUtxos' | 'tip'> & {
     /** Pair-filtered open orders (GET /order/pair/{base}_{quote}). */
     ordersByPair(base: string, quote: string): Promise<MlOrderInfo[]>;
@@ -127,6 +130,11 @@ export class OrderFlowError extends Error {
 }
 
 export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
+  let bindings: MintlayerBindings | null = null;
+  function b(): MintlayerBindings {
+    if (bindings === null) bindings = cfg.loadBindings();
+    return bindings;
+  }
   /** One order transaction at a time: selection reads live UTXOs and the
    *  change allocation mutates the persisted counters (realSend pattern). */
   let inFlight = false;
@@ -153,18 +161,18 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
   async function utxoInput(selected: SelectedMlInput): Promise<Uint8Array> {
     const sourceId = hexOf.decode(selected.utxo.outpoint.sourceId);
     if (sourceId.length !== 32) throw new OrderFlowError('rejected', 'outpoint source id must be 32 bytes');
-    const outpointSource = await cfg.bindings.encodeOutpointSourceId(
+    const outpointSource = await b().encodeOutpointSourceId(
       sourceId,
       selected.utxo.outpoint.sourceType === 'BlockReward' ? 'block-reward' : 'transaction',
     );
-    return cfg.bindings.encodeInputForUtxo(outpointSource, selected.utxo.outpoint.index);
+    return b().encodeInputForUtxo(outpointSource, selected.utxo.outpoint.index);
   }
 
   /** Re-encoded spent output of one selected input (M3 sighash contract). */
   async function spentOutput(selected: SelectedMlInput): Promise<Uint8Array> {
     return selected.tokenId === null
-      ? cfg.bindings.encodeOutputTransfer(selected.atoms, selected.address, cfg.network)
-      : cfg.bindings.encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network);
+      ? b().encodeOutputTransfer(selected.atoms, selected.address, cfg.network)
+      : b().encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network);
   }
 
   /** Sign the payer inputs; prebuilt entries (the no-signature order
@@ -203,7 +211,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
         const origin = await resolveOrigin(xpub, payer.address);
         const privateKey = mlPrivateKeyFromSeed(seed, cfg.network as 'mainnet' | 'testnet', origin.branch, origin.index);
         witnesses.push(
-          await cfg.bindings.encodeWitness({
+          await b().encodeWitness({
             sighashType: 'all',
             privateKey,
             address: payer.address,
@@ -215,7 +223,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
           }),
         );
       }
-      const signed = await cfg.bindings.encodeSignedTransaction(transaction, witnesses);
+      const signed = await b().encodeSignedTransaction(transaction, witnesses);
       return bytesToHex(signed);
     });
   }
@@ -238,8 +246,8 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     payerInputs: SelectedMlInput[],
     prebuiltWitnesses: Map<number, Uint8Array>,
   ): Promise<{ txId: string; transaction: Uint8Array }> {
-    const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
-    const localTxId = await cfg.bindings.getTransactionId(transaction, false);
+    const transaction = await b().encodeTransaction(inputs, outputs, 0);
+    const localTxId = await b().getTransactionId(transaction, false);
     const tip = await cfg.indexer.tip();
     const signedHex = await cfg.withSession((session) => sign(transaction, payerInputs, prebuiltWitnesses, session, tip.blockHeight + 1));
     const result = await cfg.broadcast.broadcastMl(signedHex).catch((e: unknown) => {
@@ -262,8 +270,8 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     return Promise.all(
       outputs.map((leg) =>
         leg.kind === 'coin'
-          ? cfg.bindings.encodeOutputTransfer('0', leg.address, cfg.network)
-          : cfg.bindings.encodeOutputTokenTransfer(leg.tokenId ?? '', '0', leg.address, cfg.network),
+          ? b().encodeOutputTransfer('0', leg.address, cfg.network)
+          : b().encodeOutputTokenTransfer(leg.tokenId ?? '', '0', leg.address, cfg.network),
       ),
     );
   }
@@ -277,7 +285,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
         const changeAddress = await cfg.allocateChangeAddress();
         try {
           const orderOutput = (giveAmount: string, askAmount: string): Promise<Uint8Array> =>
-            cfg.bindings.encodeCreateOrderOutput({
+            b().encodeCreateOrderOutput({
               give: { tokenId: giveTokenId === COIN_REF ? 'coin' : giveTokenId, atoms: giveAmount },
               ask: { tokenId: askTokenId === COIN_REF ? 'coin' : askTokenId, atoms: askAmount },
               concludeDestination: changeAddress,
@@ -302,7 +310,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
                 destinations.push(selected.address);
               }
               const outputBytes = [await orderOutput('0', '0'), ...(await estimateLegs(planned.slice(1)))];
-              return cfg.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
+              return b().estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
             },
           });
 
@@ -315,17 +323,17 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
               .reduce((acc, input) => acc + BigInt(input.atoms), 0n);
             const tokenRemainder = tokenSelected - BigInt(giveAtoms);
             if (tokenRemainder > 0n) {
-              outputs.push(await cfg.bindings.encodeOutputTokenTransfer(giveTokenId, tokenRemainder.toString(), changeAddress, cfg.network));
+              outputs.push(await b().encodeOutputTokenTransfer(giveTokenId, tokenRemainder.toString(), changeAddress, cfg.network));
             }
           }
           if (selection.changeAtoms !== '0') {
-            outputs.push(await cfg.bindings.encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
+            outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
 
           const { txId, transaction } = await finish(inputs, outputs, selection.selection, new Map());
           // The order id is a bindings extraction on the create tx output
           // (F11); output 0 is the order output this flow assembled.
-          const orderId = await cfg.bindings.getOrderId(transaction, 0);
+          const orderId = await b().getOrderId(transaction, 0);
           return { txId, orderId };
         } catch (e) {
           await cfg.releaseFailedChange();
@@ -369,11 +377,11 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
                 destinations.push(selected.address);
               }
               const outputBytes = await estimateLegs(planned);
-              return cfg.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
+              return b().estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
             },
           });
 
-          const fillInput = await cfg.bindings.encodeInputForFillOrder(
+          const fillInput = await b().encodeInputForFillOrder(
             decodeBech32Data(orderId),
             decodeBech32Data(destination),
             fillAtoms,
@@ -383,8 +391,8 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
 
           const outputs: Uint8Array[] = [
             order.giveTokenId === COIN_REF
-              ? await cfg.bindings.encodeOutputTransfer(givePayout, destination, cfg.network)
-              : await cfg.bindings.encodeOutputTokenTransfer(order.giveTokenId, givePayout, destination, cfg.network),
+              ? await b().encodeOutputTransfer(givePayout, destination, cfg.network)
+              : await b().encodeOutputTokenTransfer(order.giveTokenId, givePayout, destination, cfg.network),
           ];
           if (order.askTokenId !== COIN_REF) {
             const askSelected = selection.selection
@@ -392,14 +400,14 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
               .reduce((acc, input) => acc + BigInt(input.atoms), 0n);
             const askRemainder = askSelected - BigInt(fillAtoms);
             if (askRemainder > 0n) {
-              outputs.push(await cfg.bindings.encodeOutputTokenTransfer(order.askTokenId, askRemainder.toString(), changeAddress, cfg.network));
+              outputs.push(await b().encodeOutputTokenTransfer(order.askTokenId, askRemainder.toString(), changeAddress, cfg.network));
             }
           }
           if (selection.changeAtoms !== '0') {
-            outputs.push(await cfg.bindings.encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
+            outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
 
-          const noSignature = await cfg.bindings.encodeWitnessNoSignature();
+          const noSignature = await b().encodeWitnessNoSignature();
           const signedHex = await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]]));
           const result = await cfg.broadcast.broadcastMl(signedHex);
           return { txId: result.txId };
@@ -439,11 +447,11 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
                 destinations.push(selected.address);
               }
               const outputBytes = await estimateLegs(planned);
-              return cfg.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
+              return b().estimateTransactionSize(inputBytes, destinations, outputBytes, cfg.network);
             },
           });
 
-          const concludeInput = await cfg.bindings.encodeInputForConcludeOrder(
+          const concludeInput = await b().encodeInputForConcludeOrder(
             decodeBech32Data(orderId),
             decodeBech32Data(order.concludeDestination),
           );
@@ -454,22 +462,22 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
           if (order.giveBalanceAtoms !== '0') {
             outputs.push(
               order.giveTokenId === COIN_REF
-                ? await cfg.bindings.encodeOutputTransfer(order.giveBalanceAtoms, order.concludeDestination, cfg.network)
-                : await cfg.bindings.encodeOutputTokenTransfer(order.giveTokenId, order.giveBalanceAtoms, order.concludeDestination, cfg.network),
+                ? await b().encodeOutputTransfer(order.giveBalanceAtoms, order.concludeDestination, cfg.network)
+                : await b().encodeOutputTokenTransfer(order.giveTokenId, order.giveBalanceAtoms, order.concludeDestination, cfg.network),
             );
           }
           if (order.askBalanceAtoms !== '0') {
             outputs.push(
               order.askTokenId === COIN_REF
-                ? await cfg.bindings.encodeOutputTransfer(order.askBalanceAtoms, order.concludeDestination, cfg.network)
-                : await cfg.bindings.encodeOutputTokenTransfer(order.askTokenId, order.askBalanceAtoms, order.concludeDestination, cfg.network),
+                ? await b().encodeOutputTransfer(order.askBalanceAtoms, order.concludeDestination, cfg.network)
+                : await b().encodeOutputTokenTransfer(order.askTokenId, order.askBalanceAtoms, order.concludeDestination, cfg.network),
             );
           }
           if (selection.changeAtoms !== '0') {
-            outputs.push(await cfg.bindings.encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
+            outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
 
-          const noSignature = await cfg.bindings.encodeWitnessNoSignature();
+          const noSignature = await b().encodeWitnessNoSignature();
           const signedHex = await finishTx(inputs, outputs, selection.selection, new Map([[0, noSignature]]));
           const result = await cfg.broadcast.broadcastMl(signedHex);
           return { txId: result.txId };
@@ -500,7 +508,7 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     payerInputs: SelectedMlInput[],
     prebuiltWitnesses: Map<number, Uint8Array>,
   ): Promise<string> {
-    const transaction = await cfg.bindings.encodeTransaction(inputs, outputs, 0);
+    const transaction = await b().encodeTransaction(inputs, outputs, 0);
     const tip = await cfg.indexer.tip();
     return cfg.withSession((session) => sign(transaction, payerInputs, prebuiltWitnesses, session, tip.blockHeight + 1));
   }

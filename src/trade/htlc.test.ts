@@ -178,7 +178,7 @@ function harness(opts?: { htlcJson?: Partial<HtlcJson>; lockTimestamp?: number |
   };
   const flows = createHtlcFlows({
     network: 'mainnet',
-    bindings,
+    loadBindings: () => bindings,
     indexer: indexer as never,
     broadcast,
     addresses: async () => [VECTOR_ADDRESS],
@@ -328,7 +328,7 @@ async function main() {
     };
     const flows = createHtlcFlows({
       network: 'mainnet',
-      bindings,
+      loadBindings: () => bindings,
       indexer: indexer as never,
       broadcast: {
         broadcastMl: async () => ({ txId: LOCK_TX_ID }),
