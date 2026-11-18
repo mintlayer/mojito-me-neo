@@ -28,9 +28,13 @@ const SPEND_PUBKEY = new Uint8Array(33).fill(0x02);
 
 type HtlcJson = { atoms: string; secret_hash: string; spend_address: string; spend_pubkey: string; refund_address: string; refund_timelock: number };
 
+/** The unsigned lock transaction bytes as the flows return them from
+ *  initiate; the claim and refund decodes consume bytes, never the tx id. */
+const LOCK_TX_BYTES = new TextEncoder().encode('lock-tx-fixture:claim-refund-decode-input');
+
 function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
   witnesses: WitnessParams[];
-  htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: number }[];
+  htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: string }[];
   spendWitnesses: WitnessParams[];
   refundWitnesses: WitnessParams[];
   extractCalls: { txId: string; outpoint: string; index: number }[];
@@ -38,7 +42,7 @@ function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
   const witnesses: WitnessParams[] = [];
   const spendWitnesses: WitnessParams[] = [];
   const refundWitnesses: WitnessParams[] = [];
-  const htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: number }[] = [];
+  const htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: string }[] = [];
   const extractCalls: { txId: string; outpoint: string; index: number }[] = [];
   const u32 = (value: number): Uint8Array => {
     const out = new Uint8Array(4);
@@ -66,6 +70,9 @@ function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
     async encodeOutpointSourceId(id32: Uint8Array) {
       return cat(u8(0x01), id32);
     },
+    async encodeLockForSeconds(totalSeconds: number) {
+      return utf8(`L:${totalSeconds}`);
+    },
     async encodeInputForUtxo(outpointSource: Uint8Array, index: number) {
       return cat(u8(0x02), outpointSource, u32(index));
     },
@@ -75,9 +82,14 @@ function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
     async encodeOutputTokenTransfer(tokenId: string, atomsStr: string, address: string) {
       return utf8(`K:${tokenId}:${atomsStr}:${address}`);
     },
-    async encodeOutputHtlc(params: { atoms: string; secretHash: Uint8Array; spendAddress: string; spendPubkey: Uint8Array; refundAddress: string; refundTimelock: number }) {
-      htlcOutputs.push({ atoms: params.atoms, spendAddress: params.spendAddress, refundAddress: params.refundAddress, timelock: params.refundTimelock });
-      return utf8(`H:${params.atoms}:${params.spendAddress}:${params.refundTimelock}`);
+    async encodeOutputHtlc(params: { amount: string; secretHash: string; spendAddress: string; refundAddress: string; refundTimelock: Uint8Array }) {
+      htlcOutputs.push({
+        atoms: params.amount,
+        spendAddress: params.spendAddress,
+        refundAddress: params.refundAddress,
+        timelock: new TextDecoder().decode(params.refundTimelock),
+      });
+      return utf8(`H:${params.amount}:${params.spendAddress}:${new TextDecoder().decode(params.refundTimelock)}`);
     },
     async encodeTransaction(inputs: Uint8Array[], outputs: Uint8Array[]) {
       return cat(u8(0xee), u8(inputs.length), ...inputs, u8(0xff), u8(outputs.length), ...outputs);
@@ -85,10 +97,14 @@ function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
     async estimateTransactionSize(inputs: Uint8Array[], destinations: string[], outputs: Uint8Array[]) {
       return 100 + 40 * inputs.length + 30 * outputs.length + destinations.length;
     },
-    async getTransactionId(transaction: Uint8Array) {
-      return bytesToHex(new Uint8Array(32).fill(0x11));
+    async getTransactionId(_transaction: Uint8Array) {
+      return LOCK_TX_ID;
     },
-    async decodeTransactionToJson() {
+    async decodeTransactionToJson(transaction: Uint8Array) {
+      // Input shape gate: the vendored decode consumes serialized
+      // transaction bytes; a tx-id-sized payload is always a bug.
+      assert.notEqual(transaction.length, 32, 'decodeTransactionToJson takes transaction bytes, not a tx id');
+      assert.ok(transaction.length > 32, 'decodeTransactionToJson takes transaction bytes, not a tx id');
       return JSON.stringify({ outputs: [{ htlc: htlcJson }] });
     },
     async encodeWitness(params: WitnessParams) {
@@ -114,7 +130,7 @@ function fakeBindings(htlcJson: HtlcJson): MintlayerBindings & {
     witnesses: WitnessParams[];
     spendWitnesses: WitnessParams[];
     refundWitnesses: WitnessParams[];
-    htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: number }[];
+    htlcOutputs: { atoms: string; spendAddress: string; refundAddress: string; timelock: string }[];
     extractCalls: { txId: string; outpoint: string; index: number }[];
   };
 }
@@ -203,8 +219,9 @@ async function main() {
   // TIMELOCK_RULE is the recorded F10 string.
   assert.equal(TIMELOCK_RULE, 'btc timelock must be shorter than the mintlayer timelock (F10)');
 
-  // 1. initiate: the lock output encodes the F10 parameters; the signed
-  //    lock tx broadcasts and the outpoint rides the tx id.
+  // 1. initiate: the lock output encodes the F10 parameters through the
+  //    vendored shape (hex hash, encodeLockForSeconds blob), the signed
+  //    lock tx broadcasts and the flow returns the unsigned bytes.
   {
     const h = harness();
     const result = await h.flows.initiate(
@@ -213,14 +230,16 @@ async function main() {
       VECTOR_ADDRESS,
     );
     assert.equal(result.txId, LOCK_TX_ID);
+    assert.ok(result.lockTx.length > 32, 'initiate returns the unsigned lock tx bytes for the session record');
     assert.deepEqual(result.htlcOutpoint.id, hexOf.decode(LOCK_TX_ID));
     assert.equal(result.htlcOutpoint.index, 0);
-    // The final (real-build) HTLC output encoding carries the lock params.
+    // The final (real-build) HTLC output encoding carries the lock params
+    // in the vendored shape: atoms, addresses and the seconds lock blob.
     const lock = h.bindings.htlcOutputs[h.bindings.htlcOutputs.length - 1];
     assert.equal(lock.atoms, atoms(2n));
     assert.equal(lock.spendAddress, VECTOR_ADDRESS);
     assert.equal(lock.refundAddress, VECTOR_ADDRESS);
-    assert.equal(lock.timelock, 172800);
+    assert.equal(lock.timelock, 'L:172800');
     // Payer inputs sign normally (no secret on the lock leg).
     assert.equal(h.bindings.witnesses.length, 1);
     assert.equal(bytesToHex(h.bindings.witnesses[0].privateKey), expectedKey);
@@ -248,19 +267,19 @@ async function main() {
       ),
       (e: unknown) => e instanceof HtlcError && e.reason === 'rejected',
     );
-    const first = h.flows.claim(LOCK_TX_ID, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
+    const first = h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
     await assert.rejects(
-      () => h.flows.claim(LOCK_TX_ID, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
+      () => h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
       (e: unknown) => e instanceof HtlcError && e.reason === 'busy',
     );
     await first;
   }
 
   // 3. claim: the spend witness carries the preimage and signs against the
-  //    re-encoded HTLC output; the payout is the lock minus the fee.
+  //    re-encoded HTLC output; the decode consumes the lock tx bytes.
   {
     const h = harness();
-    const result = await h.flows.claim(LOCK_TX_ID, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
+    const result = await h.flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY });
     assert.equal(result.txId, LOCK_TX_ID);
     assert.equal(h.bindings.spendWitnesses.length, 1);
     const witness = h.bindings.spendWitnesses[0];
@@ -279,11 +298,11 @@ async function main() {
   {
     const h = harness({ lockTimestamp: Math.floor(Date.now() / 1000) - 10 });
     await assert.rejects(
-      () => h.flows.refund(LOCK_TX_ID),
+      () => h.flows.refund(LOCK_TX_BYTES),
       (e: unknown) => e instanceof HtlcError && e.reason === 'not-expired',
     );
     const expired = harness({ lockTimestamp: Math.floor(Date.now() / 1000) - 172_801 });
-    const result = await expired.flows.refund(LOCK_TX_ID);
+    const result = await expired.flows.refund(LOCK_TX_BYTES);
     assert.equal(result.txId, LOCK_TX_ID);
     assert.equal(expired.bindings.refundWitnesses.length, 1);
     assert.equal(expired.bindings.refundWitnesses[0].inputIndex, 0);
@@ -291,14 +310,14 @@ async function main() {
   }
 
   // 5. extractSecret: the bindings extraction consumes the raw signed tx
-  //    and outpoint bytes and answers the preimage (roundtrip with the
-  //    fixture claim).
+  //    bytes and the encodeOutpointSourceId blob of the HTLC outpoint and
+  //    answers the preimage (roundtrip with the fixture claim).
   {
     const h = harness();
     const fixtureSignedTx = new Uint8Array([0xde, 0xad, 0xbe, 0xef, 0x00]);
     const secret = await h.flows.extractSecret(fixtureSignedTx, { id: hexOf.decode(LOCK_TX_ID), index: 0 });
     assert.equal(bytesToHex(secret), bytesToHex(SECRET));
-    assert.deepEqual(h.bindings.extractCalls[0], { txId: 'deadbeef00', outpoint: LOCK_TX_ID, index: 0 });
+    assert.deepEqual(h.bindings.extractCalls[0], { txId: 'deadbeef00', outpoint: `01${LOCK_TX_ID}`, index: 0 });
     assert.equal(bytesToHex(secretHashOf(secret)), bytesToHex(SECRET_HASH), 'the extracted preimage hashes to the offered secret hash');
   }
 
@@ -342,7 +361,7 @@ async function main() {
       withSession: async (fn) => fn({ withSeed: (run: (s: Uint8Array) => Promise<string>) => run(seed) } as unknown as KeySession),
     });
     await assert.rejects(
-      () => flows.claim(LOCK_TX_ID, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
+      () => flows.claim(LOCK_TX_BYTES, SECRET, { address: VECTOR_ADDRESS, pubkey: SPEND_PUBKEY }),
       (e: unknown) => e instanceof HtlcError && e.reason === 'no-htlc-output',
     );
   }

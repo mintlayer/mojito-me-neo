@@ -84,3 +84,32 @@ cost that a paste-first send flow does not need yet, and shipping it half
 wired would be worse than an honest alert. The `scan.*` i18n keys land with
 the sheet, not before. Revisit when the milestone that owns scanning picks
 the camera library.
+
+## M4 change log
+
+### Bindings seam corrected to the vendored signatures (M4 review, critical)
+
+The first M4 implementation mirrored an imagined UniFFI API. The TS mirror
+in `modules/mojito-core/mintlayer/MintlayerBindings.ts` is reshaped to the
+pinned vendored surface (`vendor/mintlayer`, wallet-bindings v0.1.0):
+`getOrderId(inputs, network)` derives the order id from the create tx
+inputs (no output index exists); `encodeInputForFillOrder` and
+`encodeInputForConcludeOrder` take the bech32 id strings plus the account
+nonce and the current block height (they select the orders V0/V1 input
+form; conclude carries no destination argument); `encodeOutputHtlc` takes
+a hex secret hash, no spend pubkey, and a `refundTimelock` blob produced
+by the `encodeLock*` encoders (`encodeLockForSeconds` is added to the
+mirror for the seconds-denominated offers); `extractHtlcSecret` consumes
+the `encodeOutpointSourceId` blob, not the bare 32-byte id;
+`decodeTransactionToJson` is only ever fed serialized transaction bytes.
+The seam is pinned by `src/trade/bindingsParity.test.ts` (per-line literal
+asserts plus a checksum over the vendored signature lines), so either side
+drifts only through a failing gate.
+
+Account-nonce policy: the bindings docs require the fill and conclude
+nonces to sequence with the filler's other account spendings. The flows
+use an in-session counter (`createOrderFlows`); the wallet must persist
+the account nonce with its state before the native call-through goes live
+on real funds, otherwise the first order transaction after a restart can
+sit at the wrong nonce. Recorded here as a gate condition for the
+call-through landing.

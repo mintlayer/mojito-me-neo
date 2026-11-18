@@ -25,6 +25,7 @@ const row = (overrides?: Partial<SwapSessionRow>): SwapSessionRow => ({
   spendAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
   spendPubkeyHex: '02'.repeat(33),
   refundAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
+  lockTxHex: 'ee0102ff01',
   state: 'offered',
   txIds: [],
   updatedAt: 1700000000000,
@@ -73,9 +74,12 @@ async function main() {
     assert.equal(one?.state, 'offered');
     assert.equal(await store.get('missing'), null);
 
-    // Restart path: a fresh store over the same backend restores rows.
+    // Restart path: a fresh store over the same backend restores rows,
+    // including the lock tx bytes the claim and refund decodes need.
     const reopened = createSwapSessionStore(backend.storage);
-    assert.equal((await reopened.all()).length, 2);
+    const restored = await reopened.all();
+    assert.equal(restored.length, 2);
+    assert.equal(restored.find((r) => r.id === 'swap-1')?.lockTxHex, 'ee0102ff01');
     await reopened.remove('swap-1');
     assert.deepEqual((await reopened.all()).map((r) => r.id), ['swap-2']);
   }
@@ -93,20 +97,27 @@ async function main() {
   }
 
   // Corrupt stores drop bad rows instead of wedging the machine: garbage
-  // JSON, non-rows, a bad secret-hash shape, an unknown state.
+  // JSON, non-rows, a bad secret-hash shape, a bad lock-tx shape, an
+  // unknown state.
   assert.deepEqual(parseSwapSessions(null), []);
   assert.deepEqual(parseSwapSessions('not json'), []);
   assert.deepEqual(parseSwapSessions('{"a":1}'), []);
   const good = row();
   const badHash = row({ id: 'bad-hash', secretHashHex: 'zz' });
+  const badLockTx = row({ id: 'bad-locktx', lockTxHex: 'not-hex!' });
   const badState = row({ id: 'bad-state', state: 'cancelled' as SwapState });
   const tooManyTxIds = row({ id: 'bad-txids', txIds: Array.from({ length: 20 }, () => 'aa') });
-  const mixed = JSON.stringify([good, badHash, badState, tooManyTxIds]);
+  const mixed = JSON.stringify([good, badHash, badLockTx, badState, tooManyTxIds]);
   const parsed = parseSwapSessions(mixed);
   assert.deepEqual(
     parsed.map((r) => r.id),
     ['swap-1'],
   );
+  // Rows persisted before the lock-tx record stay loadable (optional
+  // field); they just cannot refund (the screen guards on the bytes).
+  const legacy = JSON.parse(JSON.stringify(row({ id: 'legacy' })));
+  delete legacy.lockTxHex;
+  assert.equal(parseSwapSessions(JSON.stringify([legacy])).length, 1);
 
   // Session cap: a hostile store cannot force unbounded memory.
   const many = Array.from({ length: 40 }, (_, i) => row({ id: `s${i}` }));

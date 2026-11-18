@@ -231,7 +231,8 @@ export const en = {
   'swap.state.refunded': 'Refunded',
   'swap.state.expired': 'Expired',
   'swap.warn.keepOpen': 'Keep this screen open until settlement: the preimage lives only in memory. Losing it forfeits the swap (the refund path still works).',
-  'swap.error.timelockRule': 'The Bitcoin timelock must stay well under the Mintlayer one. Pick a longer Mintlayer timelock.',
+  'swap.error.generic': 'The swap action failed. Nothing was sent.',
+  'swap.real.unavailable': 'Real swaps need a counterparty offer with its own spend path. Offer entry is not available in this build, so locking is disabled. Existing sessions can still refund.',
   'swap.refund.cta': 'Refund after timelock',
   'swap.session.empty': 'No swap sessions yet. Initiate one to see the live protocol steps.',
   'swap.session.title': 'Swap sessions',
@@ -356,6 +357,7 @@ export const en = {
   'errors.orders.invalidCursor': 'The order book page went stale. Refreshing from the top.',
   'errors.orders.notMine': 'Only the order creator can conclude an order.',
   'errors.htlc.expired': 'The refund unlocks after the timelock expiry.',
+  'errors.htlc.noOutput': 'That transaction carries no readable HTLC output, so the lock cannot be claimed or refunded.',
   'errors.orders.book': 'The order book is unavailable right now.',
 
   // onboarding

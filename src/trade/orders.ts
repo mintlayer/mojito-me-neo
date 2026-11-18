@@ -16,7 +16,7 @@
 // Without the native call-through the bindings reject, which surfaces as
 // the honest device-pending state (modules/mojito-core header), never a
 // JavaScript reimplementation of the encoding.
-import { bech32m, hex as hexOf } from '@scure/base';
+import { hex as hexOf } from '@scure/base';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
 import type { MintlayerBindings, MlNetwork } from '../../modules/mojito-core';
@@ -135,6 +135,12 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
     if (bindings === null) bindings = cfg.loadBindings();
     return bindings;
   }
+  /** Account-nonce counter for the order fill and conclude inputs (the
+   *  bindings docs: the nonce must sequence with the filler's other
+   *  account spendings). Session-scoped until the wallet persists the
+   *  account nonce with its state; the native call-through must not go
+   *  live before that (recorded in plans/mojito-neo/decisions.md). */
+  let accountNonce = 0;
   /** One order transaction at a time: selection reads live UTXOs and the
    *  change allocation mutates the persisted counters (realSend pattern). */
   let inFlight = false;
@@ -330,10 +336,10 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
             outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
 
-          const { txId, transaction } = await finish(inputs, outputs, selection.selection, new Map());
-          // The order id is a bindings extraction on the create tx output
-          // (F11); output 0 is the order output this flow assembled.
-          const orderId = await b().getOrderId(transaction, 0);
+          const { txId } = await finish(inputs, outputs, selection.selection, new Map());
+          // The order id derives from the create tx inputs through the
+          // bindings (make_order_id(tx.inputs()), no output index).
+          const orderId = await b().getOrderId(inputs, cfg.network);
           return { txId, orderId };
         } catch (e) {
           await cfg.releaseFailedChange();
@@ -381,10 +387,16 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
             },
           });
 
+          // The fill input selects the orders V0/V1 form through the
+          // account nonce and the current block height (bindings docs);
+          // both come from the indexer tip plus the in-session counter.
           const fillInput = await b().encodeInputForFillOrder(
-            decodeBech32Data(orderId),
-            decodeBech32Data(destination),
+            orderId,
             fillAtoms,
+            destination,
+            accountNonce++,
+            (await cfg.indexer.tip()).blockHeight,
+            cfg.network,
           );
           const inputs: Uint8Array[] = [fillInput];
           for (const selected of selection.selection) inputs.push(await utxoInput(selected));
@@ -452,8 +464,10 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
           });
 
           const concludeInput = await b().encodeInputForConcludeOrder(
-            decodeBech32Data(orderId),
-            decodeBech32Data(order.concludeDestination),
+            orderId,
+            accountNonce++,
+            (await cfg.indexer.tip()).blockHeight,
+            cfg.network,
           );
           const inputs: Uint8Array[] = [concludeInput];
           for (const selected of selection.selection) inputs.push(await utxoInput(selected));
@@ -519,11 +533,4 @@ export function createOrderFlows(cfg: OrderFlowsConfig): OrderFlows {
  *  to preview the payout before any transaction is built. */
 export function proportionalGivePayout(giveLegAtoms: string, askLegAtoms: string, fillAtoms: string): string {
   return ((BigInt(giveLegAtoms) * BigInt(fillAtoms)) / BigInt(askLegAtoms)).toString();
-}
-
-/** bech32m data payload of an id or address string (the bindings byte-blob
- *  form for order ids and destinations; Mintlayer encodes m-prefixed ids
- *  with the bech32m checksum). */
-function decodeBech32Data(value: string): Uint8Array {
-  return new Uint8Array(bech32m.decode(value).words);
 }

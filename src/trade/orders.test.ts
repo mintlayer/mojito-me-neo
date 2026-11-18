@@ -36,16 +36,16 @@ const atoms = (ml: bigint): string => (ml * ML).toString();
 function fakeBindings(): MintlayerBindings & {
   witnesses: WitnessParams[];
   orderParams: OrderParams[];
-  fillCalls: { orderId: string; destination: string; amount: string }[];
-  concludeCalls: { orderId: string; destination: string }[];
-  idCalls: { transaction: Uint8Array; outputIndex: number }[];
+  fillCalls: { orderId: string; destination: string; amount: string; nonce: number; height: number }[];
+  concludeCalls: { orderId: string; nonce: number; height: number }[];
+  idCalls: { inputs: Uint8Array[] }[];
   noSignatureCount: () => number;
 } {
   const witnesses: WitnessParams[] = [];
   const orderParams: OrderParams[] = [];
-  const fillCalls: { orderId: string; destination: string; amount: string }[] = [];
-  const concludeCalls: { orderId: string; destination: string }[] = [];
-  const idCalls: { transaction: Uint8Array; outputIndex: number }[] = [];
+  const fillCalls: { orderId: string; destination: string; amount: string; nonce: number; height: number }[] = [];
+  const concludeCalls: { orderId: string; nonce: number; height: number }[] = [];
+  const idCalls: { inputs: Uint8Array[] }[] = [];
   let noSignatureCalls = 0;
   const u32 = (value: number): Uint8Array => {
     const out = new Uint8Array(4);
@@ -87,15 +87,16 @@ function fakeBindings(): MintlayerBindings & {
       orderParams.push(params);
       return utf8(`O:${params.give.tokenId}:${params.give.atoms}:${params.ask.tokenId}:${params.ask.atoms}:${params.concludeDestination}`);
     },
-    // The bindings take bech32m data payloads; recorded as hex for the
-    // payload-equality assertions below.
-    async encodeInputForFillOrder(orderId: Uint8Array, destination: Uint8Array, amount: string) {
-      fillCalls.push({ orderId: bytesToHex(orderId), destination: bytesToHex(destination), amount });
-      return cat(u8(0x03), orderId, destination, utf8(amount));
+    // The vendored fill input takes the bech32 order id and destination
+    // strings plus the account nonce and block height; recorded for the
+    // assertions below.
+    async encodeInputForFillOrder(orderId: string, fillAmount: string, destination: string, nonce: number, currentBlockHeight: number) {
+      fillCalls.push({ orderId, destination, amount: fillAmount, nonce, height: currentBlockHeight });
+      return utf8(`F:${orderId}:${destination}:${fillAmount}:${nonce}:${currentBlockHeight}`);
     },
-    async encodeInputForConcludeOrder(orderId: Uint8Array, destination: Uint8Array) {
-      concludeCalls.push({ orderId: bytesToHex(orderId), destination: bytesToHex(destination) });
-      return cat(u8(0x04), orderId, destination);
+    async encodeInputForConcludeOrder(orderId: string, nonce: number, currentBlockHeight: number) {
+      concludeCalls.push({ orderId, nonce, height: currentBlockHeight });
+      return utf8(`C:${orderId}:${nonce}:${currentBlockHeight}`);
     },
     async encodeTransaction(inputs: Uint8Array[], outputs: Uint8Array[]) {
       return cat(u8(0xee), u8(inputs.length), ...inputs, u8(0xff), u8(outputs.length), ...outputs);
@@ -117,16 +118,16 @@ function fakeBindings(): MintlayerBindings & {
     async encodeSignedTransaction(transaction: Uint8Array, txWitnesses: Uint8Array[]) {
       return cat(transaction, ...txWitnesses);
     },
-    async getOrderId(transaction: Uint8Array, outputIndex: number) {
-      idCalls.push({ transaction, outputIndex });
-      return `mordr1${bytesToHex(sha256(transaction)).slice(0, 12)}`;
+    async getOrderId(inputs: Uint8Array[]) {
+      idCalls.push({ inputs });
+      return `mordr1${bytesToHex(sha256(cat(...inputs))).slice(0, 12)}`;
     },
   } as unknown as MintlayerBindings & {
     witnesses: WitnessParams[];
     orderParams: OrderParams[];
-    fillCalls: { orderId: string; destination: string; amount: string }[];
-    concludeCalls: { orderId: string; destination: string }[];
-    idCalls: { transaction: Uint8Array; outputIndex: number }[];
+    fillCalls: { orderId: string; destination: string; amount: string; nonce: number; height: number }[];
+    concludeCalls: { orderId: string; nonce: number; height: number }[];
+    idCalls: { inputs: Uint8Array[] }[];
     noSignatureCount: () => number;
   };
 }
@@ -143,12 +144,6 @@ function tokenUtxo(sourceId: string, index: number, address: string, amount: str
     outpoint: { sourceType: 'Transaction', sourceId, index },
     output: { type: 'Transfer', destination: address, value: { type: 'TokenV1', tokenId: TOKEN_ID, amount: { atoms: amount } } },
   };
-}
-
-/** bech32m data payload of an id or address, hex form (what the bindings
- *  byte-blob arguments record). */
-function payloadOf(value: string): string {
-  return bytesToHex(Uint8Array.from(bech32m.decode(value).words));
 }
 
 type OrderRow = MlOrderInfo;
@@ -278,10 +273,7 @@ async function main() {
     const result = await h.flows.createOrder({ giveTokenId: COIN_REF, giveAtoms: atoms(5n), askTokenId: TOKEN_ID, askAtoms: atoms(2n) });
     assert.match(result.orderId, /^mordr1/);
     assert.equal(h.bindings.idCalls.length, 1);
-    assert.equal(h.bindings.idCalls[0].outputIndex, 0);
-    assert.ok(h.bindings.idCalls[0].transaction.length > 0);
-    // The order output encodes once per sizing pass and once for the real
-    // build; the final encoding carries the real amounts.
+    assert.ok(h.bindings.idCalls[0].inputs.length >= 1, 'the order id derives from the create tx inputs');
     assert.ok(h.bindings.orderParams.length >= 2);
     assert.deepEqual(h.bindings.orderParams[h.bindings.orderParams.length - 1].give, { tokenId: 'coin', atoms: atoms(5n) });
     assert.deepEqual(h.bindings.orderParams[h.bindings.orderParams.length - 1].ask, { tokenId: TOKEN_ID, atoms: atoms(2n) });
@@ -323,8 +315,10 @@ async function main() {
     assert.match(result.txId, /^[0-9a-f]{64}$/);
     assert.equal(h.bindings.fillCalls.length, 1);
     assert.equal(h.bindings.fillCalls[0].amount, atoms(3n));
-    assert.equal(h.bindings.fillCalls[0].destination, payloadOf(destination));
-    assert.equal(h.bindings.fillCalls[0].orderId, payloadOf(ORDER_ID));
+    assert.equal(h.bindings.fillCalls[0].destination, destination);
+    assert.equal(h.bindings.fillCalls[0].orderId, ORDER_ID);
+    assert.equal(h.bindings.fillCalls[0].nonce, 0, 'the first account spending of the session carries nonce 0');
+    assert.equal(h.bindings.fillCalls[0].height, 12345, 'the input form rides the indexer tip height');
     // Witness mix: the fill input at index 0 is unsigned; both payer
     // inputs (ask token + fee coin) sign with the wallet key.
     assert.equal(h.bindings.noSignatureCount(), 1);
@@ -385,7 +379,9 @@ async function main() {
     const result = await h2.flows.concludeOrder({ orderId: ORDER_ID });
     assert.match(result.txId, /^[0-9a-f]{64}$/);
     assert.equal(h2.bindings.concludeCalls.length, 1);
-    assert.equal(h2.bindings.concludeCalls[0].destination, payloadOf(VECTOR_ADDRESS));
+    assert.equal(h2.bindings.concludeCalls[0].orderId, ORDER_ID);
+    assert.equal(h2.bindings.concludeCalls[0].nonce, 0);
+    assert.equal(h2.bindings.concludeCalls[0].height, 12345);
     assert.equal(h2.bindings.noSignatureCount(), 1);
     assert.equal(h2.bindings.witnesses.length, 1);
     assert.equal(bytesToHex(h2.bindings.witnesses[0].privateKey), expectedKey);

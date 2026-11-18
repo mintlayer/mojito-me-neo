@@ -3,12 +3,12 @@ import { View } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient as SvgGrad, Rect, Stop, Text as SvgText } from 'react-native-svg';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import { hex as hexOf } from '@scure/base';
 import { t, type I18nKey } from '../i18n';
 import { useProviders } from '../data/providers/context';
 import { fnv1a } from '../data/mock/hash';
 import { MojitoCore } from '../../modules/mojito-core';
 import { isBindingsUnavailable } from '../send/errors';
-import { checkTimelockRule } from '../trade/priceGuards';
 import type { SwapSessionRow, SwapState } from '../trade/swapSession';
 import type { StepState } from '../ui/StepState';
 import { C, G } from '../theme';
@@ -18,13 +18,24 @@ const ML_DECIMALS = 11;
 const TIMELOCK_CHOICES = ['12h', '24h', '48h'] as const;
 type TimelockChoice = (typeof TIMELOCK_CHOICES)[number];
 const TIMELOCK_SECONDS: Record<TimelockChoice, number> = { '12h': 43_200, '24h': 86_400, '48h': 172_800 };
-/** Demo counterparty spend key (the offer exchange is off-band and the BTC
- *  side is the scripted counterpart; see scripts/e2e-testnet.mjs). */
+/** Demo counterparty spend path (MOCK MODE ONLY): the offer exchange is
+ *  off-band and the BTC side is the scripted counterpart. Real mode never
+ *  reaches this constant: initiate is gated with a typed unsupported until
+ *  a real offer entry supplies the counterparty spend address and key
+ *  (see swapGateError and plans/mojito-neo/decisions.md). */
 const COUNTERPARTY_ADDRESS = 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl';
+
+/** Real-mode initiate gate in the BridgeError shape (typed unsupported,
+ *  mirrored from BridgeProvider.initiate): a real lock must name the
+ *  counterparty spend path from an explicit offer, and no offer entry
+ *  exists yet. Nothing may lock to the demo vector in real mode. */
+class SwapGateError extends Error {
+  readonly failure = 'unsupported' as const;
+}
 
 export function SwapScreen() {
   const assets = useDataCompat();
-  const { htlc, swapSessions, mode } = useProviders();
+  const { htlc, swapSessions, data, mode } = useProviders();
   const [amount, setAmount] = useState('0.025');
   const [timelock, setTimelock] = useState<TimelockChoice>('48h');
   const [sessions, setSessions] = useState<SwapSessionRow[] | null>(null);
@@ -47,23 +58,27 @@ export function SwapScreen() {
   }, [loadSessions]);
 
   /** Lock Mintlayer: secret generated off-band, only the hash crosses the
-   *  wire; the session persists with the hash and the tx ids alone. */
+   *  wire; the session persists with the hash, the lock tx bytes and the
+   *  tx ids. The refund path is a wallet-owned address and the spend path
+   *  is the demo vector in mock mode; real mode refuses typed. */
   const initiate = async () => {
     setError(null);
-    const mlSeconds = TIMELOCK_SECONDS[timelock];
-    // TIMELOCK_RULE: the scripted BTC leg locks at half the ML timelock,
-    // which the guard enforces before anything is built.
-    const guard = checkTimelockRule({ mlSeconds, btcSeconds: mlSeconds / 2 });
-    if (!guard.ok) {
-      setError(t('swap.error.timelockRule'));
+    if (mode === 'real') {
+      setError(swapErrorCopy(new SwapGateError('real-mode locking needs a counterparty offer; offer entry is pending')));
       return;
     }
+    const mlSeconds = TIMELOCK_SECONDS[timelock];
     setBusy(true);
     try {
+      // Refund address: the wallet's own allocation, so the wallet can
+      // sign the refund after expiry (a foreign address would lock the
+      // refund to a key this wallet cannot spend).
+      const refundAddress = (await data.getAddresses()).Mintlayer;
+      if (!refundAddress) throw new SwapGateError('no wallet mintlayer address to refund to');
       const secret = await swapSecret(mode);
       const secretHash = sha256(secret);
       preimageRef.current = secret;
-      const { txId } = await htlc.initiate(
+      const { txId, lockTx } = await htlc.initiate(
         {
           role: 'initiator',
           giveChain: 'ml',
@@ -73,7 +88,7 @@ export function SwapScreen() {
           timelockSeconds: mlSeconds,
         },
         { address: COUNTERPARTY_ADDRESS, pubkey: new Uint8Array(33).fill(0x02) },
-        COUNTERPARTY_ADDRESS,
+        refundAddress,
       );
       await swapSessions.save({
         id: txId,
@@ -81,7 +96,8 @@ export function SwapScreen() {
         secretHashHex: bytesToHex(secretHash),
         spendAddress: COUNTERPARTY_ADDRESS,
         spendPubkeyHex: '02'.repeat(33),
-        refundAddress: COUNTERPARTY_ADDRESS,
+        refundAddress,
+        lockTxHex: bytesToHex(lockTx),
         state: 'locked',
         txIds: [txId],
         updatedAt: Date.now(),
@@ -98,7 +114,11 @@ export function SwapScreen() {
     setError(null);
     setBusy(true);
     try {
-      const { txId } = await htlc.refund(session.txIds[0] ?? session.id);
+      // The refund rebuilds the lock parameters from the locally captured
+      // unsigned lock transaction bytes (the decode seam consumes bytes,
+      // not the tx id); rows without them cannot refund honestly.
+      if (!session.lockTxHex) throw new SwapGateError('stored session predates the lock tx bytes record');
+      const { txId } = await htlc.refund(hexOf.decode(session.lockTxHex));
       await swapSessions.save({ ...session, state: 'refunded', txIds: [...session.txIds, txId].slice(0, 16), updatedAt: Date.now() });
       void loadSessions();
     } catch (e) {
@@ -119,6 +139,11 @@ export function SwapScreen() {
       {mode === 'mock' && (
         <View className="px-5 pt-4">
           <Callout tone={C.amber} icon="shield">{t('swap.demo.note')}</Callout>
+        </View>
+      )}
+      {mode === 'real' && (
+        <View className="px-5 pt-4">
+          <Callout tone={C.amber} icon="shield">{t('swap.real.unavailable')}</Callout>
         </View>
       )}
       {active && (
@@ -261,13 +286,14 @@ async function swapSecret(mode: 'mock' | 'real'): Promise<Uint8Array> {
 
 function swapErrorCopy(e: unknown): string {
   if (isBindingsUnavailable(e)) return t('swap.error.devicePending');
-  const record = e as { reason?: string } | null;
+  const record = e as { reason?: string; failure?: string } | null;
+  if (record && typeof record.failure === 'string' && record.failure === 'unsupported') return t('swap.real.unavailable');
   if (record && typeof record.reason === 'string') {
     if (record.reason === 'broadcast-disabled') return t('swap.broadcastOff');
     if (record.reason === 'not-expired') return t('errors.htlc.expired');
-    if (record.reason === 'no-htlc-output') return t('errors.htlc.expired');
+    if (record.reason === 'no-htlc-output') return t('errors.htlc.noOutput');
   }
-  return t('swap.error.timelockRule');
+  return t('swap.error.generic');
 }
 
 function stateCopyKey(state: SwapState): I18nKey {

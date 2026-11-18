@@ -25,6 +25,11 @@ export type SwapSessionRow = {
   spendAddress: string;
   spendPubkeyHex: string;
   refundAddress: string;
+  /** Hex of the unsigned lock transaction bytes as built before the
+   *  broadcast: the claim and refund bindings decodes consume serialized
+   *  transaction bytes and the public indexer serves no raw-tx route, so
+   *  these are the only honest source after a restart. */
+  lockTxHex?: string;
   state: SwapState;
   txIds: string[];
   updatedAt: number;
@@ -109,6 +114,7 @@ export function parseSwapSessions(json: string | null): SwapSessionRow[] {
       typeof row.secretHashHex === 'string' && /^[0-9a-f]{64}$/.test(row.secretHashHex) &&
       typeof row.spendAddress === 'string' &&
       typeof row.refundAddress === 'string' &&
+      (row.lockTxHex === undefined || (typeof row.lockTxHex === 'string' && /^[0-9a-f]*$/.test(row.lockTxHex) && row.lockTxHex.length % 2 === 0)) &&
       typeof row.state === 'string' && row.state in TRANSITIONS &&
       Array.isArray(row.txIds) && row.txIds.length <= MAX_TX_IDS && row.txIds.every((id) => typeof id === 'string') &&
       typeof row.updatedAt === 'number' && Number.isFinite(row.updatedAt)

@@ -4,6 +4,7 @@
 // no chain state is touched and nothing reads as a real settlement (the
 // demo-data chip stays visible in mock mode, spec M4 honesty rules).
 import { ASKS, BIDS } from '../../data';
+import { bytesToHex } from '@noble/hashes/utils.js';
 import type { NetworkFlag } from '../../config/endpoints';
 import type { BroadcastProvider } from '../providers/types';
 import { DEFAULT_BOOK_DEPTH, type BookRow, type OrderBookService } from '../../trade/OrderBookService';
@@ -117,15 +118,19 @@ export function createMockHtlcFlows(cfg: { broadcast: BroadcastProvider }): Htlc
       requireAtomAmount(offer.giveAtoms, 'give');
       if (offer.secretHash.length !== 32) throw new Error('the secret hash must be 32 bytes');
       const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-lock:${offer.giveAtoms}`));
-      return { txId, htlcOutpoint: { id: new Uint8Array(32).fill(0x0a), index: 0 } };
+      // Demo lock bytes: the session persists them so the claim/refund
+      // signatures match the real seam (the demo decode is a no-op).
+      const lockTx = new Uint8Array(64).fill(0x1c);
+      return { txId, lockTx, htlcOutpoint: { id: new Uint8Array(32).fill(0x0a), index: 0 } };
     },
-    async claim(htlcTxId: string, secret: Uint8Array) {
+    async claim(lockTx: Uint8Array, secret: Uint8Array) {
+      void lockTx;
       if (secret.length !== 32) throw new Error('the preimage must be 32 bytes');
-      const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-claim:${htlcTxId}`));
+      const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-claim:${bytesToHex(lockTx.subarray(0, 8))}`));
       return { txId };
     },
-    async refund(htlcTxId: string) {
-      const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-refund:${htlcTxId}`));
+    async refund(lockTx: Uint8Array) {
+      const { txId } = await cfg.broadcast.broadcastMl(fakeId(`htlc-refund:${bytesToHex(lockTx.subarray(0, 8))}`));
       return { txId };
     },
     async extractSecret(rawSignedTx: Uint8Array, htlcOutpoint: { id: Uint8Array; index: number }) {

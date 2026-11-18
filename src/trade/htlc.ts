@@ -19,7 +19,7 @@ import { hex as hexOf } from '@scure/base';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 
-import type { MintlayerBindings, MlNetwork } from '../../modules/mojito-core';
+import type { HtlcParams, MintlayerBindings, MlNetwork } from '../../modules/mojito-core';
 import type { IndexerClient } from '../data/ml/IndexerClient';
 import type { BroadcastProvider } from '../data/providers/types';
 import type { MlTransaction } from '../data/ml/types';
@@ -45,12 +45,18 @@ export type HtlcSpend = { address: string; pubkey: Uint8Array };
 
 export interface HtlcFlows {
   /** Lock the offer's giveAtoms on Mintlayer with the counterparty's spend
-   *  key and our refund path (the initiator leg of the swap). */
-  initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string): Promise<{ txId: string; htlcOutpoint: { id: Uint8Array; index: number } }>;
-  /** Spend an HTLC with the revealed secret (the counterparty claim leg). */
-  claim(htlcTxId: string, secret: Uint8Array, spend: HtlcSpend): Promise<{ txId: string }>;
-  /** Reclaim after the timelock expiry (refund path, single sig). */
-  refund(htlcTxId: string): Promise<{ txId: string }>;
+   *  key and our refund path (the initiator leg of the swap). Returns the
+   *  unsigned lock transaction bytes: the claim and refund decodes consume
+   *  them, because the public Mintlayer indexer serves no raw transaction
+   *  route, so the caller must persist them with the swap session. */
+  initiate(offer: HtlcOffer, spend: HtlcSpend, refundAddress: string): Promise<{ txId: string; lockTx: Uint8Array; htlcOutpoint: { id: Uint8Array; index: number } }>;
+  /** Spend an HTLC with the revealed secret (the counterparty claim leg).
+   *  lockTx carries the unsigned lock transaction bytes captured at
+   *  initiate (not the tx id: the bindings decode consumes bytes). */
+  claim(lockTx: Uint8Array, secret: Uint8Array, spend: HtlcSpend): Promise<{ txId: string }>;
+  /** Reclaim after the timelock expiry (refund path, single sig). lockTx
+   *  carries the unsigned lock transaction bytes captured at initiate. */
+  refund(lockTx: Uint8Array): Promise<{ txId: string }>;
   /** Extract a revealed preimage from a signed claim transaction. The raw
    *  bytes come from the caller: the public Mintlayer indexer serves no raw
    *  transaction route, so a txId-only signature cannot honestly fetch what
@@ -188,9 +194,14 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
   }
 
   /** Describe an on-chain HTLC output through the bindings decode seam:
-   *  the indexer gives the output position, the bindings decode restores
-   *  the lock parameters the claim and refund legs must rebuild. */
-  async function describeHtlc(htlcTxId: string): Promise<HtlcDescriptor> {
+   *  lockTx is the unsigned lock transaction captured at initiate (the
+   *  bindings decode consumes serialized transaction bytes, never a tx id,
+   *  and the indexer exposes no raw-tx route to fetch them later). The
+   *  decode restores the lock parameters the claim and refund legs must
+   *  rebuild; bindings stub rejections surface as the honest
+   *  device-pending state, never a guessed descriptor. */
+  async function describeHtlc(lockTx: Uint8Array): Promise<HtlcDescriptor> {
+    const htlcTxId = await b().getTransactionId(lockTx, false);
     let tx: MlTransaction;
     try {
       tx = await cfg.indexer.transaction(htlcTxId);
@@ -199,10 +210,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     }
     const outputIndex = tx.outputs.findIndex((output: { type: string }) => output.type === 'Htlc');
     if (outputIndex < 0) throw new HtlcError('no-htlc-output', `transaction ${htlcTxId} carries no HTLC output`);
-    // The decode seam restores the lock parameters from the raw
-    // transaction; bindings stub rejections surface as the honest
-    // device-pending state, never a guessed descriptor.
-    const json = await b().decodeTransactionToJson(hexOf.decode(htlcTxId), cfg.network);
+    const json = await b().decodeTransactionToJson(lockTx, cfg.network);
     const parsed = JSON.parse(json) as {
       outputs?: { htlc?: { atoms?: string; secret_hash?: string; spend_address?: string; spend_pubkey?: string; refund_address?: string; refund_timelock?: number } }[];
     };
@@ -222,6 +230,19 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     };
   }
 
+  /** HtlcParams for the vendored encodeOutputHtlc shape: the secret hash
+   *  rides hex, the refund timelock rides the encodeLockForSeconds blob
+   *  (offers are seconds-denominated, F10). */
+  async function htlcOutputParams(amount: string, secretHashBytes: Uint8Array, spendAddress: string, refundAddress: string, timelockSeconds: number): Promise<HtlcParams> {
+    return {
+      amount,
+      secretHash: bytesToHex(secretHashBytes),
+      spendAddress,
+      refundAddress,
+      refundTimelock: await b().encodeLockForSeconds(timelockSeconds),
+    };
+  }
+
   return {
     async initiate({ giveAtoms, secretHash, timelockSeconds }, spend, refundAddress) {
       return serialize(async () => {
@@ -232,6 +253,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
         const changeAddress = await cfg.allocateChangeAddress();
         try {
           const rate = await cfg.indexer.feerate(STANDARD_TIER_IN_TOP_MB);
+          const lockParams = async (atoms: string) => htlcOutputParams(atoms, secretHash, spend.address, refundAddress, timelockSeconds);
           const selection = await selectMlInputs({
             utxos,
             sendAtoms: giveAtoms,
@@ -246,14 +268,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
                 destinations.push(selected.address);
               }
               const outputBytes: Uint8Array[] = [
-                await b().encodeOutputHtlc({
-                  atoms: '0',
-                  secretHash,
-                  spendAddress: spend.address,
-                  spendPubkey: spend.pubkey,
-                  refundAddress,
-                  refundTimelock: timelockSeconds,
-                }),
+                await b().encodeOutputHtlc(await lockParams('0')),
                 ...(await Promise.all(
                   planned.slice(1).map((leg) => b().encodeOutputTransfer('0', leg.address, cfg.network)),
                 )),
@@ -272,16 +287,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
                 : await b().encodeOutputTokenTransfer(selected.tokenId, selected.atoms, selected.address, cfg.network),
             );
           }
-          const outputs: Uint8Array[] = [
-            await b().encodeOutputHtlc({
-              atoms: giveAtoms,
-              secretHash,
-              spendAddress: spend.address,
-              spendPubkey: spend.pubkey,
-              refundAddress,
-              refundTimelock: timelockSeconds,
-            }),
-          ];
+          const outputs: Uint8Array[] = [await b().encodeOutputHtlc(await lockParams(giveAtoms))];
           if (selection.changeAtoms !== '0') {
             outputs.push(await b().encodeOutputTransfer(selection.changeAtoms, changeAddress, cfg.network));
           }
@@ -292,7 +298,7 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
           const txId = await broadcast(signedHex);
           // The HTLC outpoint rides the lock tx id and its output index
           // (the HTLC output is assembled at index 0 of this flow).
-          return { txId, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
+          return { txId, lockTx: transaction, htlcOutpoint: { id: hexOf.decode(txId), index: 0 } };
         } catch (e) {
           await cfg.releaseFailedChange();
           throw e;
@@ -300,22 +306,17 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       });
     },
 
-    async claim(htlcTxId, secret, spend) {
+    async claim(lockTx, secret, spend) {
       return serialize(async () => {
         if (secret.length !== 32) throw new HtlcError('rejected', 'the preimage must be 32 bytes');
-        const descriptor = await describeHtlc(htlcTxId);
-        const fee = await claimFee(htlcTxId, spend.address);
+        const descriptor = await describeHtlc(lockTx);
+        const fee = await claimFee(descriptor.txId, spend.address);
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the claim fee');
-        const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
-        const htlcOutputBytes = await b().encodeOutputHtlc({
-          atoms: descriptor.atoms,
-          secretHash: descriptor.secretHash,
-          spendAddress: descriptor.spendAddress,
-          spendPubkey: descriptor.spendPubkey,
-          refundAddress: descriptor.refundAddress,
-          refundTimelock: descriptor.refundTimelock,
-        });
+        const htlcInput = await utxoInput(descriptor.txId, descriptor.outputIndex);
+        const htlcOutputBytes = await b().encodeOutputHtlc(
+          await htlcOutputParams(descriptor.atoms, descriptor.secretHash, descriptor.spendAddress, descriptor.refundAddress, descriptor.refundTimelock),
+        );
         const inputs = [htlcInput];
         const outputs = [await b().encodeOutputTransfer(payout.toString(), spend.address, cfg.network)];
         const transaction = await b().encodeTransaction(inputs, outputs, 0);
@@ -329,29 +330,24 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
       });
     },
 
-    async refund(htlcTxId) {
+    async refund(lockTx) {
       return serialize(async () => {
-        const descriptor = await describeHtlc(htlcTxId);
+        const descriptor = await describeHtlc(lockTx);
         // Refunds unlock at the timelock expiry; the lock timestamp plus
         // the timelock must already be in the past, otherwise the refund
         // would be rejected by the chain: honest typed refusal first.
-        const tx = await cfg.indexer.transaction(htlcTxId);
+        const tx = await cfg.indexer.transaction(descriptor.txId);
         const lockedAt = tx.timestamp ?? 0;
         if (lockedAt + descriptor.refundTimelock > Math.floor(Date.now() / 1000)) {
           throw new HtlcError('not-expired', 'the refund unlocks after the timelock expiry');
         }
-        const fee = await claimFee(htlcTxId, descriptor.refundAddress);
+        const fee = await claimFee(descriptor.txId, descriptor.refundAddress);
         const payout = BigInt(descriptor.atoms) - fee;
         if (payout <= 0n) throw new HtlcError('rejected', 'the lock cannot cover the refund fee');
-        const htlcInput = await utxoInput(htlcTxId, descriptor.outputIndex);
-        const htlcOutputBytes = await b().encodeOutputHtlc({
-          atoms: descriptor.atoms,
-          secretHash: descriptor.secretHash,
-          spendAddress: descriptor.spendAddress,
-          spendPubkey: descriptor.spendPubkey,
-          refundAddress: descriptor.refundAddress,
-          refundTimelock: descriptor.refundTimelock,
-        });
+        const htlcInput = await utxoInput(descriptor.txId, descriptor.outputIndex);
+        const htlcOutputBytes = await b().encodeOutputHtlc(
+          await htlcOutputParams(descriptor.atoms, descriptor.secretHash, descriptor.spendAddress, descriptor.refundAddress, descriptor.refundTimelock),
+        );
         const inputs = [htlcInput];
         const outputs = [await b().encodeOutputTransfer(payout.toString(), descriptor.refundAddress, cfg.network)];
         const transaction = await b().encodeTransaction(inputs, outputs, 0);
@@ -364,7 +360,10 @@ export function createHtlcFlows(cfg: HtlcFlowsConfig): HtlcFlows {
     },
 
     async extractSecret(rawSignedTx, htlcOutpoint) {
-      return b().extractHtlcSecret(rawSignedTx, false, htlcOutpoint.id, htlcOutpoint.index);
+      // The extraction consumes the encodeOutpointSourceId blob for the
+      // HTLC output (the vendored docs), not the bare 32-byte id.
+      const outpointSourceId = await b().encodeOutpointSourceId(htlcOutpoint.id, 'transaction');
+      return b().extractHtlcSecret(rawSignedTx, false, outpointSourceId, htlcOutpoint.index);
     },
   };
 
