@@ -182,6 +182,12 @@ export class BtcTxBuilder {
     tier: FeeTierId;
     pinnedRate?: BtcPinnedRate;
   }): Promise<{ tx: Transaction; inputSat: bigint; weight: number; rate: bigint; fallback: boolean; inputOrigins: Map<string, WalletOrigin> }> {
+    if (!Array.isArray(params.fromAddresses)) {
+      // Shape guard over the typed contract: a stale single-address caller
+      // (the pre multi-address shape) must fail typed, never iterate an
+      // undefined field.
+      throw new SendError('rejected', 'fromAddresses must be an array of managed addresses');
+    }
     if (params.amountSat < BTC_DUST_SAT) throw new SendError('dust', `${params.amountSat} sat is below dust`);
     let satPerVbyte: number;
     let fallback: boolean;

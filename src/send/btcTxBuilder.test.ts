@@ -338,6 +338,36 @@ async function main() {
     assert.equal(parsed.getOutputAddress(0), BIP84_RECEIVING_0);
   }
 
+  // 12. The legacy single-address shape is a typed rejection, not a TypeError:
+  //     the fromAddresses contract is pinned so a caller cannot drift back to
+  //     the pre multi-address shape silently (the harness regression class).
+  {
+    const builder = builderFor({}, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    await assert.rejects(
+      () =>
+        builder.plan({
+          accountXpub: account.xpub,
+          fromAddresses: BIP84_RECEIVING_0 as unknown as string[],
+          to: BIP84_CHANGE_0,
+          amountSat: 40000n,
+          tier: 'standard',
+        }),
+      (e: unknown) => e instanceof SendError && e.kind === 'rejected',
+      'a string fromAddresses fails typed instead of iterating undefined',
+    );
+    await assert.rejects(
+      () =>
+        builder.plan({
+          accountXpub: account.xpub,
+          fromAddresses: undefined as unknown as string[],
+          to: BIP84_CHANGE_0,
+          amountSat: 40000n,
+          tier: 'standard',
+        }),
+      (e: unknown) => e instanceof SendError && e.kind === 'rejected',
+    );
+  }
+
   console.log('btcTxBuilder.test: ok');
 }
 

@@ -1,48 +1,41 @@
 // Testnet E2E demo harness (spec M3 deliverable 11): derives both accounts
-// from a phrase, funds via a faucet, then plans, builds, signs, broadcasts
-// and tracks one send using the same builder code paths the app runs
-// (headless thin harness). Runs under tsx because the builders are
-// TypeScript: npx tsx scripts/e2e-testnet.mjs
+// from a phrase, funds via a faucet, then quotes, builds, signs, broadcasts
+// and tracks one BTC send riding the same send service the app runs
+// (createRealSend over the real broadcast provider, an in-memory address
+// manager and the seeded KeySession closure shape). Headless thin harness.
+// Runs under tsx because the service is TypeScript: npx tsx scripts/e2e-testnet.mjs
 //
-// BLOCKED status (decisions.md R6 / action item A2): the Mintlayer-operated
-// testnet indexer URL is not documented, so the ML legs need
-// MOJITO_INDEXER_BASE (self-hosted testnet indexer, gap 6 option B) to run.
+// BTC-ONLY status (decisions.md R6 / action items A1, A2): the Mintlayer-
+// operated testnet indexer URL is not documented (A2) and the ML broadcast
+// switch needs the A1 submission endpoint, so there is no ML leg here yet.
 // The BTC leg is fully real on scure and needs MOJITO_BTC_BASE (btc-api
-// testnet deployment). ML signing additionally needs the native bindings
-// call-through, which only exists inside a dev build on a device: the
-// script reports that honestly instead of reimplementing ML signing here.
+// testnet deployment).
 //
 // Environment:
-//   MOJITO_INDEXER_BASE   testnet indexer base (A2 pending; self-hosted ok)
 //   MOJITO_BTC_BASE       btc-api testnet base (Esplora shape, F13)
 //   MOJITO_PHRASE         BIP39 phrase (default: the public abandon vector;
 //                         never put a funded real phrase in an env var)
 //   MOJITO_TO             recipient address (default: derived change addr)
 //   MOJITO_AMOUNT_BTC     amount in BTC (default 0.00005)
 //
-// Exit codes: 0 success, 2 config pending (A2 / btc base), 3 unfunded, 1 failure.
+// Exit codes: 0 success, 2 config pending (btc base), 3 unfunded, 1 failure.
 
-const indexerBase = process.env.MOJITO_INDEXER_BASE?.replace(/\/+$/, '') ?? null;
 const btcBase = process.env.MOJITO_BTC_BASE?.replace(/\/+$/, '') ?? null;
 const phrase = process.env.MOJITO_PHRASE ?? 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 const amountBtc = process.env.MOJITO_AMOUNT_BTC ?? '0.00005';
 
 const log = (...parts) => console.log(...parts);
 
-if (indexerBase === null) {
-  log('M3 testnet E2E is BLOCKED on action item A2 (decisions.md R6):');
-  log('the Mintlayer-operated testnet indexer URL is not documented yet.');
-  log('Stand up a self-hosted testnet indexer (gap 6 option B) and set');
-  log('MOJITO_INDEXER_BASE, or run the BTC-only leg with MOJITO_BTC_BASE.');
-  if (btcBase === null) process.exit(2);
-}
-
 async function main() {
   const { deriveBtcAccount, btcAddressAt } = await import('../src/keys/BtcKeyring.ts');
   const { deriveMlAccount, mlAddressAt } = await import('../src/keys/mlAccounts.ts');
   const { mnemonicToSeedSync } = await import('../src/keys/bip39.ts');
   const { BtcChainService } = await import('../src/data/btc/BtcChainService.ts');
-  const { BtcTxBuilder } = await import('../src/send/BtcTxBuilder.ts');
+  const { createAddressManager } = await import('../src/data/addresses/AddressManager.ts');
+  const { createBroadcastProvider } = await import('../src/data/providers/BroadcastProvider.ts');
+  const { TxTracker } = await import('../src/send/TxTracker.ts');
+  const { createRealSend } = await import('../src/data/real/realSend.ts');
+  const { SendError } = await import('../src/send/errors.ts');
   const { parseSendAmount } = await import('../src/send/validation.ts');
 
   const network = 'testnet';
@@ -61,10 +54,6 @@ async function main() {
     process.exit(2);
   }
 
-  const btc = new BtcChainService(btcBase, { retries: 1 });
-  const balance = await btc.balance(btcReceive);
-  log(`BTC balance: confirmed ${balance.confirmedSat} sat, unconfirmed ${balance.unconfirmedSat} sat`);
-
   const amount = parseSendAmount(amountBtc, 8);
   if (!amount.ok) {
     log('MOJITO_AMOUNT_BTC is not a valid decimal amount:', amountBtc);
@@ -73,50 +62,90 @@ async function main() {
   const amountSat = BigInt(amount.atoms);
   const changeAddress = await btcAddressAt(btcAccount, 1, 0);
   const to = process.env.MOJITO_TO ?? changeAddress;
-  log(`sending ${amountSat} sat to ${to} (change to ${changeAddress})`);
 
-  if (BigInt(balance.totalSat) < amountSat) {
-    log('The derived BTC address is unfunded for this amount.');
-    log('Fund it from a testnet faucet, then rerun. Faucet tips:');
+  // The app's send service over this process's accounts: the in-memory
+  // address manager stands in for AsyncStorage, the real broadcast provider
+  // posts the configured btc-api route, and the seed lives only inside the
+  // withSeed closure exactly like the vault session does on device.
+  const btc = new BtcChainService(btcBase, { retries: 1 });
+  const manager = createAddressManager({
+    network,
+    load: async () => ({}),
+    save: async () => {},
+    derive: {
+      ml: async (branch, index) => mlAddressAt(mlAccount.xpub, branch, index, network),
+      btc: async (branch, index) => btcAddressAt(btcAccount, branch, index),
+    },
+  });
+  const provider = createBroadcastProvider({ mode: 'real', broadcastBase: null, indexerBase: null, btcBase });
+  const seed = mnemonicToSeedSync(words);
+  const send = createRealSend({
+    context: {
+      cfg: {
+        network,
+        indexerBase: null,
+        btcBase,
+        deriveXpubs: async () => ({ mlXpub: mlAccount.xpub, btcXpub: btcAccount.xpub }),
+      },
+      ensureAccount: async () => ({ manager, balance: null, nfts: null, activity: null, btc }),
+      requireIndexerBase: () => {},
+      indexer: null,
+      btc,
+    },
+    broadcastBase: null,
+    loadBindings: () => {
+      throw new Error('the BTC leg never loads the ML bindings');
+    },
+    broadcast: provider,
+    // The harness tracks by polling txStatus below, so the tracker's own
+    // loop stays inert.
+    tracker: new TxTracker(provider, { timers: { set: () => 0, clear: () => {} } }),
+    withSession: async (fn) => fn({ withSeed: (run) => run(seed) }),
+  });
+
+  // Friendly unfunded check over every managed address (the service funds
+  // across them, so a balance on one address alone would lie).
+  let totalSat = 0n;
+  const managed = await manager.allAddresses('btc');
+  for (const address of managed) totalSat += BigInt((await btc.balance(address)).totalSat);
+  log(`BTC balance across ${managed.length} managed address(es): ${totalSat} sat`);
+  if (totalSat < amountSat) {
+    log('The derived BTC addresses are unfunded for this amount.');
+    log('Fund one from a testnet faucet, then rerun. Faucet tips:');
     log('  https://faucet.mintlayer.org dispenses Mintlayer testnet ML;');
     log('  for BTC testnet use any tb1-capable faucet (e.g. mempool space testnet faucet).');
     process.exit(3);
   }
 
-  const builder = new BtcTxBuilder({
-    network,
-    utxos: btc,
-    rateSource: async (tier) => {
-      try {
-        const estimates = await btc.feeEstimates();
-        const target = { economy: '6', standard: '3', fast: '1' }[tier];
-        const rate = estimates[target];
-        if (typeof rate === 'number' && rate > 0) return { satPerVbyte: rate, fallback: false };
-      } catch {
-        // fall through to the flagged fallback
-      }
-      log('fee-estimates unreachable: using the flagged fixed fallback 6 sat/vB');
-      return { satPerVbyte: 6, fallback: true };
-    },
-    changeAddress,
-  });
+  // Review first (the app flow): the standard-tier quote is displayed and
+  // its rate pins the send, so the signed fee is the reviewed fee.
+  const quotes = await send.quoteBtc({ to, amountDecimal: amountBtc });
+  const reviewed = quotes.standard;
+  log(`plan: fee ${reviewed.feeDecimal} BTC at ${reviewed.satPerVbyte} sat/vB (fallback: ${reviewed.rateIsFallback}), vsize ${reviewed.sizeBytes}`);
+  log(`sending ${amountSat} sat to ${to} (change to the next branch 1 address)`);
 
-  const plan = await builder.plan({ accountXpub: btcAccount.xpub, from: btcReceive, to, amountSat, tier: 'standard' });
-  log(`plan: fee ${plan.feeSat} sat at ${plan.satPerVbyte} sat/vB (fallback: ${plan.rateIsFallback}), vsize ${plan.vsize}`);
-
-  // Headless harness: the seed is already in this process, so the closure
-  // shape of KeySession.withSeed is simulated without touching the vault.
-  const seed = mnemonicToSeedSync(words);
-  const signed = await builder.buildAndSign({ seed, accountXpub: btcAccount.xpub, from: btcReceive, to, amountSat, tier: 'standard' });
-  log(`signed tx ${signed.txid} (${signed.hex.length / 2} bytes, fee ${signed.feeSat} sat)`);
-
-  log('broadcasting via btc-api POST tx...');
-  const txid = await btc.broadcastTx(signed.hex);
-  log(`broadcast accepted: ${txid}`);
+  let result;
+  try {
+    result = await send.sendBtc({
+      to,
+      amountDecimal: amountBtc,
+      tier: 'standard',
+      satPerVbyte: reviewed.satPerVbyte,
+      rateIsFallback: reviewed.rateIsFallback,
+    });
+  } catch (e) {
+    if (e instanceof SendError && e.kind === 'insufficient-funds') {
+      log('The send failed typed insufficient-funds (spendable balance below amount plus fee).');
+      process.exit(3);
+    }
+    throw e;
+  }
+  log(`broadcast accepted: ${result.txId}`);
+  if (result.warning) log('note: post-send bookkeeping failed locally; the transaction is still on the network.');
 
   log('tracking until confirmed (10s poll, up to 60 attempts)...');
   for (let attempt = 0; attempt < 60; attempt++) {
-    const status = await btc.txStatus(txid);
+    const status = await btc.txStatus(result.txId);
     if (status.confirmed) {
       log(`confirmed after ${attempt + 1} polls. Demo complete.`);
       return;
@@ -126,7 +155,7 @@ async function main() {
   log('still pending after the poll window; the tx id above stays valid.');
 }
 
-await main().catch((e) => {
+main().catch((e) => {
   console.error('E2E failed:', e instanceof Error ? e.message : e);
   process.exit(1);
 });
