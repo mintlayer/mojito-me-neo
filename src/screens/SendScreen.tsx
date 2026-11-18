@@ -9,7 +9,6 @@ import type { FeeTierId, SendQuote, SendResult } from '../data/providers';
 import type { TrackedTx, TxTracker } from '../send/TxTracker';
 import { validateAddress, parseSendAmount, type AddressChain } from '../send/validation';
 import { addressErrorCopy, amountErrorCopy, sendErrorCopy, isBindingsUnavailable } from '../send/errors';
-import { bioName } from '../onboarding/context';
 import { atomsToDecimal, decimalsToAtoms } from '../money';
 import { C, G } from '../theme';
 import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, quantizeAmount, tile, truncateMiddle, usd, hairlineTop } from '../ui';
@@ -65,7 +64,7 @@ function useTrackedTx(tracker: TxTracker, kind: 'ml' | 'btc' | null, txId: strin
   return state;
 }
 
-export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet) {
+export function SendScreen({ onClose, network = 'mainnet' }: Sheet) {
   const { send, txTracker } = useProviders();
   const assets = useData((d) => d.getAssets());
   const assetBalances = useData((d) => d.getAssetBalances());
@@ -211,7 +210,9 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
         onDone={onClose}
         header={<SheetHeader onClose={onClose} />}
         secondary={
-          txUrl !== null ? (
+          result.demo ? (
+            <Txt className="text-[11px] text-text3 mt-2 text-center">{t('send.success.demoTx')}</Txt>
+          ) : txUrl !== null ? (
             <Btn tone="ghost" className="w-full mt-1" onPress={() => void Linking.openURL(txUrl)}>
               {t('common.seeExplorer')}
             </Btn>
@@ -228,7 +229,11 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
               tone={C.green}
             />
           ) : (
-            <KVRow k={t('send.status')} v={t('send.success.pending')} tone={C.amber} />
+            <KVRow
+              k={t('send.status')}
+              v={txState?.stalled ? t('send.success.stalled') : t('send.success.pending')}
+              tone={C.amber}
+            />
           )}
         </Card>
         {result.demo ? (
@@ -262,22 +267,27 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
     const etaKey = (chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + feeTier;
     const total = leg !== undefined ? reviewTotal(amount, leg.feeDecimal, decimals, isTokenSend(chain, token.tokenId)) : amount;
     const totalText = `${total} ${token.sym}`;
+    // Token sends pay the fee in ML coin, so both rows name the unit to
+    // keep "Total" from reading as amount plus fee.
+    const tokenSend = isTokenSend(chain, token.tokenId);
+    const feeRowLabel = tokenSend ? t('send.fee.paidIn') : t('common.networkFee');
+    const totalRowLabel = tokenSend ? t('send.total.exclFee') : t('common.total');
     const rows: [string, React.ReactNode][] = [
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{truncateMiddle(address, 14, 10)}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
-      [t('common.networkFee'), feeText],
+      [feeRowLabel, feeText],
       [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(etaKey as I18nKey)}</Txt>],
     ];
     if (rateText !== undefined) rows.push([t('send.fee.rateLabel'), rateText]);
-    rows.push([t('common.total'), totalText]);
+    rows.push([totalRowLabel, totalText]);
     return (
       <Screen>
         <SheetHeader title={t('send.review.title')} onClose={onClose} onBack={() => setStep(0)} />
         <View className="px-6 pt-5">
           <View className="items-center mb-4">
             <Label>{t('common.youSend')}</Label>
-            <View className="flex-row items-baseline gap-1.5 mt-1.5">
-              <Txt mono className="text-[38px] font-bold tracking-tightest">
+            <View className="flex-row items-baseline justify-center gap-1.5 mt-1.5 self-stretch">
+              <Txt mono className="text-[38px] font-bold tracking-tightest shrink" numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.4}>
                 {amount}
               </Txt>
               <Txt className="text-[18px] text-text2">{token.sym}</Txt>
@@ -306,12 +316,12 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
             </Callout>
           ) : null}
           {sendError !== null ? (
-            <Callout tone={C.red} glyph="!" className="mt-3.5">
+            <Callout tone={C.red} glyph="!" className="mt-3.5" accessibilityRole="alert">
               <Txt className="text-[11.5px] text-text1 leading-[17px]">{sendError}</Txt>
             </Callout>
           ) : null}
           {quoteError !== null ? (
-            <Callout tone={C.red} glyph="!" className="mt-3.5">
+            <Callout tone={C.red} glyph="!" className="mt-3.5" accessibilityRole="alert">
               <Txt className="text-[11.5px] text-text1 leading-[17px]">{quoteError}</Txt>
             </Callout>
           ) : null}
@@ -322,7 +332,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
           ) : null}
 
           <Callout icon="fingerprint" className="mt-3.5">
-            <Txt className="text-[12px]">{t('send.authBio', { bio: bioName(bio) })}</Txt>
+            <Txt className="text-[12px]">{t('send.authSession')}</Txt>
           </Callout>
 
           <Btn tone="primary" icon="lock" className="mt-4" disabled={sending || leg === undefined} onPress={confirm}>
@@ -378,7 +388,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
 
       {/* Amount */}
       <View className="px-6 pt-5 items-center">
-        <View className="flex-row items-baseline gap-1.5">
+        <View className="flex-row items-baseline justify-center gap-1.5 self-stretch">
           <TextInput
             value={amount}
             onChangeText={onAmountChange}
@@ -386,7 +396,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
             placeholderTextColor={C.text3}
             keyboardType="decimal-pad"
             accessibilityLabel={t('send.amount.a11y')}
-            className="font-mono text-[56px] font-bold text-text0 text-center p-0 min-w-[80px]"
+            className="font-mono text-[56px] font-bold text-text0 text-center p-0 min-w-[80px] shrink"
           />
           <Txt className="text-[20px] text-text2 font-medium">{token.sym}</Txt>
         </View>
@@ -465,10 +475,18 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
           {(['economy', 'standard', 'fast'] as FeeTierId[]).map((k) => {
             const on = feeTier === k;
             const leg = quote?.[k];
+            const feeText = leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable');
+            // Combined label: tier, cost and arrival in one string, so
+            // screen readers get the whole decision instead of a bare
+            // color-only tier name.
+            const tileLabel = `${t(`send.fee.${k}` as I18nKey)}, ${feeText}, ${t(((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + k) as I18nKey)}`;
             return (
               <Pressable
                 key={k}
                 onPress={() => setFeeTier(k)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={tileLabel}
                 className="flex-1 p-3 rounded-xl"
                 style={on ? tint(C.amber, 0.08, 0.4) : tile(0.03)}>
                 <Txt className="text-[12px] font-semibold capitalize" style={{ color: on ? C.amber : C.text0 }}>
@@ -478,14 +496,14 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
                   {t(((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + k) as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
-                  {leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable')}
+                  {feeText}
                 </Txt>
               </Pressable>
             );
           })}
         </View>
         {quoteError !== null ? (
-          <Callout tone={C.amber} glyph="!" className="mt-2.5">
+          <Callout tone={C.amber} glyph="!" className="mt-2.5" accessibilityRole="alert">
             <Txt className="text-[11.5px] text-text1 leading-[17px]">{quoteError}</Txt>
           </Callout>
         ) : null}

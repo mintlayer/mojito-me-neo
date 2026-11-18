@@ -54,7 +54,14 @@ async function main() {
       notifications += 1;
     });
     tracker.track({ id: 'tx1', chain: 'ml' }, { confirmationsTarget: 1 });
-    assert.deepEqual(tracker.get('ml', 'tx1'), { id: 'tx1', chain: 'ml', state: 'pending', confirmations: null, blockId: null });
+    assert.deepEqual(tracker.get('ml', 'tx1'), {
+      id: 'tx1',
+      chain: 'ml',
+      state: 'pending',
+      confirmations: null,
+      blockId: null,
+      stalled: false,
+    });
     const afterTrack = notifications;
     assert.ok(afterTrack >= 1, 'registration notifies');
     // Tick one answers pending (no change), tick two confirms.
@@ -68,7 +75,14 @@ async function main() {
     const mid = notifications;
     await timers.run();
     assert.equal(notifications, mid);
-    assert.deepEqual(tracker.get('ml', 'tx1'), { id: 'tx1', chain: 'ml', state: 'confirmed', confirmations: 1, blockId: 'bb'.repeat(32) });
+    assert.deepEqual(tracker.get('ml', 'tx1'), {
+      id: 'tx1',
+      chain: 'ml',
+      state: 'confirmed',
+      confirmations: 1,
+      blockId: 'bb'.repeat(32),
+      stalled: false,
+    });
   }
 
   // 2. Flaky reads are swallowed until the attempt cap, then the loop stops
@@ -94,6 +108,7 @@ async function main() {
     assert.equal(tracker.get('ml', 'tx2')?.state, 'pending', 'state kept through failures');
     await timers.run();
     assert.equal(failures, 3, 'loop stops at the cap');
+    assert.equal(tracker.get('ml', 'tx2')?.stalled, true, 'the cap stop discloses the stall');
   }
 
   // 3. not-found is terminal; untracked ids answer null; re-tracking is a

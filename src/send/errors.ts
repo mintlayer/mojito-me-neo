@@ -1,14 +1,22 @@
 // UI-safe copy for the send flow's typed failures (spec M3: error taxonomy
 // with i18n copy, never raw server text). Pure mapping: typed errors in,
-// localized strings out; details only ride the rejected copy where the spec
-// names a {detail} slot.
+// localized strings out. Error details are diagnostics for the typed error
+// object only; no kind renders a detail on screen.
 import { t } from '../i18n';
 import { dataErrorCopy } from '../data/errors';
 import type { AddressError, AmountInputError } from './validation';
 
+/** User-facing names for the wrong-network copy: raw hrp-style tokens
+ *  (btc-testnet) must not surface verbatim; the ML side already carries a
+ *  readable name in its kind. */
+const NETWORK_LABELS: Record<string, string> = {
+  'btc-mainnet': 'Bitcoin mainnet',
+  'btc-testnet': 'Bitcoin testnet',
+};
+
 export function addressErrorCopy(e: AddressError): string {
   if (e.kind === 'wrongChain') return t('send.to.error.wrongChain');
-  if (e.kind === 'wrongNetwork') return t('send.to.error.wrongNetwork', { network: e.expected });
+  if (e.kind === 'wrongNetwork') return t('send.to.error.wrongNetwork', { network: NETWORK_LABELS[e.expected] ?? e.expected });
   return t('send.to.error.malformed');
 }
 
@@ -56,7 +64,10 @@ export function sendErrorCopy(e: unknown): string {
       case 'timeout':
         return t('send.error.timeout');
       case 'rejected':
-        return t('send.error.rejected', { detail: e.detail ?? '' });
+        // Internal pipeline rejections (builder shape guards, amount
+        // backstops): the typed detail stays diagnostics-only, the user
+        // gets the generic copy per the no-raw-internals contract.
+        return t('common.error.generic');
       case 'bindings':
         return t('send.error.bindings');
       case 'busy':

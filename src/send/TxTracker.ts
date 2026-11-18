@@ -22,6 +22,10 @@ export type TrackedTx = {
   state: TxStatusInfo['state'];
   confirmations: number | null;
   blockId: string | null;
+  /** True when tracking stopped at the attempt cap without a terminal or
+   *  settled state: the screen discloses the stall instead of reading as
+   *  a live pending poll forever. */
+  stalled: boolean;
 };
 
 export type TxTrackerOptions = {
@@ -80,6 +84,7 @@ export class TxTracker {
       state: 'pending',
       confirmations: null,
       blockId: null,
+      stalled: false,
       attempts: 0,
       handle: null,
       target: opts?.confirmationsTarget ?? this.defaultTarget,
@@ -93,7 +98,14 @@ export class TxTracker {
   get(chain: TrackedChain, id: string): TrackedTx | null {
     const entry = this.entries.get(`${chain}:${id}`);
     if (entry === undefined) return null;
-    return { id: entry.id, chain: entry.chain, state: entry.state, confirmations: entry.confirmations, blockId: entry.blockId };
+    return {
+      id: entry.id,
+      chain: entry.chain,
+      state: entry.state,
+      confirmations: entry.confirmations,
+      blockId: entry.blockId,
+      stalled: entry.stalled,
+    };
   }
 
   /** Subscribe to any state change; returns the unsubscribe function. */
@@ -133,15 +145,19 @@ export class TxTracker {
       // Flaky read: keep polling until the attempt cap, never surface raw
       // transport text here; the chain history remains the source of truth.
     }
-    if (entry.state === 'not-found' || entry.attempts >= this.maxAttempts) {
-      // Terminal or stalled: stop the loop, keep the last known state.
-      return;
-    }
-    if (entry.state === 'confirmed' && (entry.confirmations === null || entry.confirmations >= entry.target)) {
-      // Settled through the confirmation target: no more polling of a
-      // confirmed transaction. A count-less confirmed answer cannot prove
-      // the target unmet, and the success screen already reads Confirmed
-      // for it, so it stops here too.
+    // Settled through the confirmation target: no more polling of a
+    // confirmed transaction. A count-less confirmed answer cannot prove
+    // the target unmet, and the success screen already reads Confirmed
+    // for it, so it stops here too.
+    const targetMet = entry.state === 'confirmed' && (entry.confirmations === null || entry.confirmations >= entry.target);
+    if (entry.state === 'not-found' || targetMet || entry.attempts >= this.maxAttempts) {
+      // Terminal, settled or stalled: stop the loop, keep the last known
+      // state. A cap stop that reached neither not-found nor the target
+      // is the stalled case the success screen discloses.
+      if (entry.state !== 'not-found' && !targetMet && !entry.stalled) {
+        entry.stalled = true;
+        this.notify();
+      }
       return;
     }
     this.schedule(entry);
