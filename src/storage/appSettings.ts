@@ -17,6 +17,11 @@ export type AppSettings = {
    *  data providers. Mainnet is the default; the testnet base itself stays
    *  pending action item A2 (decisions.md R6). */
   testnet: boolean;
+  /** The recovery phrase passed the verify step at least once. False (never
+   *  verified, or the read failed) keeps Receive gated at cold start, so a
+   *  skipped-backup wallet re-locks Receive after every relaunch instead of
+   *  forgetting the gate. */
+  backupVerified: boolean;
 };
 
 const SETTINGS_KEY = STORAGE_KEYS.settings;
@@ -57,6 +62,7 @@ function coerce(raw: Partial<AppSettings> | null): AppSettings {
     biometrics: typeof raw?.biometrics === 'boolean' ? raw.biometrics : null,
     autoLock: raw?.autoLock !== false,
     testnet: raw?.testnet === true,
+    backupVerified: raw?.backupVerified === true,
   };
 }
 

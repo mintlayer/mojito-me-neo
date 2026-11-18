@@ -36,3 +36,21 @@ the duplicate work is bounded by the gap scan, the 60 second cadence and
 the rate-limit-friendly sequential probing, so the simplification is not
 worth the state coupling yet. Revisit with M3 send bookkeeping, which needs
 fresh per-address summaries for coin selection anyway.
+
+## D13. Chain-client methods without M2 consumers stay, deferred to their milestones
+
+The M2 gate review counted 13 production-dead methods across the chain
+clients: `src/data/ml/IndexerClient.ts` (`tip`, `spendableUtxos`, `allUtxos`,
+`tokensByTicker`, `feerate`, `coinStatistics`, `orderBook`, `walkCursor`,
+`walkOffset`) and `src/data/btc/BtcChainService.ts` (`utxos`, `txStatus`,
+`tipHeight`, `feeEstimates`) have no caller outside their own tests. That is
+the forward-declared-API shape D11 rejected, so the surface is recorded here
+instead of being silently kept or silently trimmed.
+
+Decision: defer, do not delete. Each method maps to a named milestone
+consumer: `feerate`, the UTXO listings and the BTC `utxos`/`txStatus`/
+`tipHeight`/`feeEstimates` set land with the M3 signer and fee bookkeeping;
+`orderBook`, `coinStatistics`, `tokensByTicker` and the cursor walkers land
+with the M4 market and activity paging. The client module headers cite this
+entry instead of narrating callers that do not exist, and M3/M4 must consume
+or trim these methods when their consumers land.

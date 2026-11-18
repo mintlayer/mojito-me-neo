@@ -4,6 +4,10 @@
 // third-party fallback is ever hardcoded here and callers surface the
 // unconfigured state instead. Shapes per the btc-api API.md, which mirrors
 // the Esplora contract, so a deployment swap cannot change the client.
+//
+// Methods with an M3 consumer (`utxos`, `txStatus`, `tipHeight`,
+// `feeEstimates`) are a recorded deferral, not an implied caller:
+// decisions.md D13 lists each one with the milestone that consumes it.
 import { assertHttpsBase, IndexerError, MAX_ARRAY_ITEMS, MAX_RESPONSE_BYTES } from '../ml/IndexerClient';
 
 export type FetchLike = (url: string, init: { signal: AbortSignal }) => Promise<{

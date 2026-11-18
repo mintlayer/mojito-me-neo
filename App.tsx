@@ -143,7 +143,7 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
         if (await walletVault.exists()) {
           const [detected, saved] = await Promise.all([
             detectBio(),
-            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true })),
+            loadAppSettings().catch(() => ({ biometrics: null, autoLock: true, backupVerified: false })),
           ]);
           // Self-heal a persisted biometrics choice on hardware that cannot
           // honor it: gating the vault key here would seal the wallet behind
@@ -166,7 +166,10 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
           const wantBio = (saved.biometrics ?? bioUsable) && bioUsable;
           setSession({
             vault: null,
-            deferred: false,
+            // The persisted backup-verified flag seeds the deferred gate: a
+            // wallet that skipped (or never finished) backup re-locks
+            // Receive on every cold start instead of forgetting the gate.
+            deferred: saved.backupVerified !== true,
             bio: detected ?? 'face',
             bioChoice,
             settings: { biometrics: wantBio, autoLock: saved.autoLock, testnet: false },
@@ -185,7 +188,9 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
         const keyGated = await walletVault.keyGated().catch(() => false);
         setSession({
           vault: null,
-          deferred: false,
+          // Backup state is unreadable here: keep Receive gated until the
+          // flag says otherwise.
+          deferred: true,
           bio: detected ?? 'face',
           bioChoice: keyGated,
           settings: { biometrics: detected !== null, autoLock: true, testnet: false },
@@ -285,8 +290,10 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
   const finishOnboarding = (r: OnboardingResult) => {
     void (async () => {
       // Persist the Secure-screen choice so cold start respects "Use PIN
-      // instead"; a failure must not block an otherwise complete onboarding.
-      await saveAppSettings({ biometrics: r.biometrics }).catch(() => undefined);
+      // instead", and persist the backup outcome so the deferred gate
+      // survives a relaunch; a failure must not block an otherwise complete
+      // onboarding.
+      await saveAppSettings({ biometrics: r.biometrics, backupVerified: !r.deferred }).catch(() => undefined);
       const meta = await walletVault.meta().catch(() => null);
       setSession({
         vault: meta ? { meta } : null,
@@ -414,6 +421,9 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
             onEraseWallet={confirmSignOut}
             onDone={(r) => {
               setSession((s) => (s ? { ...s, deferred: r.deferred } : s));
+              // Re-verify clears the gate for good; skipping again re-arms
+              // it for the next cold start.
+              void saveAppSettings({ backupVerified: !r.deferred }).catch(() => undefined);
               setBackup(false);
             }}
           />

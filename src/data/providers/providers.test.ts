@@ -67,7 +67,9 @@ async function main() {
   const real = createProviders('real');
   assert.equal(real.mode, 'real');
   assert.equal(real.pricesAreMock, true);
-  assert.deepEqual(await real.data.getNetworks(), ['Bitcoin', 'Mintlayer']);
+  // btcBase is unconfigured (F13), so Bitcoin is not listed as connected and
+  // only Mintlayer counts as an active network.
+  assert.deepEqual(await real.data.getNetworks(), ['Mintlayer']);
   assert.equal((await real.data.getMarket('ML/USDT')).pair, 'ML/USDT');
   // Unconfigured testnet base (action item A2): typed offline, no fetch.
   setNetwork('testnet');

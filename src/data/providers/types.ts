@@ -14,6 +14,10 @@ export type Portfolio = { total: string; change: number; delta: string; spark: n
 export type AssetRow = {
   sym: string; name: string; chain: ChainName;
   amt: number; price: number; change: number; value: number; spark: number[];
+  /** True when the backend for this chain is unconfigured: the amount and
+   *  value are unknown, not zero. The row renders an explicit unavailable
+   *  state and contributes nothing to the total. */
+  unavailable?: boolean;
 };
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };

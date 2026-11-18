@@ -22,9 +22,9 @@ async function main() {
   // process-lifetime memory double carries the settings.
   overrideAsyncStorageForTest(undefined);
   setRelease(false);
-  assert.deepEqual(await loadAppSettings(), { biometrics: null, autoLock: true, testnet: false });
+  assert.deepEqual(await loadAppSettings(), { biometrics: null, autoLock: true, testnet: false, backupVerified: false });
   await saveAppSettings({ biometrics: false, autoLock: false, testnet: true });
-  assert.deepEqual(await loadAppSettings(), { biometrics: false, autoLock: false, testnet: true });
+  assert.deepEqual(await loadAppSettings(), { biometrics: false, autoLock: false, testnet: true, backupVerified: false });
 
   // Release build with a working AsyncStorage: reads and writes must hit
   // the real store, never the memory double (which still holds the dev
@@ -44,11 +44,12 @@ async function main() {
   overrideAsyncStorageForTest(native);
   setRelease(true);
   await saveAppSettings({ biometrics: true, testnet: true });
-  assert.deepEqual(await loadAppSettings(), { biometrics: true, autoLock: true, testnet: true });
+  assert.deepEqual(await loadAppSettings(), { biometrics: true, autoLock: true, testnet: true, backupVerified: false });
   assert.deepEqual(JSON.parse(backing.get(STORAGE_KEYS.settings) ?? '{}'), {
     biometrics: true,
     autoLock: true,
     testnet: true,
+    backupVerified: false,
   });
 
   // Release build with no store: both directions fail loudly, before any
@@ -59,7 +60,7 @@ async function main() {
 
   // Same missing store under the dev policy still falls back to memory.
   setRelease(false);
-  assert.deepEqual(await loadAppSettings(), { biometrics: false, autoLock: false, testnet: true });
+  assert.deepEqual(await loadAppSettings(), { biometrics: false, autoLock: false, testnet: true, backupVerified: false });
 
   console.log('appSettings.test.ts: release store-first ordering, dev memory fallback, release no-store throw all pass');
 }

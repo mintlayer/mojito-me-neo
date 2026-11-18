@@ -59,14 +59,25 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
     };
   }, [price, range]);
 
-  const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean }[] = [
-    { icon: 'arrow_up', labelKey: 'home.actions.send', color: C.text0, press: onOpenSend },
+  const actions: { icon: IconName; labelKey: 'home.actions.send' | 'home.actions.receive' | 'home.actions.swap' | 'home.actions.bridge'; color: string; press?: () => void; locked?: boolean; hintKey?: I18nKey }[] = [
+    {
+      // Real mode has no broadcast route (R3 pending), so Send is gated
+      // exactly like the deferred Receive tile: a disabled tile with honest
+      // copy instead of a flow that would end in a fabricated success.
+      icon: mode === 'real' ? 'lock' : 'arrow_up',
+      labelKey: 'home.actions.send',
+      color: mode === 'real' ? C.text3 : C.text0,
+      press: mode === 'real' ? undefined : onOpenSend,
+      locked: mode === 'real',
+      hintKey: mode === 'real' ? 'home.actions.sendUnavailable' : undefined,
+    },
     {
       icon: deferred ? 'lock' : 'arrow_dn',
       labelKey: 'home.actions.receive',
       color: deferred ? C.text3 : C.text0,
       press: deferred ? undefined : onOpenReceive,
       locked: deferred,
+      hintKey: deferred ? 'home.backup.banner' : undefined,
     },
     { icon: 'swap', labelKey: 'home.actions.swap', color: C.amber, press: () => onGoto?.('swap') },
     { icon: 'bridge', labelKey: 'home.actions.bridge', color: C.violet, press: () => onGoto?.('bridge') },
@@ -237,7 +248,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
               onPress={a.press}
               accessibilityRole="button"
               accessibilityLabel={t(a.labelKey)}
-              accessibilityHint={a.locked ? t('home.backup.banner') : undefined}
+              accessibilityHint={a.hintKey ? t(a.hintKey) : undefined}
               accessibilityState={a.locked ? { disabled: true } : undefined}
               className="py-3.5 rounded-2xl items-center gap-1.5"
               style={[tile(), { opacity: a.locked ? 0.45 : 1 }]}>
@@ -376,8 +387,11 @@ function shortId(id: string): string {
 
 /* ══ Home ═══════════════════════════════════════════════════ */
 
-/** Asset list line: token icon, symbol + chain, sparkline, value + change. */
+/** Asset list line: token icon, symbol + chain, sparkline, value + change.
+ *  An unavailable backend renders an explicit state instead of a factual
+ *  "0" amount and value. */
 function TokenRow({ asset }: { asset: AssetRow }) {
+  const unavailable = asset.unavailable === true;
   return (
     <View className="flex-row items-center gap-3 py-3">
       <TokenIcon symbol={asset.sym} size={38} />
@@ -386,19 +400,25 @@ function TokenRow({ asset }: { asset: AssetRow }) {
           <Txt className="text-[14px] font-semibold">{asset.sym}</Txt>
           <ChainBadge chain={asset.chain} />
         </View>
-        <Txt mono className="text-[11px] text-text2 mt-0.5">
-          {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
-        </Txt>
+        {unavailable ? (
+          <Txt className="text-[11px] text-text2 mt-0.5">{t('home.tokens.btcUnavailable')}</Txt>
+        ) : (
+          <Txt mono className="text-[11px] text-text2 mt-0.5">
+            {asset.amt.toLocaleString(undefined, { maximumFractionDigits: 4 })} · ${asset.price.toLocaleString()}
+          </Txt>
+        )}
       </View>
       <Sparkline data={asset.spark} color={asset.change >= 0 ? C.green : C.red} width={48} height={22} />
-      <View className="items-end">
-        <Txt mono className="text-[14px] font-semibold">
-          ${asset.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-        </Txt>
-        <View className="mt-0.5">
-          <LivePill value={asset.change} />
+      {unavailable ? null : (
+        <View className="items-end">
+          <Txt mono className="text-[14px] font-semibold">
+            ${asset.value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </Txt>
+          <View className="mt-0.5">
+            <LivePill value={asset.change} />
+          </View>
         </View>
-      </View>
+      )}
     </View>
   );
 }

@@ -26,9 +26,10 @@ import { loadAddressIndex, saveAddressIndex } from '../../storage/addressStore';
 import type { NetworkFlag } from '../../config/endpoints';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
 import {
-  CHAIN_GLYPH, CONTACTS, DAPPS, FEES, HTLC_STEPS, MARKET, PROFILE, RANGES, SWAP_STATS,
+  CHAIN_GLYPH, CONTACTS, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
   TIMEFRAMES, WAITLIST, ASKS, BIDS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE,
 } from '../../data';
+import { truncateMiddle } from '../../ui/format';
 import { createFixtureWalletData } from '../mock/fixtures';
 import { createFixturePriceProvider } from '../mock/priceFixtures';
 
@@ -166,6 +167,12 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
     pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML')), mlDecimal);
 
     let btcDecimal = '0';
+    // Unconfigured btc-api base (F13): the BTC amount is unknown, not zero,
+    // so the row renders an explicit unavailable state and the total stays
+    // honest about what it excludes. A configured backend that fails keeps
+    // the zero row so the ML surfaces keep rendering (transport failures
+    // still surface through the offline banner, not a crash).
+    const btcUnavailable = !acct.btc;
     if (acct.btc) {
       try {
         // Sum confirmed and unconfirmed sats over every derived address
@@ -180,12 +187,10 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
         }
         btcDecimal = atomsToDecimal(sat.toString(), 8);
       } catch (e) {
-        // BTC backend configured but unreachable: the row shows zero and the
-        // transport failure surfaces through the offline banner, not a crash.
         if (!(e instanceof IndexerError && e.kind === 'transport')) throw e;
       }
     }
-    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC')), btcDecimal);
+    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable), btcDecimal);
 
     for (const entry of portfolio.tokens) {
       if (nftIds.has(entry.tokenId)) continue; // NFT units live on the NFTs tab.
@@ -256,9 +261,24 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
       return acct.activity.rows(limit);
     },
     getNfts: async (opts) => (await loadHome(opts)).nfts,
-    getNetworks: async (): Promise<ChainName[]> => ['Bitcoin', 'Mintlayer'],
+    // Bitcoin stays a connected network only while its backend exists: an
+    // unconfigured btc-api base (F13) must not list a chain with no data
+    // behind it.
+    getNetworks: async (): Promise<ChainName[]> => (cfg.btcBase ? ['Bitcoin', 'Mintlayer'] : ['Mintlayer']),
     getRanges: async () => [...RANGES],
-    getProfile: async () => PROFILE,
+    // The fixture identity stays mock-mode only: real mode derives the
+    // profile from the first ML address and the actual network count, so no
+    // screen presents a demo name or demo address as the user's wallet.
+    getProfile: async () => {
+      const acct = await ensureAccount();
+      const ml = truncateMiddle(await acct.manager.currentReceivingAddress('ml'));
+      return {
+        name: ml,
+        initial: (ml[0] ?? 'M').toUpperCase(),
+        address: ml,
+        chains: cfg.btcBase ? 2 : 1,
+      };
+    },
     getMarket: async () => MARKET,
     getOrderBook: async () => ({ asks: [...ASKS], bids: [...BIDS] }),
     getTimeframes: async () => [...TIMEFRAMES],
@@ -287,7 +307,8 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
 }
 
 /** Display asset row: number conversion happens exactly here, at the render
- *  boundary of the existing AssetRow contract. */
+ *  boundary of the existing AssetRow contract. `unavailable` marks a chain
+ *  whose backend is unconfigured (unknown amount, not zero). */
 function assetRow(
   sym: string,
   name: string,
@@ -295,6 +316,7 @@ function assetRow(
   decimal: string,
   snapshot: PriceSnapshot | null,
   spark: number[],
+  unavailable = false,
 ): AssetRow {
   const amt = Number(decimal);
   const price = snapshot ? Number(snapshot.usd) : 0;
@@ -307,6 +329,7 @@ function assetRow(
     change: snapshot?.change24hPct ?? 0,
     value: amt * price,
     spark,
+    unavailable: unavailable || undefined,
   };
 }
 
