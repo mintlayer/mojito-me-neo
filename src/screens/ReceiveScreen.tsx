@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import QRCodeSvg from 'react-native-qrcode-svg';
 import type { Sheet } from './types';
@@ -19,6 +19,21 @@ export function ReceiveScreen({ onClose }: Sheet) {
   const chainGlyphs = useData((d) => d.getChainGlyphs());
   const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
+  /** Pending copied-flag reset; cancelled on unmount so the label timer
+   *  never fires against a gone screen. */
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Pending clipboard wipe (M3 spec security note): the address is
+   *  scrubbed 60 seconds after a copy so a leftover value cannot be pasted
+   *  elsewhere. The wipe has no state dependency, so it survives unmount
+   *  on purpose: cancelling it on sheet close would silently drop the
+   *  wipe on the common copy-then-close flow. A re-copy resets the timer. */
+  const wipeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
   const addr = addresses.data?.[chain] ?? '';
   const accent = CHAINS[chain];
   const label = (name: ChainName): string => {
@@ -31,7 +46,19 @@ export function ReceiveScreen({ onClose }: Sheet) {
     try {
       await Clipboard.setStringAsync(addr);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copiedTimer.current !== null) clearTimeout(copiedTimer.current);
+      copiedTimer.current = setTimeout(() => setCopied(false), 1500);
+      if (wipeTimer.current !== null) clearTimeout(wipeTimer.current);
+      wipeTimer.current = setTimeout(() => {
+        wipeTimer.current = null;
+        // The installed expo-clipboard (57) ships no clear API, so the wipe
+        // is the supported equivalent: an empty string write leaves nothing
+        // readable to paste.
+        Clipboard.setStringAsync('').catch(() => {
+          // A failed wipe (rare OS refusal) must not surface as an error
+          // dialog after a successful copy.
+        });
+      }, 60_000);
     } catch {
       Alert.alert(t('receive.copyError.title'), t('receive.copyError.body'));
     }
