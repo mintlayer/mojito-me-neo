@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Defs, LinearGradient as SvgGrad, Path, Stop } from 'react-native-svg';
@@ -16,9 +16,10 @@ export function CardScreen() {
   const waitlistCount = useData((d) => d.getWaitlist());
   const cardFeatures = useData((d) => d.getCardFeatures());
   const cardTiers = useData((d) => d.getCardTiers());
-  // One machine per screen instance over the provider handle; the handle is
-  // stable until ProvidersProvider rebuilds (network switch remounts).
-  const [form] = useState(() => new WaitlistForm(providers.waitlist));
+  // One machine per screen instance, rebuilt if the provider handle swaps
+  // (network switch rebuilds the provider set without remounting screens);
+  // the draft resets with it, while the sealed store itself persists.
+  const form = useMemo(() => new WaitlistForm(providers.waitlist), [providers.waitlist]);
   const [email, setEmailDraft] = useState('');
   const [phase, setPhase] = useState<WaitlistPhase>('idle');
   const [busy, setBusy] = useState(false);
