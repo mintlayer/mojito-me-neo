@@ -11,9 +11,9 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · M2 (chain data)
+## ⚠️ Project status · M3 (send and receive)
 
-**This repository is the chain-data milestone: real key management plus live mainnet balances, activity and NFTs under the shell UI. Sending is not here yet, so it is still not a full wallet.**
+**This repository is the send milestone: everything M2 shipped (keys, vault, live chain data) plus the three-step send flow on real builders, BTC signing and broadcast end-to-end on pure-TypeScript scure, the tracked pending to confirmed lifecycle and fresh-address rotation. ML broadcasting still waits on infrastructure, so a mainnet ML send prepares and signs but honestly refuses to broadcast.**
 
 Real since M1, with vector-backed tests:
 
@@ -21,6 +21,13 @@ Real since M1, with vector-backed tests:
 - **Vault**: the phrase is sealed with AES-256-GCM under a Keychain (iOS) or Keystore (Android) resident key before onboarding completes; the wallet survives kill and relaunch. The key is **user-authentication gated only when you chose biometrics on the Secure screen** (the persisted choice, never hardware detection): every seal and open then runs the OS biometric prompt inside the native module, and enrolling a new biometric invalidates the key. Enabling biometrics later re-seals the vault under a gated key at the next unlock.
 - **PIN and lock**: persisted PBKDF2 verifier with an escalating lockout that survives restart; real `LocalAuthentication` biometric prompts (biometry-only for the wallet lock, in-app PIN always works); auto-lock on background; the recovery-phrase reveal sits behind a re-auth step-up.
 - **Derivation**: Mintlayer account 0 (`m/44'/<coin type>'/0'`) and BTC BIP84 account (`m/84'/<coin>'/0'`) in pure TypeScript, byte-pinned to the bindings' published parity vectors and the BIP84 test vectors. Discovery derives real addresses and probes real usage.
+
+Real in M3:
+
+- **BTC sends**: build, sign and broadcast are fully real in TypeScript (@scure/btc-signer P2WPKH, BIP84-vector pinned) against the configured btc-api base; fee tiers read live /fee-estimates with a flagged fixed fallback when the backend is unreachable.
+- **ML sends**: address validation (mtc1/tmt1/bc1/tb1 with wrong-network detection), exact decimal amount parsing, UTXO selection with the implicit-fee invariant, and assembly/signing over the Mintlayer bindings interface. The signing call-through is the recorded device-pending seam: without a dev build on a device it fails typed, never fakes a signature.
+- **Send lifecycle**: the three-step flow (details, review, sent) with per-tier live quotes, the typed error taxonomy (insufficient funds, malformed address, broadcast disabled or failed, timeout, rejection), pending to confirmed tracking that nudges the activity list, and fresh-address rotation after every send.
+- **Demo path (R3)**: in mock mode the send flow completes on the mock broadcaster with demo-labelled fake ids, so the UX is fully demoable while ML production sending waits on a public submission endpoint (action item A1).
 
 Real in M2, on mainnet:
 
@@ -31,9 +38,10 @@ Real in M2, on mainnet:
 Still fixture-backed or deferred, deliberately:
 
 - **Prices** are the mock provider in both modes (R1): every USD figure is indicative, and the home screen says so with the demo-data chip.
-- **Sending** lands in M3 (the broadcast base stays null until action item A1 resolves).
-- **BTC device verification** is pending: balances come from the configured btc-api deployment, and an end-to-end check against a funded device has not run yet.
-- **Testnet** ships typed-offline: no Mintlayer-operated testnet indexer URL is documented (action item A2), so nothing points at a guess.
+- **ML production sending** waits on infrastructure: the production API refuses transaction submissions (403), so the real-mode ML flow stops honestly at the broadcast step (R3, action item A1); the config switch makes enabling it a URL change.
+- **ML signing device verification** is pending: the bindings artifacts are vendored and the TS pipeline is wired to their interface, but no build machine has verified the native call-through yet.
+- **BTC device verification** is pending: balances and sends come from the configured btc-api deployment, and an end-to-end check against a funded device has not run yet.
+- **Testnet** ships typed-offline: no Mintlayer-operated testnet indexer URL is documented (action item A2), so nothing points at a guess. The E2E harness (`npx tsx scripts/e2e-testnet.mjs`) states this honestly and runs its BTC leg when a btc-api testnet base is provided.
 - The **vendored bindings call-through** (transaction assembly, signing, native encoders) still rejects; the artifacts are vendored and linked, the facades are real code that compiles on EAS, and the TS key paths above do not depend on the call-through. See the Storage section and `vendor/mintlayer/`.
 
 Do not point this at real funds you cannot afford to lose, and do not treat any screen here as a security control until the corresponding logic is implemented and audited.
