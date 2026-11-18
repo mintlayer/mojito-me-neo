@@ -97,10 +97,16 @@ export function createAddressManager(opts: AddressManagerOptions): AddressManage
     const managed = chains[chain];
     if (managed.scanned) return;
     if (managed.scanPromise === null) {
+      // A rejected scan resets the promise so a transient probe failure (or
+      // a corrupt store read) can succeed on the next call, mirroring the
+      // account promise in the real-mode data layer.
       managed.scanPromise = (async () => {
         await hydrate(chain);
         if (!managed.scanned) await scan(chain);
-      })();
+      })().catch((e: unknown) => {
+        managed.scanPromise = null;
+        throw e;
+      });
     }
     await managed.scanPromise;
   }

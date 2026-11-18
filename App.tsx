@@ -347,7 +347,10 @@ function Shell({ network, onNetworkChange }: { network: NetworkFlag; onNetworkCh
     <View className="flex-1" style={{ backgroundColor: C.bg0 }}>
       <AppBackground />
 
-      {session && (
+      {/* Mounted only while unlocked: every screen data load (and the polling
+          it drives) runs behind the unlock gate, so a locked wallet never
+          opens the key session or sends derived addresses to a backend. */}
+      {session && !locked && (
         <>
           <Active
             onOpenSend={() => setOverlay('send')}

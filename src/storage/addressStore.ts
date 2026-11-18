@@ -25,11 +25,27 @@ async function loadRaw(): Promise<AddressIndexState> {
   const api = await loadAsyncStorage();
   if (api) {
     const json = await api.getItem(STORAGE_KEY);
-    return json ? (JSON.parse(json) as AddressIndexState) : {};
+    return parseAddressIndexState(json);
   }
   if (!devFallbackAllowed()) throw new Error('async storage unavailable');
   if (memory === null) memory = {};
   return memory;
+}
+
+/** Corrupt stored JSON drops the state (a rescan re-derives everything):
+ *  a failed parse must not wedge every fresh/current/allAddresses call for
+ *  the whole session. */
+export function parseAddressIndexState(json: string | null): AddressIndexState {
+  if (json === null || json.length === 0) return {};
+  try {
+    const parsed = JSON.parse(json) as unknown;
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as AddressIndexState;
+    }
+  } catch {
+    // corrupt JSON falls through to the empty state
+  }
+  return {};
 }
 
 async function writeRaw(state: AddressIndexState): Promise<void> {

@@ -103,7 +103,8 @@ async function main() {
   assert.equal(pending.blockId, null);
   assert.equal(pending.outputs[0].value?.amount?.atoms, '49');
 
-  // nft: 200 parses, 404 resolves to null (non-NFT id).
+  // nft: 200 parses, 404 resolves to null (non-NFT id). Upstream double-
+  // encodes display strings; the parse layer strips one quoting level.
   const nftClient = new IndexerClient('https://indexer.test/api/v2', {
     fetch: scriptedFetch([
       {
@@ -114,8 +115,28 @@ async function main() {
     ]),
     delay: noDelay,
   });
-  assert.equal((await nftClient.nft('mmltk1nft'))?.name, '"Mojito #1"');
+  const nftInfo = await nftClient.nft('mmltk1nft');
+  assert.equal(nftInfo?.name, 'Mojito #1');
+  assert.equal(nftInfo?.ticker, 'MOJ');
+  assert.equal(nftInfo?.description, 'x');
+  assert.equal(nftInfo?.mediaHash, 'aa');
   assert.equal(await nftClient.nft('mmltk1notnft'), null);
+
+  // Token info: quoted ticker and authority surface unquoted; already-plain
+  // strings and a non-JSON quoted fragment pass through unchanged.
+  const tokenClient = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: scriptedFetch([
+      { status: 200, body: { token_ticker: '"USDT"', number_of_decimals: 6, authority: '"ab"', metadata_uri: 'https://plain.example', frozen: false } },
+      { status: 200, body: { token_ticker: '"USDT' } },
+    ]),
+    delay: noDelay,
+  });
+  const tokenInfo = await tokenClient.token('mmltk1usdt');
+  assert.equal(tokenInfo.ticker, 'USDT');
+  assert.equal(tokenInfo.authority, 'ab');
+  assert.equal(tokenInfo.decimals, 6);
+  assert.equal(tokenInfo.metadataUri, 'https://plain.example');
+  assert.equal((await tokenClient.token('mmltk1odd')).ticker, '"USDT');
 
   // feerate: bare JSON string body, with query param passthrough.
   const feeCalls: { url: string }[] = [];
@@ -170,6 +191,54 @@ async function main() {
   });
   assert.deepEqual(offsets, [2, 1]);
   assert.match(offsetCalls[1].url, /offset=2/);
+
+  // Non-terminating cursor: the same next_cursor forever is cut off by the
+  // page cap with a typed parse error, not an unbounded request loop.
+  let endlessCursorCalls = 0;
+  const endlessCursor = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: async () => {
+      endlessCursorCalls += 1;
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ items: [1], next_cursor: 'same', truncated: false }) };
+    },
+    delay: noDelay,
+  });
+  await assert.rejects(
+    () => endlessCursor.walkCursor('/order/pair/ML_USDT/book', { side: 'ask' }, async () => undefined),
+    (e: unknown) => e instanceof IndexerError && e.kind === 'parse',
+  );
+  assert.equal(endlessCursorCalls, 100);
+
+  // Explicit caps apply: a two-page ceiling stops a terminating walk early
+  // with the same typed error.
+  let cappedCalls = 0;
+  const cappedCursor = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: async () => {
+      cappedCalls += 1;
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify({ items: [1], next_cursor: `c${cappedCalls}`, truncated: false }) };
+    },
+    delay: noDelay,
+  });
+  await assert.rejects(
+    () => cappedCursor.walkCursor('/order/pair/ML_USDT/book', { side: 'ask' }, async () => undefined, { maxPages: 2 }),
+    (e: unknown) => e instanceof IndexerError && e.kind === 'parse',
+  );
+  assert.equal(cappedCalls, 2);
+
+  // Endless full pages in the offset walk hit the item cap with a typed
+  // parse error.
+  let endlessOffsetCalls = 0;
+  const endlessOffset = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: async () => {
+      endlessOffsetCalls += 1;
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(['t1', 't2']) };
+    },
+    delay: noDelay,
+  });
+  await assert.rejects(
+    () => endlessOffset.walkOffset('/token', undefined, 2, async () => undefined, { maxItems: 6 }),
+    (e: unknown) => e instanceof IndexerError && e.kind === 'parse',
+  );
+  assert.equal(endlessOffsetCalls, 3);
 
   // 429 retries with the capped Retry-After, then succeeds.
   const retryCalls: { url: string }[] = [];

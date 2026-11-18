@@ -58,6 +58,12 @@ const BACKOFF_BASE_MS = 500;
 const BACKOFF_CAP_MS = 8_000;
 /** Ceiling for a server-provided Retry-After so a hostile header cannot pin the wallet. */
 const RETRY_AFTER_CAP_MS = 30_000;
+/** Walker bounds: a non-terminating listing is a parse error, not a loop. */
+export type WalkerCaps = { maxPages?: number; maxItems?: number };
+
+const DEFAULT_MAX_PAGES = 100;
+
+const DEFAULT_MAX_ITEMS = 50_000;
 
 function backoffMs(attempt: number): number {
   return Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt);
@@ -84,6 +90,20 @@ export function parseAmount(raw: unknown): AmountJson {
 
 function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+/** One level of JSON string quoting stripped: upstream double-encodes
+ *  display strings (tickers, NFT names), so '"USDT"' must surface as
+ *  'USDT'. Values that are not quoted strings pass through unchanged. */
+function unquoted(value: unknown): string | null {
+  const raw = asString(value);
+  if (raw === null || raw.length < 2 || !raw.startsWith('"') || !raw.endsWith('"')) return raw;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === 'string' ? parsed : raw;
+  } catch {
+    return raw;
+  }
 }
 
 function asNumberOrNull(value: unknown): number | null {
@@ -166,11 +186,11 @@ function parseTransaction(raw: unknown): MlTransaction {
 function parseTokenInfo(raw: unknown): MlTokenInfo {
   const record = asRecord(raw);
   return {
-    authority: asString(record.authority) ?? '',
-    ticker: asString(record.token_ticker),
+    authority: unquoted(record.authority) ?? '',
+    ticker: unquoted(record.token_ticker),
     decimals: asNumberOrNull(record.number_of_decimals) ?? 0,
     circulatingSupply: record.circulating_supply !== undefined ? parseAmount(record.circulating_supply) : null,
-    metadataUri: asString(record.metadata_uri),
+    metadataUri: unquoted(record.metadata_uri),
     frozen: record.frozen === true,
   };
 }
@@ -179,14 +199,14 @@ function parseNftInfo(id: string, raw: unknown): MlNftInfo {
   const record = asRecord(raw);
   return {
     id,
-    name: asString(record.name),
-    ticker: asString(record.ticker),
-    description: asString(record.description),
-    creator: asString(record.creator),
-    owner: asString(record.owner),
-    mediaUri: asString(record.media_uri),
-    iconUri: asString(record.icon_uri),
-    mediaHash: asString(record.media_hash),
+    name: unquoted(record.name),
+    ticker: unquoted(record.ticker),
+    description: unquoted(record.description),
+    creator: unquoted(record.creator),
+    owner: unquoted(record.owner),
+    mediaUri: unquoted(record.media_uri),
+    iconUri: unquoted(record.icon_uri),
+    mediaHash: unquoted(record.media_hash),
   };
 }
 
@@ -328,38 +348,62 @@ export class IndexerClient {
 
   /**
    * Keyset cursor walk: pages until the envelope reports no next cursor (or
-   * the scan cap with a null cursor), handing each page to the visitor.
+   * the scan cap with a null cursor), handing each page to the visitor. A
+   * hostile or misbehaving endpoint that keeps serving a next cursor is
+   * cut off by the page and item caps with a typed parse error, never an
+   * unbounded request loop.
    */
   async walkCursor(
     path: string,
     query: Record<string, string> | undefined,
     onPage: (page: { items: unknown[]; nextCursor: string | null; truncated: boolean }) => Promise<void>,
+    caps?: WalkerCaps,
   ): Promise<void> {
+    const maxPages = caps?.maxPages ?? DEFAULT_MAX_PAGES;
+    const maxItems = caps?.maxItems ?? DEFAULT_MAX_ITEMS;
     let cursor: string | undefined;
+    let pages = 0;
+    let items = 0;
     for (;;) {
+      if (pages >= maxPages || items >= maxItems) {
+        throw new IndexerError('parse', path, undefined);
+      }
       const merged = { ...(query ?? {}) };
       if (cursor !== undefined) merged.cursor = cursor;
       const raw = asRecord(await this.request(path, Object.keys(merged).length > 0 ? merged : undefined));
-      const items = asArray(raw.items ?? []);
+      const pageItems = asArray(raw.items ?? []);
       const nextCursor = asString(raw.next_cursor);
-      await onPage({ items, nextCursor, truncated: raw.truncated === true });
+      pages += 1;
+      items += pageItems.length;
+      await onPage({ items: pageItems, nextCursor, truncated: raw.truncated === true });
       if (nextCursor === null) return;
       cursor = nextCursor;
     }
   }
 
-  /** Offset/items walk for list endpoints; stops at the first short page. */
+  /** Offset/items walk for list endpoints; stops at the first short page or
+   *  the walker caps (typed parse error on a non-terminating listing). */
   async walkOffset(
     path: string,
     query: Record<string, string> | undefined,
     pageSize: number,
     onPage: (items: unknown[]) => Promise<void>,
+    caps?: WalkerCaps,
   ): Promise<void> {
+    const maxPages = caps?.maxPages ?? DEFAULT_MAX_PAGES;
+    const maxItems = caps?.maxItems ?? DEFAULT_MAX_ITEMS;
+    let pages = 0;
+    let items = 0;
     for (let offset = 0; ; offset += pageSize) {
+      if (pages >= maxPages || items >= maxItems) {
+        throw new IndexerError('parse', path, undefined);
+      }
       const merged = { ...(query ?? {}), items: String(pageSize), offset: String(offset) };
-      const items = asArray(await this.request(path, merged));
-      if (items.length > 0) await onPage(items);
-      if (items.length < pageSize) return;
+      const pageItems = asArray(await this.request(path, merged));
+      pages += 1;
+      items += pageItems.length;
+      if (pageItems.length > 0) await onPage(pageItems);
+      if (pageItems.length < pageSize) return;
     }
   }
 

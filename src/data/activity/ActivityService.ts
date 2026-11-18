@@ -8,6 +8,7 @@ import type { BtcChainService } from '../btc/BtcChainService';
 import { IndexerClient } from '../ml/IndexerClient';
 import type { MlTransaction } from '../ml/types';
 import type { MlTokenMeta } from '../ml/BalanceService';
+import { atomsOf } from '../amount';
 import { ML_DECIMALS, atomsToDecimal, formatAmount } from '../../money';
 import { t } from '../../i18n';
 import type { ActivityRow } from '../providers/types';
@@ -45,6 +46,28 @@ export type ActivityServiceDeps = {
 };
 
 const DEFAULT_MAX_LOOKUPS = 30;
+
+/**
+ * Interleave per-address newest-first id lists (merge k sorted): rank r of
+ * every address precedes rank r+1 of any address, so the lookup cap cannot
+ * crowd out one address's history behind another address's older entries.
+ * Ids seen on several addresses stay at their first rank.
+ */
+export function mergeNewestFirst(lists: string[][]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const depth = lists.reduce((max, list) => Math.max(max, list.length), 0);
+  for (let rank = 0; rank < depth; rank++) {
+    for (const list of lists) {
+      const id = list[rank];
+      if (id !== undefined && !seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  }
+  return out;
+}
 
 /** Short relative time ('2m', '1h', '3d'), the row `time` contract. */
 export function relativeTime(seconds: number | null, nowSeconds: number): string {
@@ -120,18 +143,14 @@ export class ActivityService {
     if (!ml) return [];
     const addresses = await ml.addresses();
     const mine = new Set(addresses);
-    // History ids arrive newest first per address; dedupe across addresses.
-    const ids: string[] = [];
-    const seen = new Set<string>();
+    // History ids arrive newest first per address; the cross-address merge
+    // interleaves by rank before the cap is applied.
+    const lists: string[][] = [];
     for (const address of addresses) {
       const info = await ml.client.addressInfo(address);
-      for (const id of info.transactionHistory) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          ids.push(id);
-        }
-      }
+      lists.push(info.transactionHistory);
     }
+    const ids = mergeNewestFirst(lists);
     const out: ActivityEntry[] = [];
     for (const id of ids.slice(0, this.maxLookups)) {
       const tx = await ml.client.transaction(id);
@@ -206,7 +225,7 @@ async function mapMlTransaction(
   const coinOut = (toMe: boolean): bigint =>
     tx.outputs
       .filter((o) => o.value?.type === 'Coin' && o.destination !== undefined && mine.has(o.destination) === toMe)
-      .reduce((sum, o) => sum + BigInt(o.value?.amount?.atoms ?? '0'), 0n);
+      .reduce((sum, o) => sum + BigInt(atomsOf(o.value?.amount, ML_DECIMALS)), 0n);
   const toMe = coinOut(true);
   const toOthers = coinOut(false);
   const isHtlc = tx.outputs.some((o) => o.type === 'Htlc') || tx.inputs.some((i) => i.utxo?.type === 'Htlc');
@@ -235,9 +254,9 @@ async function mapMlTransaction(
     const tokenOutput = tx.outputs.find(
       (o) => o.value?.type === 'TokenV1' && o.value.tokenId !== undefined && o.destination !== undefined && mine.has(o.destination) === wantToMe,
     );
-    if (!tokenOutput || !tokenOutput.value?.tokenId || !tokenOutput.value.amount?.atoms) return null;
+    if (!tokenOutput || !tokenOutput.value?.tokenId || !tokenOutput.value.amount) return null;
     const meta: MlTokenMeta = await tokenMeta(tokenOutput.value.tokenId);
-    amountDecimal = atomsToDecimal(tokenOutput.value.amount.atoms, meta.decimals);
+    amountDecimal = atomsToDecimal(atomsOf(tokenOutput.value.amount, meta.decimals), meta.decimals);
     symbol = meta.ticker ?? tokenOutput.value.tokenId;
   }
 

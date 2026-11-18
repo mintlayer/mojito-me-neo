@@ -5,6 +5,8 @@
 // address, rate-limit friendly per the spec security note. Token metadata
 // (ticker, decimals) is cached in session memory only.
 import { IndexerClient, IndexerError } from './IndexerClient';
+import { atomsOf } from '../amount';
+import { ML_DECIMALS } from '../../money';
 
 export type MlTokenBalance = { tokenId: string; atoms: string };
 
@@ -41,11 +43,11 @@ export class BalanceService {
     const tokenAtoms = new Map<string, bigint>();
     for (const address of addresses) {
       const info = await this.client.addressInfo(address);
-      coin += BigInt(info.coinBalance.atoms ?? '0');
-      locked += BigInt(info.lockedCoinBalance.atoms ?? '0');
+      coin += BigInt(atomsOf(info.coinBalance, ML_DECIMALS));
+      locked += BigInt(atomsOf(info.lockedCoinBalance, ML_DECIMALS));
       for (const entry of info.tokens) {
         const current = tokenAtoms.get(entry.tokenId) ?? 0n;
-        tokenAtoms.set(entry.tokenId, current + BigInt(entry.amount.atoms ?? '0'));
+        tokenAtoms.set(entry.tokenId, current + BigInt(await this.tokenAtomsOf(entry.tokenId, entry.amount)));
       }
     }
     return {
@@ -53,6 +55,14 @@ export class BalanceService {
       lockedCoinAtoms: locked.toString(),
       tokens: [...tokenAtoms.entries()].map(([tokenId, atoms]) => ({ tokenId, atoms: atoms.toString() })),
     };
+  }
+
+  /** Atoms for one address token entry: atoms directly, or the decimal
+   *  field rescaled through the cached token metadata decimals. */
+  private async tokenAtomsOf(tokenId: string, amount: { atoms?: string; decimal?: string }): Promise<string> {
+    if (amount.atoms !== undefined) return amount.atoms;
+    const meta = await this.tokenMeta(tokenId);
+    return atomsOf(amount, meta.decimals);
   }
 
   /** Ticker and decimals for a token id, cached per session. */

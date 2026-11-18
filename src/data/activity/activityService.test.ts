@@ -7,7 +7,7 @@ import { strict as assert } from 'node:assert/strict';
 import { IndexerClient, type FetchLike } from '../ml/IndexerClient';
 import { BalanceService } from '../ml/BalanceService';
 import { NftService } from '../ml/NftService';
-import { ActivityService, relativeTime } from './ActivityService';
+import { ActivityService, mergeNewestFirst, relativeTime } from './ActivityService';
 import { BtcChainService, type FetchLike as BtcFetchLike } from '../btc/BtcChainService';
 
 const MY = 'mtc1qme';
@@ -52,7 +52,7 @@ function btcClient(responses: Record<string, unknown>): BtcChainService {
   return new BtcChainService('http://btc.test/api/bitcoin', { fetch, delay: () => Promise.resolve() });
 }
 
-const USDT_TICKER = '"USDT"';
+const USDT_TICKER = 'USDT';
 const USDT_DECIMALS = 6;
 
 async function main() {
@@ -95,11 +95,34 @@ async function main() {
   const meta = await balance.tokenMeta('mmltk1usdt');
   assert.deepEqual(meta, { ticker: USDT_TICKER, decimals: USDT_DECIMALS });
 
-  // NFT identification: probe once, 404 means fungible.
+  // NFT identification: probe once, 404 means fungible. Display strings
+  // arrive double-encoded upstream; the parse layer strips one quoting
+  // level, so the ticker and name here surface unquoted.
   const nft = new NftService(client);
   const ids = await nft.identify(['mmltk1usdt', 'mmltk1nft']);
   assert.deepEqual([...ids], ['mmltk1nft']);
-  assert.equal((await nft.metadata('mmltk1nft'))?.name, '"Mojito #1"');
+  assert.equal((await nft.metadata('mmltk1nft'))?.name, 'Mojito #1');
+
+  // Decimal-only token amounts: the portfolio must rescale through the
+  // cached token metadata decimals instead of counting the leg as zero.
+  const decimalClient = mlClient({
+    '/address/mtc1qdec': {
+      coin_balance: { atoms: '0', decimal: '0' },
+      locked_coin_balance: { atoms: '0', decimal: '0' },
+      tokens: [{ token_id: 'mmltkdec', amount: { decimal: '1.5' } }],
+      transaction_history: [],
+    },
+    '/token/mmltkdec': { token_ticker: 'DEC', number_of_decimals: 6 },
+  });
+  const decimalBalance = new BalanceService(decimalClient, async () => ['mtc1qdec']);
+  const decimalPortfolio = await decimalBalance.portfolio();
+  assert.deepEqual(decimalPortfolio.tokens, [{ tokenId: 'mmltkdec', atoms: '1500000' }]);
+
+  // mergeNewestFirst: rank interleave across per-address newest-first id
+  // lists, so a lookup cap cannot crowd out one address behind another's
+  // older entries, and ids shared across addresses stay deduped.
+  assert.deepEqual(mergeNewestFirst([['a1', 'a2'], ['b1'], ['a1', 'a3']]), ['a1', 'b1', 'a2', 'a3']);
+  assert.deepEqual(mergeNewestFirst([]), []);
 
   // ML activity: send from our address, receive to it, token receive, htlc.
   const now = 1_700_000_000;
@@ -224,6 +247,71 @@ async function main() {
   assert.equal(btcRows[0].sub, '- 0.00002 BTC');
   assert.equal(btcRows[1].time, '1h');
   assert.equal(btcRows[2].time, '1d');
+
+  // Decimal-only token leg and merge-before-cap: a second address whose
+  // newest transaction moves tokens with a decimal-only amount, and a cap
+  // that must not crowd it out behind the first address's older entries.
+  const MY2 = 'mtc1qme2';
+  const TOKEN_TX = '5'.repeat(64);
+  const OLD_A = '6'.repeat(64);
+  const OLD_B = '7'.repeat(64);
+  const mergeClient = mlClient({
+    [`/address/${MY2}`]: {
+      coin_balance: { atoms: '0' },
+      locked_coin_balance: { atoms: '0' },
+      tokens: [],
+      transaction_history: [TOKEN_TX],
+    },
+    '/address/mtc1qold': {
+      coin_balance: { atoms: '0' },
+      locked_coin_balance: { atoms: '0' },
+      tokens: [],
+      transaction_history: [OLD_A, OLD_B],
+    },
+    [`/transaction/${TOKEN_TX}`]: {
+      id: TOKEN_TX,
+      inputs: [{ input_type: 'Utxo', utxo: { type: 'Transfer', destination: OTHER, value: { type: 'Coin', amount: { atoms: '10' } } } }],
+      outputs: [{ type: 'Transfer', destination: MY2, value: { type: 'TokenV1', token_id: 'mmltkusdt2', amount: { decimal: '2.5' } } }],
+      fee: { atoms: '10' },
+      block_id: 'cc'.repeat(32),
+      timestamp: String(now - 60),
+      confirmations: '1',
+    },
+    [`/transaction/${OLD_A}`]: {
+      id: OLD_A,
+      inputs: [{ input_type: 'Utxo', utxo: { type: 'Transfer', destination: OTHER, value: { type: 'Coin', amount: { atoms: '800' } } } }],
+      outputs: [{ type: 'Transfer', destination: 'mtc1qold', value: { type: 'Coin', amount: { atoms: '800' } } }],
+      fee: { atoms: '0' },
+      block_id: 'bb'.repeat(32),
+      timestamp: String(now - 300),
+      confirmations: '5',
+    },
+    [`/transaction/${OLD_B}`]: {
+      id: OLD_B,
+      inputs: [{ input_type: 'Utxo', utxo: { type: 'Transfer', destination: OTHER, value: { type: 'Coin', amount: { atoms: '900' } } } }],
+      outputs: [{ type: 'Transfer', destination: 'mtc1qold', value: { type: 'Coin', amount: { atoms: '900' } } }],
+      fee: { atoms: '0' },
+      block_id: 'aa'.repeat(32),
+      timestamp: String(now - 600),
+      confirmations: '9',
+    },
+    '/token/mmltkusdt2': { token_ticker: 'USDT2', number_of_decimals: 6 },
+  });
+  const mergeActivity = new ActivityService({
+    ml: {
+      client: mergeClient,
+      addresses: async () => ['mtc1qme2', 'mtc1qold'],
+      tokenMeta: (tokenId) =>
+        mergeClient.token(tokenId).then((info) => ({ ticker: info.ticker, decimals: info.decimals })),
+    },
+    maxLookups: 2,
+  });
+  const mergeEntries = await mergeActivity.entries(10, now);
+  // Rank 0 of every address precedes rank 1 of any: the capped lookups
+  // cover the token receive on the second address, mapped through the
+  // metadata decimals ('2.5' at 6 decimals).
+  assert.deepEqual(mergeEntries.map((entry) => entry.id), [TOKEN_TX, OLD_A]);
+  assert.deepEqual([mergeEntries[0].amountDecimal, mergeEntries[0].symbol], ['2.5', 'USDT2']);
 
   // relativeTime shapes.
   assert.equal(relativeTime(null, now), 'now');

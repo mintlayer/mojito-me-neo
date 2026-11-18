@@ -76,6 +76,31 @@ async function main() {
     assert.deepEqual(await manager.allAddresses('ml'), ['ml-0-0', 'ml-0-1', 'ml-0-2']);
   }
 
+  // A rejected scan must stay retryable: the failed probe keeps the scan
+  // uncached, so the next call re-runs it and succeeds.
+  {
+    const store = memoryStore();
+    let attempts = 0;
+    const manager = createAddressManager({
+      network: NETWORK,
+      load: store.load,
+      save: store.save,
+      derive: { ml: deriver('ml'), btc: deriver('btc') },
+      probe: {
+        ml: async (address) => {
+          attempts += 1;
+          if (attempts === 1) throw new Error('transient probe failure');
+          return address === 'ml-0-0';
+        },
+      },
+    });
+    await assert.rejects(() => manager.ensureScanned('ml'), /transient probe failure/);
+    await manager.ensureScanned('ml');
+    // The failed attempt plus a full gap scan from address 0.
+    assert.equal(attempts, 2 + GAP_LIMIT);
+    assert.equal(await manager.currentReceivingAddress('ml'), 'ml-0-1');
+  }
+
   // Change bookkeeping derives branch 1 and advances its own counter.
   {
     const store = memoryStore();

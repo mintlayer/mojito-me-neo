@@ -222,7 +222,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs twenty-two things:
+`npm run check` runs twenty-three things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -239,32 +239,34 @@ npx tsx src/theme.test.ts
 6. **`src/data/btc/btcChainService.test.ts`**: the Esplora-shaped BTC client: balances,
    UTXOs, transaction parsing, address stats and retries against scripted responses.
 7. **`src/data/addresses/addressManager.test.ts`**: gap scan bounds, fresh-address
-   monotonicity, persistence and the no-probe degradation.
-8. **`src/data/activity/activityService.test.ts`**: portfolio aggregation, ML/BTC activity
+   monotonicity, persistence, the no-probe degradation and scan retry after a failure.
+8. **`src/storage/addressStore.test.ts`**: persisted derivation indexes: corrupt JSON drops
+   the state instead of wedging address calls, invalid entries drop on load.
+9. **`src/data/activity/activityService.test.ts`**: portfolio aggregation, ML/BTC activity
    direction mapping, NFT identification and the 404 tolerances.
-9. **`src/data/real/realWalletData.test.ts`**: the real-mode home bundle over a scripted
+10. **`src/data/real/realWalletData.test.ts`**: the real-mode home bundle over a scripted
    fetch: BTC sums across derived addresses and tolerates the two-key Esplora balance body.
-10. **`src/storage/secureStore.test.ts`**: memory SecureStore self-check (roundtrip, wrong key and
+11. **`src/storage/secureStore.test.ts`**: memory SecureStore self-check (roundtrip, wrong key and
    tamper rejection, wipe). The native path is exercised on dev builds.
-11. **`src/storage/walletVault.test.ts`**: seal, meta-only read, open and wipe of the phrase vault.
-12. **`src/storage/pinStore.test.ts`**: PIN set/verify, attempt bookkeeping, escalating lockout
+12. **`src/storage/walletVault.test.ts`**: seal, meta-only read, open and wipe of the phrase vault.
+13. **`src/storage/pinStore.test.ts`**: PIN set/verify, attempt bookkeeping, escalating lockout
    with persistence, unset-vs-wrong, wipe.
-13. **`src/storage/appSettings.test.ts`**: the plain security toggles roundtrip.
-14. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour, plus
+14. **`src/storage/appSettings.test.ts`**: the plain security toggles roundtrip.
+15. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour, plus
    the real-mode construction seams.
-15. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+16. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
    NFKD normalization, wordlist integrity, supplied-entropy generation.
-16. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+17. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
    blobs, receiving blobs and addresses, plus the custom-path scan.
-17. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+18. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
    account paths.
-18. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+19. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
    release semantics, xpub parity.
-19. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+20. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
     modules (keys, storage, data, onboarding).
-20. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-21. **`tsc --noEmit`**: strict TypeScript.
-22. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+21. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+22. **`tsc --noEmit`**: strict TypeScript.
+23. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
