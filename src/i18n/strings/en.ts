@@ -209,6 +209,8 @@ export const en = {
   'dex.order.ambiguousTicker': 'Several tokens share this ticker. Pick the exact token id to trade.',
   'dex.order.typeUnsupported': 'Only limit orders are supported right now. Switch back to Limit to place an order.',
   'dex.order.busy': 'The previous order action is still running. Wait for it to finish.',
+  'dex.order.rejected': 'The order action was refused before anything was sent. Check the amount and the order state, then retry.',
+  'dex.order.working': 'Working',
   'dex.orders.empty': 'No orders of yours yet. Placed orders show up here.',
   'dex.dev.demoBanner': 'Demo DEX: this order is simulated in this build, not a chain order.',
   'dex.fill.cta': 'Fill order',

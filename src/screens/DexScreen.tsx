@@ -457,7 +457,7 @@ export function DexScreen() {
           </Txt>
         )}
         <Btn tone={side === 'buy' ? 'green' : 'red'} className="mt-4" disabled={placing} onPress={() => void placeOrder()}>
-          {placing ? t('swap.state.pending') : t('dex.order.place')}
+          {placing ? t('dex.order.working') : t('dex.order.place')}
         </Btn>
       </Sheet>
 
@@ -478,7 +478,7 @@ export function DexScreen() {
               </Txt>
             )}
             <Btn tone="green" className="mt-4" disabled={placing} onPress={() => void runFill()}>
-              {placing ? t('swap.state.pending') : t('dex.fill.cta')}
+              {placing ? t('dex.order.working') : t('dex.fill.cta')}
             </Btn>
           </>
         )}
@@ -488,7 +488,9 @@ export function DexScreen() {
 }
 
 /** Order flow failures to screen copy (device-pending and config-pending
- *  stay explicit: nothing reads as sent when it was not). */
+ *  stay explicit: nothing reads as sent when it was not). Generic order
+ *  rejections (malformed fill amounts, non-computable legs, zero payout)
+ *  get their own copy: the book-unreachable line misstates the failure. */
 function orderErrorCopy(e: unknown): string {
   if (isBindingsUnavailable(e)) return t('dex.order.signingPending');
   const record = e as { reason?: string } | null;
@@ -500,7 +502,7 @@ function orderErrorCopy(e: unknown): string {
     if (record.reason === 'slippage') return t('errors.orders.slippage');
     if (record.reason === 'busy') return t('dex.order.busy');
   }
-  return t('dex.book.error');
+  return t('dex.order.rejected');
 }
 
 function MyOrderRow({ order, usdtDecimals, onDone, onError, onFill }: { order: OrderData; usdtDecimals: number; onDone: () => void; onError: (message: string) => void; onFill: (order: OrderData) => void }) {
