@@ -45,7 +45,8 @@ async function main() {
     const btc = await mock.broadcastBtc(SIGNED_HEX);
     assert.match(ml.txId, /^[0-9a-f]{64}$/);
     assert.match(btc.txId, /^[0-9a-f]{64}$/);
-    assert.equal(ml.txId, ml.txId, 'deterministic per payload');
+    const mlAgain = await mock.broadcastMl(SIGNED_HEX);
+    assert.equal(mlAgain.txId, ml.txId, 'deterministic per payload');
     const fixture = createFixtureBroadcastProvider();
     assert.equal((await fixture.broadcastMl(SIGNED_HEX)).txId, ml.txId, 'mock mode rides the fixture provider');
     assert.deepEqual(await mock.getMlStatus(ml.txId), { state: 'pending' });

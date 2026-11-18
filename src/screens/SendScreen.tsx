@@ -235,15 +235,20 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       leg === undefined
         ? undefined
         : chain === 'btc'
-          ? t('send.fee.rateBtc', { rate: leg.satPerVbyte ?? '' })
-          : t('send.fee.rate', { rate: leg.rateAtomsPerKb ?? '' });
+          ? leg.satPerVbyte !== undefined
+            ? t('send.fee.rateBtc', { rate: leg.satPerVbyte })
+            : undefined
+          : leg.rateAtomsPerKb !== undefined
+            ? t('send.fee.rate', { rate: leg.rateAtomsPerKb })
+            : undefined;
+    const etaKey = (chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + feeTier;
     const total = leg !== undefined ? reviewTotal(amount, leg.feeDecimal, decimals, isTokenSend(chain, token.tokenId)) : amount;
     const totalText = `${total} ${token.sym}`;
     const rows: [string, React.ReactNode][] = [
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{truncateMiddle(address, 14, 10)}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
       [t('common.networkFee'), feeText],
-      [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(`send.fee.eta.${feeTier}` as I18nKey)}</Txt>],
+      [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(etaKey as I18nKey)}</Txt>],
     ];
     if (rateText !== undefined) rows.push([t('send.fee.rate'), rateText]);
     rows.push([t('common.total'), totalText]);
@@ -442,7 +447,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
                   {t(`send.fee.${k}` as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text2 mt-0.5">
-                  {t(`send.fee.eta.${k}` as I18nKey)}
+                  {t(((chain === 'btc' ? 'send.fee.eta.' : 'send.fee.eta.ml.') + k) as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
                   {leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable')}
