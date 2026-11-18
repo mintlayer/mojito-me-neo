@@ -19,6 +19,36 @@
 //   MOJITO_AMOUNT_BTC     amount in BTC (default 0.00005)
 //
 // Exit codes: 0 success, 2 config pending (btc base), 3 unfunded, 1 failure.
+//
+// ── M4 scripted atomic swap counterparty (spec M4 acceptance) ────────────
+// The BTC side of the ML<->BTC HTLC swap demo runs OUTSIDE the wallet in v1
+// (custom BTC HTLC script construction is unproven in-repo; see
+// missing-architecture gap 2). The scripted counterparty flow, with the
+// shorter-timelock rule enforced by the app's UI guards
+// (src/trade/priceGuards.checkTimelockRule, TIMELOCK_RULE in
+// src/trade/htlc.ts), is:
+//   1. INITIATOR (app, real mode): generate the 32-byte preimage with the
+//      native secure random, share ONLY SHA-256(preimage) off-band, lock ML
+//      via src/trade/htlc.ts initiate() with refund_timelock = 48h
+//      (172800s) and the counterparty's spend address/pubkey.
+//   2. COUNTERPARTY (this script, external tooling): build and broadcast a
+//      BTC HTLC paying the same SHA-256 hash with a SHORTER timelock
+//      (24h = 86400s; the guard refuses any offer where
+//      btcSeconds * 2 > mlSeconds). The lock script is a prebuilt
+//      transaction generated with external Bitcoin tooling - the demo never
+//      fabricates one in-app.
+//   3. INITIATOR: claim the BTC HTLC by revealing the preimage in the
+//      witness (the secret becomes public on Bitcoin).
+//   4. COUNTERPARTY: read the preimage from the BTC claim (btc-api
+//      GET tx/:txid/hex plus witness script parse), then claim the
+//      Mintlayer HTLC via src/trade/htlc.ts claim() with the revealed
+//      secret; extractSecret() round-trips the raw claim bytes through the
+//      bindings extraction.
+//   5. REFUND: if the counterparty never locks, the initiator reclaims via
+//      htlc.refund() after the ML timelock expiry (the flow refuses typed
+//      with not-expired before it).
+// The sessions survive restarts via src/trade/swapSession.ts (secret hash
+// only; the preimage stays in memory, hence the keep-open warning).
 
 const btcBase = process.env.MOJITO_BTC_BASE?.replace(/\/+$/, '') ?? null;
 const phrase = process.env.MOJITO_PHRASE ?? 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';

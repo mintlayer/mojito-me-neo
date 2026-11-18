@@ -11,9 +11,18 @@ mobile app, rebuilt in React Native.
 
 ---
 
-## ⚠️ Project status · M3 (send and receive)
+## ⚠️ Project status · M4 (trade)
 
-**This repository is the send milestone: everything M2 shipped (keys, vault, live chain data) plus the three-step send flow on real builders, BTC signing and broadcast end-to-end on pure-TypeScript scure, the tracked pending to confirmed lifecycle and fresh-address rotation. ML broadcasting still waits on infrastructure, so a mainnet ML send prepares and signs but honestly refuses to broadcast.**
+**This repository is the trade milestone: everything M3 shipped (keys, vault, live chain data, the send pipeline) plus the three trade surfaces wired to real infrastructure where it exists - the DEX runs the live on-chain order book with order create/fill/conclude flows, the swap screen drives the ML-side HTLC session machine with persisted sessions, and the bridge reads the bridge_v2 api-server (M2E quotes, fees, status; the treasury deposit address). Signing still rides the device-pending bindings seam and ML broadcasting waits on infrastructure, so every trade action lands in an honest state instead of a fabricated success.**
+
+Real in M4:
+
+- **Order book**: Dex depth rows come from GET /order/pair/{base}_{quote}/book with keyset cursor pagination and an invalid-cursor page-1 restart; stale and error states are explicit, never fixture rows in real mode.
+- **Orders**: place (confirm sheet with the exact amounts and a slippage guard against the book mid), fill and conclude run the bindings order encoders with the F11 witness mix (no-signature on the order input, signed payer inputs); ids extract through the bindings on the create tx output.
+- **Atomic swap**: the ML-side HTLC flow (lock, claim, refund, secret extraction) per the docs guide; sessions persist across restarts with the secret hash only (the preimage never persists and never logs; the keep-open warning explains what is at stake). The BTC counterparty leg is the scripted demo (see scripts/e2e-testnet.mjs) with the shorter-timelock rule enforced by UI guards.
+- **Bridge**: quotes and status ride the bridge_v2 api-server per R5 (per-token fees per direction, the Mintlayer treasury deposit address, m2e deposit confirmations); E2M stays disabled with explanatory copy (no EVM signer, scoped decision open). M2E initiation is honestly gated until the deposit intent encoder and the ML submission route exist. The EVM demo fixtures (Arbitrum, Polygon, BNB) are removed from the bridge chains and pickers in this milestone.
+
+M3 (still accurate): BTC sends are end-to-end real on scure against the configured btc-api base; ML sends prepare and sign over the bindings interface but honestly refuse to broadcast (R3, action item A1); the send lifecycle tracks pending to confirmed with fresh-address rotation.
 
 Real since M1, with vector-backed tests:
 
@@ -56,7 +65,7 @@ Do not point this at real funds you cannot afford to lose, and do not treat any 
 |---|---|
 | **Onboarding** | Welcome · Secure (biometric) · PIN set/confirm · Seed reveal · Verify backup · Import phrase · Account discovery · Draw-your-own-entropy |
 | **Wallet** | Home (portfolio, balance chart, activity) · DEX (order book + ticket) |
-| **Trade** | Atomic Swap (HTLC) · Bridge (Mintlayer ⇄ EVM) · Mojito Card waitlist |
+| **Trade** | Atomic Swap (HTLC sessions) · Bridge (Mintlayer ⇄ Ethereum) · Mojito Card waitlist |
 | **Flows** | Send (3-step) · Receive (QR) · Settings |
 | **App** | Splash · Unlock (biometric + PIN with lockout) |
 
@@ -232,7 +241,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs thirty things:
+`npm run check` runs thirty-six things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
