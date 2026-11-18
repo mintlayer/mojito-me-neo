@@ -83,7 +83,16 @@ export type SendQuoteLeg = {
 
 export type SendQuote = Record<FeeTierId, SendQuoteLeg>;
 
-export type SendResult = { txId: string; kind: 'ml' | 'btc'; /** True when the id comes from the mock broadcaster (R3 demo path). */ demo: boolean };
+export type SendResult = {
+  txId: string;
+  kind: 'ml' | 'btc';
+  /** True when the id comes from the mock broadcaster (R3 demo path). */
+  demo: boolean;
+  /** True when the broadcast succeeded but post-send bookkeeping (activity
+   *  tracking or fresh-address rotation) failed locally: the transaction is
+   *  on the network, so this must never read as a failed send. */
+  warning?: boolean;
+};
 
 /** The send seam screens consume (real in real mode, mock demo otherwise). */
 export interface SendService {
@@ -91,7 +100,10 @@ export interface SendService {
   quoteMl(params: { to: string; amountDecimal: string; decimals: number; tokenId?: string }): Promise<SendQuote>;
   sendMl(params: { to: string; amountDecimal: string; decimals: number; tier: FeeTierId; tokenId?: string }): Promise<SendResult>;
   quoteBtc(params: { to: string; amountDecimal: string }): Promise<SendQuote>;
-  sendBtc(params: { to: string; amountDecimal: string; tier: FeeTierId }): Promise<SendResult>;
+  /** satPerVbyte pins the reviewed rate: the send re-checks the live
+   *  estimate and refuses typed when it rose past what the user reviewed,
+   *  so the signed fee is the reviewed fee (or the send fails safe). */
+  sendBtc(params: { to: string; amountDecimal: string; tier: FeeTierId; satPerVbyte?: string; rateIsFallback?: boolean }): Promise<SendResult>;
 }
 
 // Profile

@@ -39,6 +39,8 @@ type Harness = {
   broadcastHexes: string[];
   gateBroadcast: () => void;
   releaseBroadcast: () => void;
+  scriptBroadcastAnswer: (txId: string) => void;
+  breakBookkeeping: () => void;
 };
 
 /** One real send service over an in-memory store, a scripted BTC client and
@@ -89,6 +91,8 @@ async function harness(opts?: {
   };
   let holdBroadcast = false;
   let releaseFn: (() => void) | null = null;
+  let scriptedAnswer: string | null = null;
+  let bookkeepingBroken = false;
   const broadcastHexes: string[] = [];
   const provider: BroadcastProvider = {
     async broadcastMl() {
@@ -98,7 +102,7 @@ async function harness(opts?: {
       broadcastHexes.push(hex);
       if (holdBroadcast) await new Promise<void>((resolve) => { releaseFn = resolve; });
       const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(hex, 'hex')));
-      return { txId: parsed.id };
+      return { txId: scriptedAnswer ?? parsed.id };
     },
     async getMlStatus() {
       return { state: 'pending' };
@@ -107,7 +111,15 @@ async function harness(opts?: {
       return { state: 'pending' };
     },
   };
-  const tracker = new TxTracker(provider, { timers: { set: () => 0, clear: () => {} } });
+  const realTracker = new TxTracker(provider, { timers: { set: () => 0, clear: () => {} } });
+  const tracker = {
+    track: (tx: { id: string; chain: 'ml' | 'btc' }) => {
+      if (bookkeepingBroken) throw new Error('storage unavailable');
+      return realTracker.track(tx);
+    },
+    get: realTracker.get.bind(realTracker),
+    subscribe: realTracker.subscribe.bind(realTracker),
+  } as unknown as TxTracker;
   const seed = mnemonicToSeedSync(VECTOR_12);
   const send = createRealSend({
     context,
@@ -133,6 +145,12 @@ async function harness(opts?: {
       releaseFn = null;
       holdBroadcast = false;
       if (fn !== null) fn();
+    },
+    scriptBroadcastAnswer: (txId) => {
+      scriptedAnswer = txId;
+    },
+    breakBookkeeping: () => {
+      bookkeepingBroken = true;
     },
   };
 }
@@ -191,6 +209,67 @@ async function main() {
     assert.equal(h.btcIndexes().receiving, 1, 'the refused send left the counters untouched');
     assert.equal(h.btcIndexes().change, 1, 'exactly one change allocation happened');
     assert.match(done.txId, /^[0-9a-f]{64}$/);
+  }
+
+  // 3. The broadcast answer must match the locally computed id: a lying
+  //    backend answer is a typed rejection and never reaches the tracker.
+  {
+    const recv0 = await btcAddressAt({ xpub: xpub12, network: 'mainnet' }, 0, 0);
+    const h = await harness({ funded: { [recv0]: [utxo(TXID_A, 0, '100000')] } });
+    h.scriptBroadcastAnswer('c'.repeat(64));
+    await assert.rejects(
+      () => h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard' }),
+      (e: unknown) => e instanceof SendError && e.kind === 'txid-mismatch',
+      'a mismatched broadcast answer is a typed rejection',
+    );
+    assert.equal(h.btcIndexes().receiving, 0, 'no rotation happened for the rejected send');
+  }
+
+  // 4. Fee pinning: the reviewed rate signs; a fresh estimate above it
+  //    refuses typed (ask the user to re-review), at or below it proceeds
+  //    with the pinned rate so the signed fee is the reviewed fee.
+  {
+    const recv0 = await btcAddressAt({ xpub: xpub12, network: 'mainnet' }, 0, 0);
+    const h = await harness({ funded: { [recv0]: [utxo(TXID_A, 0, '100000')] }, feeEstimates: { '6': 3, '3': 5, '1': 8 } });
+    await assert.rejects(
+      () => h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard', satPerVbyte: '4' }),
+      (e: unknown) => e instanceof SendError && e.kind === 'stale-fee',
+      'fresh 5 sat/vB is above the reviewed 4: fail safe, re-review',
+    );
+    assert.equal(h.btcIndexes().change, 0, 'the refused send allocated nothing');
+    const done = await h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard', satPerVbyte: '5' });
+    assert.match(done.txId, /^[0-9a-f]{64}$/);
+    const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(h.broadcastHexes.at(-1) ?? '', 'hex')));
+    const leg = [0, 1].map((i) => parsed.getOutput(i)?.amount ?? 0n);
+    const outputs = leg[0] + leg[1];
+    const inputs = 100000n;
+    assert.equal(inputs - outputs, BigInt(parsed.vsize) * 5n, 'the signed fee uses the pinned reviewed rate');
+  }
+
+  // 5. A quote is read-only on the change bookkeeping: repeated quotes never
+  //    advance or persist the branch 1 index, and one send allocates once.
+  {
+    const recv0 = await btcAddressAt({ xpub: xpub12, network: 'mainnet' }, 0, 0);
+    const h = await harness({ btcIndexes: { receiving: 0, change: 0 }, funded: { [recv0]: [utxo(TXID_A, 0, '100000')] } });
+    await h.send.quoteBtc({ to: recipient, amountDecimal: '0.0001' });
+    await h.send.quoteBtc({ to: recipient, amountDecimal: '0.0002' });
+    await h.send.quoteBtc({ to: recipient, amountDecimal: '0.0003' });
+    assert.deepEqual(h.btcIndexes(), { receiving: 0, change: 0 }, 'quotes never touch the indexes');
+    await h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard' });
+    assert.deepEqual(h.btcIndexes(), { receiving: 1, change: 1 }, 'exactly one send-time allocation');
+  }
+
+  // 6. Post-broadcast storage failure: the transaction is on the network,
+  //    so a tracker or rotation failure returns success with a warning and
+  //    the rotation state stays untouched.
+  {
+    const recv0 = await btcAddressAt({ xpub: xpub12, network: 'mainnet' }, 0, 0);
+    const h = await harness({ funded: { [recv0]: [utxo(TXID_A, 0, '100000')] } });
+    h.breakBookkeeping();
+    const result = await h.send.sendBtc({ to: recipient, amountDecimal: '0.0001', tier: 'standard' });
+    assert.equal(result.warning, true, 'broadcast tx reads as success with a warning');
+    assert.match(result.txId, /^[0-9a-f]{64}$/);
+    assert.deepEqual(h.btcIndexes(), { receiving: 0, change: 1 }, 'rotation failed before persisting');
   }
 
   console.log('realSend.test: ok');

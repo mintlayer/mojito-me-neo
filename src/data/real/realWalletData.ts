@@ -18,7 +18,7 @@ import { IndexerError } from '../ml/IndexerClient';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
 import type { AccountServices, RealAccountContext, RealAccountConfig } from './account';
 import {
-  CHAIN_GLYPH, CONTACTS, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
+  CHAIN_GLYPH, DAPPS, FEES, HTLC_STEPS, MARKET, RANGES, SWAP_STATS,
   TIMEFRAMES, WAITLIST, ASKS, BIDS, BRIDGE_CHAINS, BRIDGE_QUOTE, BRIDGE_ROUTE,
 } from '../../data';
 import { truncateMiddle } from '../../ui/format';
@@ -217,7 +217,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
     getCardFeatures: async () => fixtureData.getCardFeatures(),
     getCardTiers: async () => fixtureData.getCardTiers(),
     getFees: async () => FEES,
-    getContacts: async () => [...CONTACTS],
+    getContacts: async () => [], // contacts are a mock-only affordance (M3 spec moves them past v2); real mode ships none
     getAddresses: async () => {
       const acct = await ensureAccount();
       const [ml, btc] = await Promise.all([

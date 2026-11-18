@@ -114,6 +114,10 @@ async function main() {
     assert.equal(await manager.allocateChangeAddress('ml'), 'ml-1-1');
     assert.deepEqual(await manager.allAddresses('ml'), ['ml-0-0', 'ml-1-0', 'ml-1-1']);
     assert.deepEqual(store.read()[NETWORK]?.ml, { receiving: 0, change: 2 });
+    // peekChangeAddress previews without advancing or persisting (quotes).
+    assert.equal(await manager.peekChangeAddress('ml'), 'ml-1-2');
+    assert.equal(await manager.peekChangeAddress('ml'), 'ml-1-2', 'peek is stable');
+    assert.deepEqual(store.read()[NETWORK]?.ml, { receiving: 0, change: 2 }, 'peek did not persist');
   }
 
   // Chains are independent and the state is per network.

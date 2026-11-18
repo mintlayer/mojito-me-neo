@@ -16,12 +16,12 @@ import { MlTxBuilder, type MlPlanResult } from '../../send/MlTxBuilder';
 import type { MlUtxo } from '../ml/types';
 import { IndexerError } from '../ml/IndexerClient';
 import { MlTxSigner } from '../../send/MlTxSigner';
-import { BtcTxBuilder } from '../../send/BtcTxBuilder';
+import { BtcTxBuilder, parsePinnedRate, type BtcPinnedRate } from '../../send/BtcTxBuilder';
 import { SendError } from '../../send/errors';
 import { validateAddress, parseSendAmount } from '../../send/validation';
 import { TxTracker } from '../../send/TxTracker';
 import type { KeySession } from '../../keys/session';
-import type { BroadcastProvider, FeeTierId, SendQuote, SendService } from '../providers/types';
+import type { BroadcastProvider, FeeTierId, SendQuote, SendResult, SendService } from '../providers/types';
 import { BroadcastError } from '../providers/BroadcastProvider';
 import type { MintlayerBindings } from '../../../modules/mojito-core';
 import { ML_DECIMALS, atomsToDecimal } from '../../money';
@@ -75,6 +75,24 @@ export function createRealSend(cfg: RealSendConfig): SendService {
     return fn().finally(() => {
       inFlight = false;
     });
+  }
+
+  /** Post-broadcast contract: verify the network answer against the locally
+   *  computed id (a lying backend must not poison the tracker), track the
+   *  local id, then rotate. The transaction is on the network at this
+   *  point, so a storage failure in bookkeeping surfaces as success with a
+   *  warning, never as a failed send inviting a retry. */
+  async function finishSend(kind: 'ml' | 'btc', answeredTxId: string, localTxId: string, rotate: () => Promise<void>): Promise<SendResult> {
+    if (answeredTxId.toLowerCase() !== localTxId.toLowerCase()) {
+      throw new SendError('txid-mismatch', `broadcast answered ${answeredTxId}, locally signed ${localTxId}`);
+    }
+    try {
+      tracker.track({ id: localTxId, chain: kind });
+      await rotate();
+    } catch {
+      return { txId: localTxId, kind, demo: false, warning: true };
+    }
+    return { txId: localTxId, kind, demo: false };
   }
 
   /** Public xpubs, derived once per service instance (public material,
@@ -172,11 +190,11 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         } catch (e) {
           throw mapBroadcastError(e);
         }
-        // Fresh-address policy (AddressManager): every outbound transaction
-        // advances the receiving index; the next Receive visit shows it.
-        await acct.manager.freshReceivingAddress('ml');
-        tracker.track({ id: result.txId, chain: 'ml' });
-        return { txId: result.txId, kind: 'ml', demo: false };
+        // The unsigned tx id survives signing (witnesses are separate), so
+        // it is the locally computed id the broadcast answer must match.
+        return finishSend('ml', result.txId, unsigned.txId, async () => {
+          await acct.manager.freshReceivingAddress('ml');
+        });
       });
     },
 
@@ -186,12 +204,12 @@ export function createRealSend(cfg: RealSendConfig): SendService {
       const amountSat = BigInt(amount.atoms);
       const acct = await context.ensureAccount();
       if (acct.btc === null) throw new SendError('broadcast-disabled', 'no btc-api base is configured');
-      // A quote reads the full managed address list so its fee preview
-      // matches what sendBtc will select; the change bookkeeping is only
-      // mutated by sendBtc (the quote previews on the next branch 1
-      // address once peekChangeAddress lands with the quote purity fix).
+      // A quote never mutates the change bookkeeping: it previews on the
+      // next branch 1 address without advancing or persisting the index.
+      // Allocation happens exactly once, inside sendBtc's serialized
+      // section, so the reviewed change address is the sent one.
       const fromAddresses = await acct.manager.allAddresses('btc');
-      const changeAddress = await acct.manager.allocateChangeAddress('btc');
+      const changeAddress = await acct.manager.peekChangeAddress('btc');
       const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
       const { btcXpub } = await publicXpubs();
       const tiers: FeeTierId[] = ['economy', 'standard', 'fast'];
@@ -218,6 +236,20 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         if (!amount.ok) throw new SendError('rejected', amount.error === 'tooManyDecimals' ? 'too many decimals' : 'amount not parseable');
         const acct = await context.ensureAccount();
         if (acct.btc === null) throw new SendError('broadcast-disabled', 'no btc-api base is configured');
+        // Fee pinning: the reviewed rate signs, the live rate guards. A
+        // fresh estimate above the reviewed one refuses typed (fail safe:
+        // never pay more than reviewed); at or below it the pinned rate
+        // keeps the signed fee equal to the reviewed plan.
+        const pinned: BtcPinnedRate | undefined =
+          params.satPerVbyte === undefined
+            ? undefined
+            : { satPerVbyte: params.satPerVbyte, isFallback: params.rateIsFallback ?? false };
+        if (pinned !== undefined) {
+          const fresh = await btcRateSource(params.tier);
+          if (BigInt(Math.ceil(fresh.satPerVbyte)) > BigInt(Math.ceil(parsePinnedRate(pinned.satPerVbyte)))) {
+            throw new SendError('stale-fee', `fee estimate moved from ${pinned.satPerVbyte} to ${fresh.satPerVbyte} sat/vB`);
+          }
+        }
         // Fund across every managed address: change from earlier sends sits
         // on branch 1 and older UTXOs on earlier receiving indexes, and the
         // builder signs each selected input with its own origin.
@@ -229,7 +261,15 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         const { btcXpub } = await publicXpubs();
         const signed = await withSession((session) =>
           session.withSeed((seed) =>
-            builder.buildAndSign({ seed, accountXpub: btcXpub, fromAddresses, to, amountSat: BigInt(amount.atoms), tier: params.tier }),
+            builder.buildAndSign({
+              seed,
+              accountXpub: btcXpub,
+              fromAddresses,
+              to,
+              amountSat: BigInt(amount.atoms),
+              tier: params.tier,
+              pinnedRate: pinned,
+            }),
           ),
         );
         let result: { txId: string };
@@ -238,9 +278,9 @@ export function createRealSend(cfg: RealSendConfig): SendService {
         } catch (e) {
           throw mapBroadcastError(e);
         }
-        await acct.manager.freshReceivingAddress('btc');
-        tracker.track({ id: result.txId, chain: 'btc' });
-        return { txId: result.txId, kind: 'btc', demo: false };
+        return finishSend('btc', result.txId, signed.txid, async () => {
+          await acct.manager.freshReceivingAddress('btc');
+        });
       });
     },
   };

@@ -33,6 +33,18 @@ export type BtcUtxoSource = Pick<BtcChainService, 'utxos'>;
 /** Rate source seam: tier to sat/vB, with the fallback flag. */
 export type BtcRateSource = (tier: FeeTierId) => Promise<{ satPerVbyte: number; fallback: boolean }>;
 
+/** A reviewed rate pinned into the signing call (fee pinning): when set it
+ *  replaces the live rate source so the signed fee is exactly the fee the
+ *  user reviewed, never a fresh (possibly higher) estimate. */
+export type BtcPinnedRate = { satPerVbyte: string; isFallback: boolean };
+
+/** Parse a pinned rate string into the positive number the estimator uses. */
+export function parsePinnedRate(satPerVbyte: string): number {
+  const rate = Number(satPerVbyte);
+  if (!Number.isFinite(rate) || rate <= 0) throw new SendError('rejected', 'reviewed fee rate is not a usable number');
+  return rate;
+}
+
 /** Standard-relay dust floor for a P2WPKH output (claim input weight times
  *  the 3 sat/vB relay rate, rounded up): 294 sat. Sending less would create
  *  an output full nodes refuse to relay. */
@@ -83,7 +95,14 @@ export class BtcTxBuilder {
   }
 
   /** Fee plan per tier for the current UTXO set (review screen). */
-  async plan(params: { accountXpub: string; fromAddresses: string[]; to: string; amountSat: bigint; tier: FeeTierId }): Promise<BtcFeePlan> {
+  async plan(params: {
+    accountXpub: string;
+    fromAddresses: string[];
+    to: string;
+    amountSat: bigint;
+    tier: FeeTierId;
+    pinnedRate?: BtcPinnedRate;
+  }): Promise<BtcFeePlan> {
     const { tx, inputSat, weight } = await this.buildUnsigned(params);
     const feeSat = tx.fee;
     return {
@@ -111,6 +130,7 @@ export class BtcTxBuilder {
     to: string;
     amountSat: bigint;
     tier: FeeTierId;
+    pinnedRate?: BtcPinnedRate;
   }): Promise<BtcSendResult> {
     const { tx, rate, fallback, inputOrigins } = await this.buildUnsigned(params);
     for (let index = 0; index < tx.inputsLength; index++) {
@@ -148,9 +168,17 @@ export class BtcTxBuilder {
     to: string;
     amountSat: bigint;
     tier: FeeTierId;
+    pinnedRate?: BtcPinnedRate;
   }): Promise<{ tx: Transaction; inputSat: bigint; weight: number; rate: bigint; fallback: boolean; inputOrigins: Map<string, WalletOrigin> }> {
     if (params.amountSat < BTC_DUST_SAT) throw new SendError('dust', `${params.amountSat} sat is below dust`);
-    const { satPerVbyte, fallback } = await this.opts.rateSource(params.tier);
+    let satPerVbyte: number;
+    let fallback: boolean;
+    if (params.pinnedRate !== undefined) {
+      satPerVbyte = parsePinnedRate(params.pinnedRate.satPerVbyte);
+      fallback = params.pinnedRate.isFallback;
+    } else {
+      ({ satPerVbyte, fallback } = await this.opts.rateSource(params.tier));
+    }
     if (!(satPerVbyte > 0) || !Number.isFinite(satPerVbyte)) {
       throw new SendError('broadcast-failed', 'fee rate source answered an unusable value');
     }

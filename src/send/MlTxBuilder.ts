@@ -106,6 +106,14 @@ function byAtomsDesc(a: SelectedMlInput, b: SelectedMlInput): number {
   return diff === 0n ? 0 : diff > 0n ? 1 : -1;
 }
 
+/** One planned output the estimator must model: a coin transfer or a token
+ *  transfer with its token id. Change legs ride the recipient address as a
+ *  stand-in (every wallet address is the same pubkeyhash variant, so the
+ *  encoded length is identical) and amounts encode as 0 per the estimator
+ *  seam's contract. Sizing must match build()'s output list exactly or the
+ *  implicit fee underbills the real transaction. */
+export type EstimatedMlOutput = { kind: 'coin' | 'token'; address: string; tokenId?: string };
+
 export type MlSelection = {
   selection: SelectedMlInput[];
   inputAtoms: string;
@@ -117,14 +125,16 @@ export type MlSelection = {
 /**
  * Grow the candidate set (value inputs first, then coin inputs for the fee
  * when a token is sent) until inputs cover send + fee, sizing honestly with
- * the change output present whenever a remainder survives. Throws the typed
+ * the real output list (recipient leg, token remainder leg when one
+ * survives, coin change leg when a remainder survives). Throws the typed
  * insufficient-funds error when the pools cannot cover the spend.
  */
 export async function selectMlInputs(opts: {
   utxos: MlUtxo[];
   sendAtoms: string;
+  to: string;
   tokenId: string | null;
-  sizeOf: (inputs: SelectedMlInput[], outputCount: number) => Promise<number>;
+  sizeOf: (inputs: SelectedMlInput[], outputs: EstimatedMlOutput[]) => Promise<number>;
   rateAtomsPerKb: string;
 }): Promise<MlSelection> {
   const valueKind = opts.tokenId === null ? 'coin' : 'token';
@@ -145,8 +155,29 @@ export async function selectMlInputs(opts: {
   pools.value.sort(byAtomsDesc);
   pools.fee.sort(byAtomsDesc);
 
+  /** The exact output list build() will emit for this selection: the
+   *  recipient leg, the token remainder as its own token transfer when the
+   *  indivisible token inputs overshoot the send, and the coin change when
+   *  a remainder survives. A token remainder modeled as a plain transfer
+   *  (or not at all) underbills the fee and the broadcast gets rejected. */
+  const plannedOutputs = (inputs: SelectedMlInput[], changePresent: boolean): EstimatedMlOutput[] => {
+    const outs: EstimatedMlOutput[] = [
+      valueKind === 'coin' ? { kind: 'coin', address: opts.to } : { kind: 'token', address: opts.to, tokenId: opts.tokenId ?? undefined },
+    ];
+    if (valueKind === 'token') {
+      const tokenSelected = inputs
+        .filter((input) => input.tokenId === opts.tokenId)
+        .reduce((acc, input) => acc + BigInt(input.atoms), 0n);
+      if (tokenSelected - BigInt(opts.sendAtoms) > 0n) {
+        outs.push({ kind: 'token', address: opts.to, tokenId: opts.tokenId ?? undefined });
+      }
+    }
+    if (changePresent) outs.push({ kind: 'coin', address: opts.to });
+    return outs;
+  };
+
   const sizeWithFee = async (inputs: SelectedMlInput[], changePresent: boolean): Promise<{ size: number; fee: string }> => {
-    const size = await opts.sizeOf(inputs, changePresent ? 2 : 1);
+    const size = await opts.sizeOf(inputs, plannedOutputs(inputs, changePresent));
     return { size, fee: mlFeeAtoms(size, opts.rateAtomsPerKb) };
   };
 
@@ -213,9 +244,10 @@ export class MlTxBuilder {
     const selection = await selectMlInputs({
       utxos,
       sendAtoms: params.amountAtoms,
+      to: params.to,
       tokenId: params.tokenId ?? null,
       rateAtomsPerKb,
-      sizeOf: (inputs, outputCount) => this.estimateSize(inputs, params.to, outputCount, params.tokenId ?? null),
+      sizeOf: (inputs, outputs) => this.estimateSize(inputs, outputs),
     });
     return {
       tier: params.tier,
@@ -295,10 +327,11 @@ export class MlTxBuilder {
     return lists;
   }
 
-  /** F8 sizing: one destination (the owning address) per input, plus the
-   *  destination output(s). The transfer encoders rebuild the exact output
-   *  shapes this builder produces. */
-  private async estimateSize(inputs: SelectedMlInput[], to: string, outputCount: number, tokenId: string | null): Promise<number> {
+  /** F8 sizing over the real output list: one destination (the owning
+   *  address) per input, then the planned outputs rebuilt through the same
+   *  encoders build() uses, so the token remainder bills as a token
+   *  transfer and the coin change as a transfer. */
+  private async estimateSize(inputs: SelectedMlInput[], outputs: EstimatedMlOutput[]): Promise<number> {
     const inputBytes: Uint8Array[] = [];
     const destinations: string[] = [];
     for (const selected of inputs) {
@@ -309,15 +342,14 @@ export class MlTxBuilder {
       inputBytes.push(await this.bindings.encodeInputForUtxo(outpointSource, selected.utxo.outpoint.index));
       destinations.push(selected.address);
     }
-    const outputs: Uint8Array[] = [];
-    if (tokenId === null) {
-      outputs.push(await this.bindings.encodeOutputTransfer('0', to, this.network));
-    } else {
-      outputs.push(await this.bindings.encodeOutputTokenTransfer(tokenId, '0', to, this.network));
+    const outputBytes: Uint8Array[] = [];
+    for (const out of outputs) {
+      outputBytes.push(
+        out.kind === 'coin'
+          ? await this.bindings.encodeOutputTransfer('0', out.address, this.network)
+          : await this.bindings.encodeOutputTokenTransfer(out.tokenId ?? '', '0', out.address, this.network),
+      );
     }
-    for (let i = 1; i < outputCount; i++) {
-      outputs.push(await this.bindings.encodeOutputTransfer('0', to, this.network));
-    }
-    return this.bindings.estimateTransactionSize(inputBytes, destinations, outputs, this.network);
+    return this.bindings.estimateTransactionSize(inputBytes, destinations, outputBytes, this.network);
   }
 }

@@ -111,33 +111,46 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
     [decimals],
   );
 
-  // Live per-tier quotes (debounced) whenever the details settle.
+  // Live per-tier quotes (debounced) while the details settle on step 0;
+  // the review entry re-quotes so the reviewed numbers are fresh (fee
+  // pinning reads this quote's BTC rate into the confirm call).
+  const loadQuote = useCallback(() => {
+    const load =
+      chain === 'btc'
+        ? send.quoteBtc({ to: address.trim(), amountDecimal: amount })
+        : send.quoteMl({ to: address.trim(), amountDecimal: amount, decimals, tokenId: token?.tokenId });
+    load
+      .then((q) => {
+        setQuote(q);
+        setQuoteError(null);
+      })
+      .catch((e: unknown) => {
+        setQuote(null);
+        setQuoteError(sendErrorCopy(e));
+      });
+  }, [address, amount, chain, decimals, token, send]);
+
   useEffect(() => {
-    if (step !== 0 || addressError !== null || amountError !== null || address === '' || amount === '') {
+    if (step !== 0) return undefined;
+    if (addressError !== null || amountError !== null || address === '' || amount === '') {
       setQuote(null);
       setQuoteError(null);
       return undefined;
     }
     if (quoteTimer.current !== null) clearTimeout(quoteTimer.current);
-    quoteTimer.current = setTimeout(() => {
-      const load =
-        chain === 'btc'
-          ? send.quoteBtc({ to: address.trim(), amountDecimal: amount })
-          : send.quoteMl({ to: address.trim(), amountDecimal: amount, decimals, tokenId: token?.tokenId });
-      load
-        .then((q) => {
-          setQuote(q);
-          setQuoteError(null);
-        })
-        .catch((e: unknown) => {
-          setQuote(null);
-          setQuoteError(sendErrorCopy(e));
-        });
-    }, 400);
+    quoteTimer.current = setTimeout(loadQuote, 400);
     return () => {
       if (quoteTimer.current !== null) clearTimeout(quoteTimer.current);
     };
-  }, [step, address, amount, addressError, amountError, chain, decimals, token, send]);
+  }, [step, address, amount, addressError, amountError, loadQuote]);
+
+  const openReview = useCallback(() => {
+    if (quoteTimer.current !== null) clearTimeout(quoteTimer.current);
+    setQuote(null);
+    setQuoteError(null);
+    loadQuote();
+    setStep(1);
+  }, [loadQuote]);
 
   const paste = async () => {
     try {
@@ -152,7 +165,14 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
     if (token === undefined || sending) return;
     setSending(true);
     setSendError(null);
-    const btcParams = { to: address.trim(), amountDecimal: amount, tier: feeTier };
+    const reviewed = quote?.[feeTier];
+    const btcParams = {
+      to: address.trim(),
+      amountDecimal: amount,
+      tier: feeTier,
+      satPerVbyte: reviewed?.satPerVbyte,
+      rateIsFallback: reviewed?.rateIsFallback,
+    };
     const mlParams = { to: address.trim(), amountDecimal: amount, decimals, tier: feeTier, tokenId: token.tokenId };
     const flow = chain === 'btc' ? send.sendBtc(btcParams) : send.sendMl(mlParams);
     flow
@@ -197,6 +217,11 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
         {result.demo ? (
           <Callout glyph="ⓘ" className="mt-3.5">
             <Txt className="text-[12px]">{t('home.demoData')}</Txt>
+          </Callout>
+        ) : null}
+        {result.warning ? (
+          <Callout tone={C.amber} glyph="!" className="mt-3.5">
+            <Txt className="text-[11.5px]">{t('send.success.warning')}</Txt>
           </Callout>
         ) : null}
       </SuccessScreen>
@@ -382,18 +407,22 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
           </Txt>
         ) : null}
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
-          {contacts.map((c) => (
-            <Pressable
-              key={c.name}
-              onPress={() => onAddressChange(c.address)}
-              className="flex-row items-center gap-2 px-3 py-2 rounded-full"
-              style={tile()}>
-              <Avatar letter={c.name[0]} size={22} radius={11} colors={G.avatar} />
-              <Txt className="text-[12px] font-medium">{c.name}</Txt>
-            </Pressable>
-          ))}
-        </ScrollView>
+        {/* Recipient chips are a mock-mode affordance only: the real-mode
+            contact list is empty until real contacts ship (M3 spec). */}
+        {contacts.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
+            {contacts.map((c) => (
+              <Pressable
+                key={c.name}
+                onPress={() => onAddressChange(c.address)}
+                className="flex-row items-center gap-2 px-3 py-2 rounded-full"
+                style={tile()}>
+                <Avatar letter={c.name[0]} size={22} radius={11} colors={G.avatar} />
+                <Txt className="text-[12px] font-medium">{c.name}</Txt>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
       </View>
 
       {/* Fee tier */}
@@ -436,7 +465,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       </View>
 
       <View className="px-6 pt-6">
-        <Btn tone="primary" disabled={!detailsReady} onPress={() => setStep(1)}>
+        <Btn tone="primary" disabled={!detailsReady} onPress={openReview}>
           {t('send.review.cta')}
         </Btn>
       </View>

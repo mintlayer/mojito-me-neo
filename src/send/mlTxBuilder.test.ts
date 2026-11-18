@@ -201,6 +201,9 @@ async function main() {
     });
     assert.equal(plan.selection.find((input) => input.tokenId === TOKEN_ID)?.atoms, atoms(5n), 'the whole indivisible token utxo is selected');
     assert.ok(plan.selection.some((input) => input.tokenId === null), 'a coin input pays the fee');
+    // Real output list (the fix over output-count sizing): token recipient
+    // + token remainder + coin change = 30*3 outputs, 2 destinations.
+    assert.equal(plan.sizeBytes, 80 + 40 * 2 + 30 * 3 + 2, 'token remainder bills as a token transfer output');
     const unsigned = await builder.build({ ...plan, to: toAddress, changeAddress });
     const decoded = parseOutputs(unsigned.transaction).text;
     assert.ok(decoded.includes(`K:${TOKEN_ID}:${atoms(2n)}:${toAddress}`), 'token transfer output present');
@@ -217,6 +220,7 @@ async function main() {
       selectMlInputs({
         utxos: [tokenAt],
         sendAtoms: atoms(1n),
+        to: toAddress,
         tokenId: TOKEN_ID,
         rateAtomsPerKb: '1000',
         sizeOf: async () => 181,

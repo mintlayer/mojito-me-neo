@@ -25,7 +25,9 @@ export type SendErrorKind =
   | 'timeout'
   | 'rejected'
   | 'bindings'
-  | 'busy';
+  | 'busy'
+  | 'txid-mismatch'
+  | 'stale-fee';
 
 /** Typed failure of one send pipeline step (plan, build, sign, broadcast). */
 export class SendError extends Error {
@@ -59,8 +61,36 @@ export function sendErrorCopy(e: unknown): string {
         return t('send.error.bindings');
       case 'busy':
         return t('send.error.busy');
+      case 'txid-mismatch':
+        return t('send.error.txidMismatch');
+      case 'stale-fee':
+        return t('send.error.feeChanged');
     }
   }
+  // The native facade rejects with a plain BindingsError object
+  // ({ kind, detail }, modules/mojito-core), never a class instance across
+  // the bridge, so the device-pending signing copy is mapped here by the
+  // documented kind set (no collision: the data-layer errors use
+  // transport/http/parse kinds, none of which appear in this set).
+  if (isBindingsErrorShape(e)) return t('send.error.bindings');
   // Chain read failures during planning keep the shared provider copy.
   return dataErrorCopy(e);
+}
+
+/** The BindingsError kind set (modules/mojito-core/mintlayer), duck-typed. */
+const BINDINGS_ERROR_KINDS = new Set([
+  'invalid-mnemonic',
+  'decoding',
+  'signing',
+  'sighash',
+  'address-parse',
+  'amount',
+  'orders-v1-not-activated',
+  'unknown',
+]);
+
+function isBindingsErrorShape(e: unknown): boolean {
+  if (typeof e !== 'object' || e === null) return false;
+  const record = e as { kind?: unknown; detail?: unknown };
+  return typeof record.kind === 'string' && BINDINGS_ERROR_KINDS.has(record.kind) && typeof record.detail === 'string';
 }

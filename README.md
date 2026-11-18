@@ -43,6 +43,8 @@ Still fixture-backed or deferred, deliberately:
 - **BTC device verification** is pending: balances and sends come from the configured btc-api deployment, and an end-to-end check against a funded device has not run yet.
 - **Testnet** ships typed-offline: no Mintlayer-operated testnet indexer URL is documented (action item A2), so nothing points at a guess. The E2E harness (`npx tsx scripts/e2e-testnet.mjs`) states this honestly and runs its BTC leg when a btc-api testnet base is provided.
 - The **vendored bindings call-through** (transaction assembly, signing, native encoders) still rejects; the artifacts are vendored and linked, the facades are real code that compiles on EAS, and the TS key paths above do not depend on the call-through. See the Storage section and `vendor/mintlayer/`.
+- **QR encoding** rides the battle-tested `react-native-qrcode-svg` library at error correction H: the spec's pure-TypeScript encoder deliverable (ECC M) was replaced deliberately, and the substitution is recorded in `plans/mojito-neo/decisions.md` (D14).
+- **Camera scanning** (the send screen's ScanSheet over expo-camera) ships with a later milestone: the QR button explains this honestly in an alert, and the deferral is recorded in `plans/mojito-neo/decisions.md` (D15).
 
 Do not point this at real funds you cannot afford to lose, and do not treat any screen here as a security control until the corresponding logic is implemented and audited.
 
@@ -230,7 +232,7 @@ npm run lint         # eslint only
 npx tsx src/theme.test.ts
 ```
 
-`npm run check` runs twenty-three things:
+`npm run check` runs twenty-nine things:
 
 1. **`src/theme.test.ts`**: asserts the oklch→sRGB conversion against the known sRGB primaries.
    Every colour in the app flows through it, so it's the one piece of non-trivial logic with a
@@ -261,20 +263,33 @@ npx tsx src/theme.test.ts
    with persistence, unset-vs-wrong, wipe.
 14. **`src/storage/appSettings.test.ts`**: the plain security toggles roundtrip.
 15. **`src/data/providers/providers.test.ts`**: provider mode switch and mock behaviour, plus
-   the real-mode construction seams.
-16. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
-   NFKD normalization, wordlist integrity, supplied-entropy generation.
-17. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
-   blobs, receiving blobs and addresses, plus the custom-path scan.
-18. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
-   account paths.
-19. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
-   release semantics, xpub parity.
-20. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
+    the real-mode construction seams.
+16. **`src/data/providers/broadcast.test.ts`**: the gap-3 broadcast provider: mock deterministic
+    ids, 403-to-disabled and transport-to-network mappings, BTC POST tx shape, status reads.
+17. **`src/keys/bip39.test.ts`**: published BIP39 seed vectors, checksum/word/length rejection,
+    NFKD normalization, wordlist integrity, supplied-entropy generation.
+18. **`src/keys/mlAccounts.test.ts`**: the bindings parity vectors (both networks) for account
+    blobs, receiving blobs and addresses, plus the custom-path scan.
+19. **`src/keys/BtcKeyring.test.ts`**: BIP84 zpub and address vectors, branch separation, custom
+    account paths.
+20. **`src/send/validation.test.ts`**: send address validation (mtc1/tmt1/bc1/tb1, wrong-network
+    detection, non-standard HRP rejection) and exact amount parsing against published vectors.
+21. **`src/send/mlTxBuilder.test.ts`**: the ML planner and assembler: selection determinism, the
+    implicit-fee invariant, token-remainder sizing on the real output list, signer loopback.
+22. **`src/send/btcTxBuilder.test.ts`**: the BTC builder: plan-fee equals signed-fee on the BIP84
+    vectors, multi-origin signing, confirmed-input policy, typed dust and insufficient funds.
+23. **`src/send/TxTracker.test.ts`**: the pending-to-confirmed lifecycle with injected timers:
+    poll cadence, attempt caps, terminal stop, flaky-read tolerance.
+24. **`src/data/real/realSend.test.ts`**: the real send service over an in-memory manager:
+    funding across every managed address with fresh branch 1 change, typed busy refusal,
+    broadcast-answer verification, fee pinning, quote purity, post-broadcast warning.
+25. **`src/keys/session.test.ts`**: KeySession closure isolation, zeroize of the seed buffer,
+    release semantics, xpub parity.
+26. **`scripts/no-console.ts`**: no `console.*` in the native facade or the secret-handling
     modules (keys, storage, data, onboarding).
-21. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
-22. **`tsc --noEmit`**: strict TypeScript.
-23. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
+27. **`scripts/no-em-dash.ts`**: no em or en dashes anywhere in code, specs or docs.
+28. **`tsc --noEmit`**: strict TypeScript.
+29. **`eslint .`**: `eslint-config-expo`, including the `react-hooks` rules.
 
 **There is no UI/component test suite yet.** Adding one (React Native Testing Library +
 `jest-expo`) is a welcome contribution: start with the onboarding flow, which holds the most
@@ -312,8 +327,8 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
    shows the "Unlock failed" alert.
 9. **Real QR scans to the correct address.** In real mode (`EXPO_PUBLIC_DATA_MODE=real`, mainnet,
    unlocked), open Receive on each chain segment and scan the code with a phone camera: it must
-   decode to exactly the address string shown under the QR. Mock mode keeps the decorative grid,
-   which is not scannable by design.
+   decode to exactly the address string shown under the QR. Mock mode renders the same scannable
+   library QR (both modes are scannable by design; the old decorative grid is gone).
 10. **BTC portfolio sums across used addresses.** With BTC held on a previously used address (so
    the current receiving address is fresh), the home BTC row shows the combined confirmed plus
    unconfirmed balance of every derived address, not zero.
@@ -324,6 +339,21 @@ The native auth gate cannot be exercised in Node; verify these by hand on a devi
 12. **Lock screen shows no data prompts behind it.** With auto-lock on, background the app and
     return: the unlock layer appears with no biometric prompt and no network data prompt firing
     behind it, and portfolio or address requests only start after unlock.
+13. **Second send spends the change.** In real mode on a funded wallet: after a first BTC send,
+    the wallet still shows the change balance, and a second send succeeds spending it (including
+    while the first send's change is still unconfirmed). The new change lands on a fresh address,
+    verifiable on the explorer link or by rescanning the seed outside the app.
+14. **Concurrent send refuses busy.** Start a send and, before it completes, start a second one
+    on the same account: the second attempt is refused with the send-in-progress copy and leaves
+    the balances and indexes untouched, and the first send completes cleanly.
+15. **Unconfirmed incoming is not spendable.** While an incoming BTC transaction sits in the
+    mempool, the balance counts it but a send drawing on it fails typed as insufficient funds;
+    after it confirms, the same send succeeds. (Own unconfirmed change is the documented
+    exception: it keeps back to back sends working.)
+16. **Fee rise asks for re-review.** On the review screen, confirm while the live fee estimate
+    has risen above the reviewed rate: the send refuses with the fee-changed copy and the flow
+    asks for a fresh review. At or below the reviewed rate, the signed fee is exactly the
+    reviewed fee.
 
 ---
 
@@ -388,7 +418,7 @@ import and verification steps.
 
 Mojito ME is pre-production: the key stack is real and vector-tested, but the bindings
 call-through, transaction sending and BTC device verification are still pending (see
-[Project status](#️-project-status--m2-chain-data)). Findings against mock chain data or the
+[Project status](#️-project-status--m3-send-and-receive)). Findings against mock chain data or the
 not-yet-wired bindings facades are out of scope and not eligible for a reward.
 
 The bounty becomes valid for this repository when it ships to production, at which point this

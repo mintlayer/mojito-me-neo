@@ -4,7 +4,7 @@
 //   tsx src/send/validation.test.ts
 import { strict as assert } from 'node:assert/strict';
 
-import { bech32m } from '@scure/base';
+import { bech32, bech32m } from '@scure/base';
 
 import { validateAddress, parseSendAmount, exceedsBalance } from './validation';
 
@@ -27,6 +27,13 @@ async function main() {
   assert.deepEqual(validateAddress(ML_TESTNET, 'ml', 'mainnet'), { kind: 'wrongNetwork', expected: 'testnet' });
   assert.deepEqual(validateAddress(BTC_MAINNET, 'btc', 'testnet'), { kind: 'wrongNetwork', expected: 'btc-mainnet' });
   assert.deepEqual(validateAddress(BTC_TESTNET, 'btc', 'mainnet'), { kind: 'wrongNetwork', expected: 'btc-testnet' });
+
+  // A P2WPKH-shaped address on a non-standard HRP (bcrt regtest and the
+  // like) is generic malformed: the copy must not claim a network this
+  // wallet cannot mean (sec#8).
+  const bcrt = bech32.encode('bcrt', bech32.toWords(new Uint8Array(20)));
+  assert.deepEqual(validateAddress(bcrt, 'btc', 'mainnet'), { kind: 'malformed' });
+  assert.deepEqual(validateAddress(bcrt, 'btc', 'testnet'), { kind: 'malformed' });
 
   // Wrong chain is distinct in both directions.
   assert.deepEqual(validateAddress(BTC_MAINNET, 'ml', 'mainnet'), { kind: 'wrongChain', expected: 'btc' });

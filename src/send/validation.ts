@@ -85,7 +85,13 @@ export function validateAddress(raw: string, chain: AddressChain, network: Netwo
   const btc = btcShape(text);
   if (btc !== null) {
     if (btc.prefix !== BTC_HRP[network]) {
-      return { kind: 'wrongNetwork', expected: btc.prefix === BTC_HRP.mainnet ? 'btc-mainnet' : 'btc-testnet' };
+      // Only the two documented BTC prefixes name a network in the copy; a
+      // non-standard P2WPKH-shaped HRP (bcrt regtest and the like) falls
+      // through to the generic malformed message instead of a wrong-network
+      // claim this wallet cannot mean.
+      const expected = btc.prefix === BTC_HRP.mainnet ? 'btc-mainnet' : btc.prefix === BTC_HRP.testnet ? 'btc-testnet' : null;
+      if (expected === null) return { kind: 'malformed' };
+      return { kind: 'wrongNetwork', expected };
     }
     return null;
   }

@@ -40,6 +40,9 @@ export interface AddressManager {
   currentReceivingAddress(chain: ManagedChain): Promise<string>;
   /** Next change address for send bookkeeping (consumed by M3). */
   allocateChangeAddress(chain: ManagedChain): Promise<string>;
+  /** The next change address without advancing or persisting (quotes:
+   *  a fee preview must not burn derivation indexes). */
+  peekChangeAddress(chain: ManagedChain): Promise<string>;
   /** Every known receiving (up to and including current) and change address. */
   allAddresses(chain: ManagedChain): Promise<string[]>;
 }
@@ -137,6 +140,11 @@ export function createAddressManager(opts: AddressManagerOptions): AddressManage
       const next = { ...indexes, change: indexes.change + 1 };
       chains[chain].indexes = next;
       await save(opts.network, chain, next);
+      return opts.derive[chain](1, indexes.change);
+    },
+
+    async peekChangeAddress(chain: ManagedChain): Promise<string> {
+      const indexes = await indexesOf(chain);
       return opts.derive[chain](1, indexes.change);
     },
 
