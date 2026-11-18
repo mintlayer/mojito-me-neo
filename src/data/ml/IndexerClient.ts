@@ -325,6 +325,17 @@ export class IndexerClient {
     return parseOrder(await this.request(`/order/${encodeURIComponent(id)}`));
   }
 
+  /** Open orders for one pair (GET /order/pair/{BASE}_{QUOTE}); sides are
+   *  the ML ticker or a raw token id, direction normalized upstream. */
+  async ordersByPair(base: string, quote: string): Promise<MlOrderInfo[]> {
+    const out: MlOrderInfo[] = [];
+    const path = `/order/pair/${encodeURIComponent(base)}_${encodeURIComponent(quote)}`;
+    await this.walkOffset(path, undefined, DEFAULT_PAGE_ITEMS, async (items) => {
+      for (const entry of items) out.push(parseOrder(entry));
+    });
+    return out;
+  }
+
   /** GET /nft/{id}; a 404 NFT not found (non-NFT id) resolves to null. */
   async nft(id: string): Promise<MlNftInfo | null> {
     try {
