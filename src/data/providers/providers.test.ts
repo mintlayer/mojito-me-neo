@@ -49,12 +49,25 @@ async function main() {
   assert.equal(typeof candles[0].o, 'string');
   assert.equal(typeof candles[0].v, 'string');
 
+  // M5 waitlist semantics (R4): one slot per install, idempotent rejoin of
+  // the address on file, duplicate refusal keeps the stored address, leave
+  // wipes. The store is sealed under the shared memory double in Node runs;
+  // leave() resets it for the later provider builds in this file.
   const joined = await providers.waitlist.join('user@example.com');
   assert.equal(joined.ok, true);
-  const duplicate = await providers.waitlist.join('user@example.com');
+  assert.ok(joined.ok && joined.position !== null, 'a fresh local join reports a position');
+  const rejoin = await providers.waitlist.join('USER@Example.com ');
+  assert.deepEqual(rejoin, { ok: true, position: null }, 'the same address rejoins idempotently with no new position');
+  const wlStatus = await providers.waitlist.status();
+  assert.equal(wlStatus.joined, true);
+  assert.equal(wlStatus.email, 'user@example.com');
+  const duplicate = await providers.waitlist.join('other@example.com');
   assert.deepEqual(duplicate, { ok: false, reason: 'duplicate' });
+  assert.equal((await providers.waitlist.status()).email, 'user@example.com', 'the stored address survives a duplicate refusal');
   const invalid = await providers.waitlist.join('not-an-email');
   assert.deepEqual(invalid, { ok: false, reason: 'invalid' });
+  await providers.waitlist.leave();
+  assert.deepEqual(await providers.waitlist.status(), { joined: false, email: null, position: null });
 
   const broadcast = await providers.broadcast.broadcastMl('deadbeef');
   assert.ok(/^[0-9a-f]{64}$/.test(broadcast.txId));

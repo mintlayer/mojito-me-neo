@@ -17,7 +17,8 @@ import { ML_DECIMALS, atomsToDecimal, decimalsToAtoms, formatAmount, formatUsd }
 import { IndexerError } from '../ml/IndexerClient';
 import type { AssetRow, NftRow, PriceProvider, PriceSnapshot, WalletData } from '../providers/types';
 import type { AccountServices, RealAccountContext, RealAccountConfig } from './account';
-import { CHAIN_GLYPH, DAPPS, FEES, RANGES, TIMEFRAMES, WAITLIST } from '../../data';
+import { CHAIN_GLYPH, DAPPS, FEES, RANGES, TIMEFRAMES } from '../../data';
+import { localWaitlistCounter } from '../mock/localWaitlist';
 import { truncateMiddle } from '../../ui/format';
 import { createFixtureWalletData } from '../mock/fixtures';
 import { createFixturePriceProvider } from '../mock/priceFixtures';
@@ -256,7 +257,9 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
       }
     },
     getTimeframes: async () => [...TIMEFRAMES],
-    getWaitlist: async () => WAITLIST,
+    // R4: the taken counter is the local waitlist store's state (seed plus
+    // one while this install holds its slot), not a static fixture number.
+    getWaitlist: async () => localWaitlistCounter(),
     getDapps: async () => DAPPS,
     getCardFeatures: async () => fixtureData.getCardFeatures(),
     getCardTiers: async () => fixtureData.getCardTiers(),
