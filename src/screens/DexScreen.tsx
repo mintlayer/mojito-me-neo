@@ -81,17 +81,31 @@ export function DexScreen() {
     };
   }, [price, tf]);
 
-  // My orders (spec: actions on orders flagged as mine).
+  // My orders (spec: actions on orders flagged as mine). myOrders spans
+  // every wallet pair; this screen trades ML/USDT, so rows are filtered to
+  // the displayed pair (either direction) instead of rendering foreign
+  // tickers with hardcoded decimals. An ambiguous USDT ticker (more than
+  // one token id) keeps the list unloaded: the ticket refuses placement on
+  // the same condition.
   const [myOrders, setMyOrders] = useState<OrderData[] | null>(null);
   const [ordersError, setOrdersError] = useState<string | null>(null);
+  const usdtTokenId = askTokenIds !== null && askTokenIds.length === 1 ? askTokenIds[0] : null;
   const loadMyOrders = useCallback(async () => {
+    if (usdtTokenId === null) return;
     try {
-      setMyOrders(await orders.myOrders());
+      const mine = await orders.myOrders();
+      setMyOrders(
+        mine.filter(
+          (order) =>
+            (order.giveTokenId === COIN_REF && order.askTokenId === usdtTokenId) ||
+            (order.giveTokenId === usdtTokenId && order.askTokenId === COIN_REF),
+        ),
+      );
       setOrdersError(null);
     } catch {
       setOrdersError(t('errors.orders.book'));
     }
-  }, [orders]);
+  }, [orders, usdtTokenId]);
   useEffect(() => {
     void loadMyOrders();
   }, [loadMyOrders]);
@@ -103,13 +117,24 @@ export function DexScreen() {
   const [lastDemoNote, setLastDemoNote] = useState<string | null>(null);
   // Fill confirmation state: the payout preview (proportionalGivePayout on
   // the order legs) plus the effective price versus the book mid, before
-  // any fill transaction is built.
-  const [fillSheet, setFillSheet] = useState<{ order: OrderData; payout: string; effective: string; mid: string } | null>(null);
+  // any fill transaction is built. legs carries the direction-derived
+  // decimals and symbols (the fill pays the order's ask currency).
+  const [fillSheet, setFillSheet] = useState<{
+    order: OrderData;
+    payout: string;
+    effective: string;
+    mid: string;
+    legs: { payDecimals: number; paySymbol: string; receiveDecimals: number; receiveSymbol: string };
+  } | null>(null);
 
   const bookRows = liveBook;
   if (!timeframes || !fees || !candles || !assets || !askTokenIds || !askMeta || !bookRows) return <Screen />;
   const maxAsk = Math.max(...bookRows.asks.map((r) => Number(r.total || 0)), 1);
   const maxBid = Math.max(...bookRows.bids.map((r) => Number(r.total || 0)), 1);
+  // Quote-token decimals with the absent-meta fallback: 0 is a valid
+  // precision, so a falsy-decimals fallback would inflate a 0-decimal
+  // order leg by 1e11.
+  const askDecimals = Number.isInteger(askMeta.decimals) ? askMeta.decimals : ML_DECIMALS;
   const total = usd(amount, market?.price ?? 0);
   const bestAsk = Number(bookRows.asks[0]?.price ?? market?.price ?? 0);
   const bestBid = Number(bookRows.bids[0]?.price ?? market?.price ?? 0);
@@ -159,9 +184,9 @@ export function DexScreen() {
     try {
       await orders.createOrder({
         giveTokenId: buy ? askTokenIds[0] : COIN_REF,
-        giveAtoms: buy ? decimalsToAtoms(total, askMeta.decimals || ML_DECIMALS) : decimalsToAtoms(amount, ML_DECIMALS),
+        giveAtoms: buy ? decimalsToAtoms(total, askDecimals) : decimalsToAtoms(amount, ML_DECIMALS),
         askTokenId: buy ? COIN_REF : askTokenIds[0],
-        askAtoms: buy ? decimalsToAtoms(amount, ML_DECIMALS) : decimalsToAtoms(total, askMeta.decimals || ML_DECIMALS),
+        askAtoms: buy ? decimalsToAtoms(amount, ML_DECIMALS) : decimalsToAtoms(total, askDecimals),
       });
       setConfirmOpen(false);
       setLastDemoNote(mode === 'mock' ? t('dex.order.demo') : null);
@@ -176,14 +201,16 @@ export function DexScreen() {
 
   /** Fill preview: payout from the order legs (the same math the flow
    *  applies) and the effective ask-per-give price, checked against the
-   *  book mid before the fill executes; the flow re-checks the band. */
+   *  book mid before the fill executes; the flow re-checks the band. The
+   *  legs follow the order's direction, not the ticket's. */
   const openFill = (order: OrderData) => {
+    const legs = pairLegs(order, askDecimals);
     const mid = (bestAsk + bestBid) / 2;
     const payout = proportionalGivePayout(order.giveBalanceAtoms, order.askBalanceAtoms, order.askBalanceAtoms);
-    const fillDecimal = Number(atomsToDecimal(order.askBalanceAtoms, askMeta.decimals));
-    const payoutDecimal = Number(atomsToDecimal(payout, ML_DECIMALS));
+    const fillDecimal = Number(atomsToDecimal(order.askBalanceAtoms, legs.payDecimals));
+    const payoutDecimal = Number(atomsToDecimal(payout, legs.receiveDecimals));
     const effective = payoutDecimal > 0 ? fillDecimal / payoutDecimal : 0;
-    setFillSheet({ order, payout, effective: effective.toFixed(4), mid: mid.toFixed(4) });
+    setFillSheet({ order, payout, effective: effective.toFixed(4), mid: mid.toFixed(4), legs });
   };
 
   const runFill = async () => {
@@ -194,7 +221,7 @@ export function DexScreen() {
         orderId: fillSheet.order.orderId,
         fillAtoms: fillSheet.order.askBalanceAtoms,
         destination: fillSheet.order.concludeDestination,
-        priceBand: { midDecimal: fillSheet.mid, maxSlippagePct: MAX_SLIPPAGE_PCT, askDecimals: askMeta.decimals, giveDecimals: ML_DECIMALS },
+        priceBand: { midDecimal: fillSheet.mid, maxSlippagePct: MAX_SLIPPAGE_PCT, askDecimals: fillSheet.legs.payDecimals, giveDecimals: fillSheet.legs.receiveDecimals },
       });
       setFillSheet(null);
       void loadMyOrders();
@@ -406,6 +433,7 @@ export function DexScreen() {
             <MyOrderRow
               key={order.orderId}
               order={order}
+              usdtDecimals={askDecimals}
               onDone={() => void loadMyOrders()}
               onError={setTicketError}
               onFill={openFill}
@@ -439,9 +467,9 @@ export function DexScreen() {
         {fillSheet && (
           <>
             <View className="gap-2">
-              <KVRow k={t('dex.fill.pay')} v={`${atomsToDecimal(fillSheet.order.askBalanceAtoms, askMeta.decimals)} USDT`} />
-              <KVRow k={t('dex.fill.receive')} v={`${atomsToDecimal(fillSheet.payout, ML_DECIMALS)} ML`} />
-              <KVRow k={t('dex.fill.effective')} v={`${fillSheet.effective} USDT/ML`} />
+              <KVRow k={t('dex.fill.pay')} v={`${atomsToDecimal(fillSheet.order.askBalanceAtoms, fillSheet.legs.payDecimals)} ${fillSheet.legs.paySymbol}`} />
+              <KVRow k={t('dex.fill.receive')} v={`${atomsToDecimal(fillSheet.payout, fillSheet.legs.receiveDecimals)} ${fillSheet.legs.receiveSymbol}`} />
+              <KVRow k={t('dex.fill.effective')} v={`${fillSheet.effective} ${fillSheet.legs.paySymbol}/${fillSheet.legs.receiveSymbol}`} />
               <KVRow k={t('dex.book.mid')} v={fillSheet.mid} />
             </View>
             {Number(fillSheet.effective) > 0 && Number(fillSheet.mid) > 0 && (Math.abs(Number(fillSheet.effective) - Number(fillSheet.mid)) / Number(fillSheet.mid)) * 100 > MAX_SLIPPAGE_PCT && (
@@ -475,10 +503,11 @@ function orderErrorCopy(e: unknown): string {
   return t('dex.book.error');
 }
 
-function MyOrderRow({ order, onDone, onError, onFill }: { order: OrderData; onDone: () => void; onError: (message: string) => void; onFill: (order: OrderData) => void }) {
+function MyOrderRow({ order, usdtDecimals, onDone, onError, onFill }: { order: OrderData; usdtDecimals: number; onDone: () => void; onError: (message: string) => void; onFill: (order: OrderData) => void }) {
   const { orders } = useProviders();
   const phase = orderPhase(order);
   const [busy, setBusy] = useState(false);
+  const legs = pairLegs(order, usdtDecimals);
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -501,7 +530,7 @@ function MyOrderRow({ order, onDone, onError, onFill }: { order: OrderData; onDo
         </Chip>
       </View>
       <Txt mono className="text-[11px] text-text2 mt-1">
-        {`give ${atomsToDecimal(order.giveBalanceAtoms, ML_DECIMALS)} ML · ask ${atomsToDecimal(order.askBalanceAtoms, ML_DECIMALS)} USDT`}
+        {`give ${atomsToDecimal(order.giveBalanceAtoms, legs.receiveDecimals)} ${legs.receiveSymbol} · ask ${atomsToDecimal(order.askBalanceAtoms, legs.payDecimals)} ${legs.paySymbol}`}
       </Txt>
       {phase !== 'concluded' && (
         <View className="flex-row gap-2 mt-2">
@@ -523,6 +552,20 @@ function MyOrderRow({ order, onDone, onError, onFill }: { order: OrderData; onDo
       )}
     </View>
   );
+}
+
+/** Direction legs for a displayed-pair order (the myOrders load filter
+ *  guarantees ML/USDT on both legs, either direction): the fill pays the
+ *  order's ask currency and receives the give currency, each at its own
+ *  decimals. */
+function pairLegs(order: OrderData, usdtDecimals: number): { payDecimals: number; paySymbol: string; receiveDecimals: number; receiveSymbol: string } {
+  const giveIsMl = order.giveTokenId === COIN_REF;
+  return {
+    payDecimals: giveIsMl ? usdtDecimals : ML_DECIMALS,
+    paySymbol: giveIsMl ? 'USDT' : 'ML',
+    receiveDecimals: giveIsMl ? ML_DECIMALS : usdtDecimals,
+    receiveSymbol: giveIsMl ? 'ML' : 'USDT',
+  };
 }
 
 /** Order-book line with a depth bar filling from the right. */
