@@ -198,3 +198,47 @@ the tx id (the generic nothing-sent copy would invite a second lock).
 The retired spend pubkey column is dropped with the split: the vendored
 `encodeOutputHtlc` carries no spend pubkey, the decoded descriptor never
 read one, and the screen no longer fabricates a 33-byte key to persist.
+
+## D16. Release configuration decisions (M6)
+
+2026-11-18, branch feat/m6-release. The M6 spec deliverables against the
+actual repo:
+
+- Production app identifiers: `org.mintlayer.mojito.me` (iOS
+  bundleIdentifier and Android package), derived from the project slug.
+  Owner confirms before submission; the runbook carries it as precondition.
+- EAS profiles follow the spec contract: `development` (dev client, mock
+  mode explicit), `preview` (Android APK, real mode), `production-android`
+  (local app bundle, real mode) and `production-ios` (Mac mini or CI, real
+  mode), all with `EXPO_PUBLIC_DATA_MODE` in the profile env and no secrets
+  in eas.json. No endpoint variable ships: endpoint flips stay single-file
+  changes in `src/config/endpoints.ts`.
+- The testnet network switch is dev-only (the M6 spec data section): release
+  builds render the `settings.network.unavailable` status row instead of the
+  toggle, behind the single `devFallbackAllowed` spelling. Production
+  defaults mainnet.
+- Spec i18n keys not added, recorded: `update.required.*` (the completeness
+  gate fails on unreferenced keys; they land with the version-gate wiring),
+  `send.disabled.*` (superseded by the shipped M3 honesty: send stays
+  enabled through review and sign and refuses at broadcast) and
+  `release.network.mainnetOnly` (no call site; the release row shows the
+  unavailable copy).
+- Camera usage string deferred with D15: no camera dependency exists; a
+  usage string without the feature is a store-rejection and honesty risk.
+- Perf and size scripts ship static (no device in the gate): `perf.mjs`
+  grades startup-path properties, `size-report.mjs` grades the JS budget
+  only against a measured metro export. Measured bundle 4,608,641 bytes
+  (4.40 MiB) over the 4 MB budget: waived in writing in
+  `docs/REVIEW-RUNBOOK.md` section 5 with the trim plan and owner sign-off
+  at submission.
+
+## M6 change log
+
+### Release honesty audit and gates
+
+The production-build honesty audit (every pending-config gate and its
+release behavior, with file references) lives in
+`docs/REVIEW-RUNBOOK.md` section 3; the device pass it feeds lives in
+`docs/MANUAL-QA.md`. The ux-deferred reconciliation (resolved vs carried)
+is runbook section 4.2 with the carried DEX Trades/Depth segment and the
+scan-alert deferral in the README pending list.

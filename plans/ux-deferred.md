@@ -46,3 +46,16 @@ meaning the address joined from another device, and the status-refusal
 fallback masks the typed address instead of a verified on-file one. The copy
 is accurate for the v1 local-only store (decision R4 in
 plans/mojito-neo/decisions.md); revisit it with that milestone.
+
+## M6 release reconciliation
+
+Confirmed at the M6 gate (docs/REVIEW-RUNBOOK.md 4.2): resolved items -
+swap percent semantics (M2), address book and request-amount rows (removed),
+home segment wiring (M2), profile chevron, bell, see all, Settings edit and
+dApps (removed), manage networks (status row), bridge tiles (informational),
+ICU plurals (keys gone with the reworded copy), waitlist join failures
+(fixed). Carried into the release notes and docs/MANUAL-QA.md explicitly:
+the send scan alert (camera deferred, D15), the DEX Trades/Depth segment
+(state set, no panel consumes it), the native vault-prompt English strings,
+NFT text-only rows, the sub-360 QR rule and the waitlist duplicate-copy
+revisit with the R4 backend.
