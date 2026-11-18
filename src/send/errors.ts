@@ -94,3 +94,10 @@ function isBindingsErrorShape(e: unknown): boolean {
   const record = e as { kind?: unknown; detail?: unknown };
   return typeof record.kind === 'string' && BINDINGS_ERROR_KINDS.has(record.kind) && typeof record.detail === 'string';
 }
+
+/** True when the failure is the device-pending native signing module: the
+ *  send screen keys its proactive ML note off this seam so the honest
+ *  state surfaces with the first quote failure, not only at Confirm. */
+export function isBindingsUnavailable(e: unknown): boolean {
+  return (e instanceof SendError && e.kind === 'bindings') || isBindingsErrorShape(e);
+}

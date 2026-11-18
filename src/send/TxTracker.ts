@@ -7,9 +7,10 @@
 //
 // Polling policy: fixed interval (default 12 s, deliberately faster than
 // the 60 s home cycle because a just-broadcast transaction settles within
-// seconds), capped attempts, stop on confirmed or not-found, swallow
-// per-tick failures until the cap (a flaky read must not kill tracking),
-// injected timers for deterministic tests.
+// seconds), capped attempts, stop once confirmed through the per-entry
+// confirmation target or on not-found, swallow per-tick failures until
+// the cap (a flaky read must not kill tracking), injected timers for
+// deterministic tests.
 import type { BroadcastProvider, TxStatusInfo } from '../data/providers/types';
 import type { PollTimers } from '../data/polling';
 
@@ -134,6 +135,13 @@ export class TxTracker {
     }
     if (entry.state === 'not-found' || entry.attempts >= this.maxAttempts) {
       // Terminal or stalled: stop the loop, keep the last known state.
+      return;
+    }
+    if (entry.state === 'confirmed' && (entry.confirmations === null || entry.confirmations >= entry.target)) {
+      // Settled through the confirmation target: no more polling of a
+      // confirmed transaction. A count-less confirmed answer cannot prove
+      // the target unmet, and the success screen already reads Confirmed
+      // for it, so it stops here too.
       return;
     }
     this.schedule(entry);

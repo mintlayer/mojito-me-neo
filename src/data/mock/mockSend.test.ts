@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert/strict';
 import { createMockSend } from './mockSend';
 import { createFixtureBroadcastProvider } from './fixtures';
 import { SendError } from '../../send/errors';
+import { decimalsToAtoms } from '../../money';
 import { setNetwork } from '../../config/endpoints';
 
 async function main() {
@@ -22,6 +23,18 @@ async function main() {
   assert.equal(quote.standard.feeDecimal, '0.00012');
   assert.equal(quote.fast.feeDecimal, '0.00024');
   assert.equal(quote.fast.rateIsFallback, true, 'fixture rates are flagged');
+
+  // Shape gate: fixture fees are atom-built, so the BTC decimals never
+  // carry float tails or e-notation (the review screen feeds them to
+  // decimalsToAtoms, which throws on 'e' strings).
+  const btcQuote = await send.quoteBtc({ to: 'bc1qcr8te4kr609gcawutmrza0j4xv80jy8z306fyu', amountDecimal: '0.001' });
+  for (const tier of ['economy', 'standard', 'fast'] as const) {
+    const leg = btcQuote[tier];
+    assert.match(leg.feeDecimal, /^\d+(?:\.\d+)?$/, `${tier} feeDecimal is a plain decimal, never e-notation`);
+    assert.match(leg.feeAtoms, /^\d+$/, `${tier} feeAtoms is a plain atom string`);
+    assert.equal(decimalsToAtoms(leg.feeDecimal, 8), leg.feeAtoms, `${tier} feeDecimal survives the review-screen conversion`);
+  }
+  assert.equal(btcQuote.economy.feeDecimal, '0.00008', 'the BTC schedule rides the same fixture numbers at sat precision');
 
   // Foreign-chain and malformed addresses are rejected before broadcasting.
   await assert.rejects(

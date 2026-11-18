@@ -3,28 +3,35 @@
 // and amount validation the real service runs, so the demo exercises the
 // honest error paths too. Results are labelled demo: the tx id is a
 // deterministic fake and no rotation or chain state is touched.
-import { FEES } from '../../data';
 import { SendError } from '../../send/errors';
 import { validateAddress, parseSendAmount } from '../../send/validation';
+import { atomsToDecimal } from '../../money';
 import type { NetworkFlag } from '../../config/endpoints';
-import type { BroadcastProvider, FeeSchedule, SendQuote, SendService } from '../providers/types';
+import type { BroadcastProvider, FeeTierId, SendQuote, SendService } from '../providers/types';
 
 export type MockSendConfig = {
   broadcast: BroadcastProvider;
   network: NetworkFlag;
 };
 
-function quote(decimals: number, tierCosts: FeeSchedule): SendQuote {
-  const leg = (cost: number): SendQuote['economy'] => ({
-    feeDecimal: String(cost),
-    feeAtoms: BigInt(Math.round(cost * 10 ** decimals)).toString(),
+/** Fixture fee schedule in atom integers (ML at 11 decimals; BTC rides the
+ *  same numbers at 8). Quote legs build on atomsToDecimal, never on float
+ *  math: scaling the cost floats produced e-notation fee strings that
+ *  crashed the review screen's decimalsToAtoms conversion. */
+const ML_FEE_ATOMS: Record<FeeTierId, bigint> = { economy: 8_000_000n, standard: 12_000_000n, fast: 24_000_000n };
+const BTC_FEE_ATOMS: Record<FeeTierId, bigint> = { economy: 8_000n, standard: 12_000n, fast: 24_000n };
+
+function quote(feeAtoms: Record<FeeTierId, bigint>, decimals: number): SendQuote {
+  const leg = (atoms: bigint): SendQuote['economy'] => ({
+    feeDecimal: atomsToDecimal(atoms.toString(), decimals),
+    feeAtoms: atoms.toString(),
     sizeBytes: 0,
     rateIsFallback: true,
   });
   return {
-    economy: leg(tierCosts.economy.cost),
-    standard: leg(tierCosts.standard.cost),
-    fast: leg(tierCosts.fast.cost),
+    economy: leg(feeAtoms.economy),
+    standard: leg(feeAtoms.standard),
+    fast: leg(feeAtoms.fast),
   };
 }
 
@@ -66,18 +73,13 @@ export function createMockSend(cfg: MockSendConfig): SendService {
     async quoteMl(params) {
       requireValid(params.to, 'ml');
       requireAmount(params.amountDecimal, params.decimals);
-      return quote(11, FEES);
+      return quote(ML_FEE_ATOMS, 11);
     },
 
     async quoteBtc(params) {
       requireValid(params.to, 'btc');
       requireAmount(params.amountDecimal, 8);
-      const scaled: FeeSchedule = {
-        economy: { cost: FEES.economy.cost / 1000 },
-        standard: { cost: FEES.standard.cost / 1000 },
-        fast: { cost: FEES.fast.cost / 1000 },
-      };
-      return quote(8, scaled);
+      return quote(BTC_FEE_ATOMS, 8);
     },
 
     async sendMl(params) {

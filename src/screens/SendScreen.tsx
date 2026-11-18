@@ -8,7 +8,7 @@ import { endpointsFor } from '../config/endpoints';
 import type { FeeTierId, SendQuote, SendResult } from '../data/providers';
 import type { TrackedTx, TxTracker } from '../send/TxTracker';
 import { validateAddress, parseSendAmount, type AddressChain } from '../send/validation';
-import { addressErrorCopy, amountErrorCopy, sendErrorCopy } from '../send/errors';
+import { addressErrorCopy, amountErrorCopy, sendErrorCopy, isBindingsUnavailable } from '../send/errors';
 import { bioName } from '../onboarding/context';
 import { atomsToDecimal, decimalsToAtoms } from '../money';
 import { C, G } from '../theme';
@@ -81,6 +81,13 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
   const [feeTier, setFeeTier] = useState<FeeTierId>('standard');
   const [quote, setQuote] = useState<SendQuote | null>(null);
   const [quoteError, setQuoteError] = useState<string | null>(null);
+  /** True while a quote request is in flight: the "preparing" copy may
+   *  only claim work that is actually running. */
+  const [quoting, setQuoting] = useState(false);
+  /** Device-pending native signing, discovered through the first ML quote
+   *  failure (errors.ts bindings seam): keeps the honest state at step 0
+   *  instead of surfacing it only at Confirm. */
+  const [mlSigningUnavailable, setMlSigningUnavailable] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -119,6 +126,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       chain === 'btc'
         ? send.quoteBtc({ to: address.trim(), amountDecimal: amount })
         : send.quoteMl({ to: address.trim(), amountDecimal: amount, decimals, tokenId: token?.tokenId });
+    setQuoting(true);
     load
       .then((q) => {
         setQuote(q);
@@ -127,7 +135,9 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       .catch((e: unknown) => {
         setQuote(null);
         setQuoteError(sendErrorCopy(e));
-      });
+        if (chain === 'ml' && isBindingsUnavailable(e)) setMlSigningUnavailable(true);
+      })
+      .finally(() => setQuoting(false));
   }, [address, amount, chain, decimals, token, send]);
 
   useEffect(() => {
@@ -237,7 +247,8 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
 
   if (step === 1) {
     const leg = quote?.[feeTier];
-    const feeText = leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable');
+    const feeText =
+      leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : quoting ? t('send.fee.unavailable') : '-';
     const rateText =
       leg === undefined
         ? undefined
@@ -257,7 +268,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       [t('common.networkFee'), feeText],
       [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(etaKey as I18nKey)}</Txt>],
     ];
-    if (rateText !== undefined) rows.push([t('send.fee.rate'), rateText]);
+    if (rateText !== undefined) rows.push([t('send.fee.rateLabel'), rateText]);
     rows.push([t('common.total'), totalText]);
     return (
       <Screen>
@@ -298,6 +309,16 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
             <Callout tone={C.red} glyph="!" className="mt-3.5">
               <Txt className="text-[11.5px] text-text1 leading-[17px]">{sendError}</Txt>
             </Callout>
+          ) : null}
+          {quoteError !== null ? (
+            <Callout tone={C.red} glyph="!" className="mt-3.5">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{quoteError}</Txt>
+            </Callout>
+          ) : null}
+          {quoteError !== null ? (
+            <Btn tone="ghost" className="w-full mt-2" onPress={loadQuote}>
+              {t('common.retry')}
+            </Btn>
           ) : null}
 
           <Callout icon="fingerprint" className="mt-3.5">
@@ -468,8 +489,11 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
             <Txt className="text-[11.5px] text-text1 leading-[17px]">{quoteError}</Txt>
           </Callout>
         ) : null}
-        {chain === 'ml' && !send.canBroadcast('ml') ? (
+        {chain === 'ml' && mlSigningUnavailable ? (
           <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('send.chain.mlPending')}</Txt>
+        ) : null}
+        {chain === 'ml' && !canBroadcast ? (
+          <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('send.chain.mlBroadcastOff')}</Txt>
         ) : null}
         {chain === 'btc' && !send.canBroadcast('btc') ? (
           <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('send.chain.btcUnconfigured')}</Txt>

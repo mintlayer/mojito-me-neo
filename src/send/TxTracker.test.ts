@@ -53,7 +53,7 @@ async function main() {
     tracker.subscribe(() => {
       notifications += 1;
     });
-    tracker.track({ id: 'tx1', chain: 'ml' });
+    tracker.track({ id: 'tx1', chain: 'ml' }, { confirmationsTarget: 1 });
     assert.deepEqual(tracker.get('ml', 'tx1'), { id: 'tx1', chain: 'ml', state: 'pending', confirmations: null, blockId: null });
     const afterTrack = notifications;
     assert.ok(afterTrack >= 1, 'registration notifies');
@@ -97,7 +97,9 @@ async function main() {
   }
 
   // 3. not-found is terminal; untracked ids answer null; re-tracking is a
-  //    refresh, not a duplicate loop.
+  //    refresh, not a duplicate loop; and the loop stops once confirmations
+  //    reach the per-entry target instead of polling a confirmed tx to the
+  //    attempt cap.
   {
     const timers = manualTimers();
     const tracker = new TxTracker(scriptedProvider([{ state: 'not-found' }]), { timers });
@@ -108,6 +110,21 @@ async function main() {
     assert.equal(tracker.get('ml', 'tx3')?.state, 'not-found');
     await timers.run();
     assert.equal(tracker.get('ml', 'tx3')?.state, 'not-found');
+  }
+  {
+    const timers = manualTimers();
+    const tracker = new TxTracker(
+      scriptedProvider([], [{ state: 'pending' }, { state: 'confirmed', confirmations: 1 }, { state: 'confirmed', confirmations: 2 }]),
+      { timers },
+    );
+    tracker.track({ id: 'tx3b', chain: 'btc' }, { confirmationsTarget: 2 });
+    await timers.run(); // pending
+    await timers.run(); // confirmed at 1: below target, the loop reschedules
+    assert.ok(timers.pending() >= 1, 'still polling below the target');
+    await timers.run(); // confirmed at 2: target met, the loop stops
+    assert.equal(tracker.get('btc', 'tx3b')?.confirmations, 2);
+    await timers.run();
+    assert.equal(tracker.get('btc', 'tx3b')?.confirmations, 2, 'stopped at the target, no further polls');
   }
 
   // 4. BTC rides getBtcStatus.
