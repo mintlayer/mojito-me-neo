@@ -4,8 +4,11 @@
 // missing-architecture.md so the real implementations slot in unchanged.
 import type { ChainName, Tone } from '../../theme';
 import type { IconName } from '../../ui/icons';
-import type { StepState } from '../../ui/StepState';
 import type { TxTracker } from '../../send/TxTracker';
+import type { OrderBookService } from '../../trade/OrderBookService';
+import type { OrderFlows } from '../../trade/orders';
+import type { HtlcFlows } from '../../trade/htlc';
+import type { SwapSessionStore } from '../../trade/swapSession';
 
 export type ProviderMode = 'mock' | 'real';
 
@@ -51,15 +54,6 @@ export type MarketSummary = {
   pair: string; last: string; change: number; btc: string;
   high: string; low: string; volume: string; price: number;
 };
-
-export type BookLevel = { p: number; s: number; t: number };
-
-// Swap and bridge fixture rows
-export type HtlcStep = { label: string; detail: string; state: StepState; note?: string };
-export type SwapStat = [string, string];
-export type BridgeChain = { name: ChainName; sym: string };
-export type BridgeRouteStep = { label: string; detail: string; icon: IconName; eta: string };
-export type BridgeQuoteLine = [string, string];
 
 // Card
 export type WaitlistStatus = { taken: number; total: number };
@@ -165,8 +159,18 @@ export interface WaitlistProvider {
 export type BridgeRouteDirection = 'E2M' | 'M2E';
 export type BridgeQuoteRequest = { route: BridgeRouteDirection; token: string; amount: string; destAddr: string };
 export type BridgeQuote = {
-  feePct: string; feeAmount: string; minAmount: string;
-  etaSeconds: number; destContractOrAddress: string;
+  feePct: string;
+  feeAmount: string;
+  /** Documented minimum (fixture); the bridge_v2 API documents none, so the
+   *  real provider answers null and the screen hides the row. */
+  minAmount?: string | null;
+  /** Documented seconds ETA (fixture); the real API reports confirmations
+   *  instead, so this is absent on real quotes. */
+  etaSeconds?: number;
+  /** Real API: the m2e deposit confirmations the master waits for. */
+  confirmationsRequired?: number;
+  /** M2E: the Mintlayer treasury deposit address to fund (F14). */
+  destContractOrAddress: string;
 };
 export type BridgeHandle = { id: string; createdAt: number };
 export type BridgeState = 'awaiting-deposit' | 'attesting' | 'minted' | 'released' | 'expired' | 'failed';
@@ -189,17 +193,17 @@ export interface WalletData {
   getNetworks(): Promise<ChainName[]>;
   getRanges(): Promise<PriceRange[]>;
   getProfile(): Promise<Profile>;
-  // dex
-  getMarket(pair: string): Promise<MarketSummary>;
-  getOrderBook(pair: string): Promise<{ asks: BookLevel[]; bids: BookLevel[] }>;
+  // dex. Null answers a price-snapshot miss: the header renders a typed
+  // unavailable state, never a fixture row (the AssetRow.unavailable
+  // precedent).
+  getMarket(pair: string): Promise<MarketSummary | null>;
   getTimeframes(): Promise<CandleInterval[]>;
-  // swap
-  getHtlcSteps(): Promise<HtlcStep[]>;
-  getSwapStats(): Promise<SwapStat[]>;
-  // bridge
-  getBridgeChains(): Promise<BridgeChain[]>;
-  getBridgeRoute(): Promise<BridgeRouteStep[]>;
-  getBridgeQuote(): Promise<BridgeQuoteLine[]>;
+  /** Token ids served for one ticker; tickers are not unique (F6), so the
+   *  list can carry more than one id and callers must disambiguate
+   *  honestly instead of guessing (M4 order placement). */
+  getTokenIds(ticker: string): Promise<string[]>;
+  /** Ticker and decimals of one token id; null when unindexed. */
+  getTokenMeta(tokenId: string): Promise<{ ticker: string | null; decimals: number } | null>;
   // card
   getWaitlist(): Promise<WaitlistStatus>;
   getDapps(): Promise<DappsSummary>;
@@ -226,4 +230,16 @@ export interface Providers {
   /** True while USD figures come from the mock price provider (R1): the UI
    *  labels them as indicative mock data instead of presenting real prices. */
   pricesAreMock: boolean;
+
+  // Trade seams (spec M4): real in real mode over the bindings and the
+  // indexer, demo-labelled in mock mode (createMockSend pattern), so the
+  // screens stay mode-agnostic and the demo chip stays honest.
+  /** Live order book (DexScreen depth rows); the fixture book in mock. */
+  orderBook: OrderBookService;
+  /** On-chain order flows (place, fill, conclude); demo pipeline in mock. */
+  orders: OrderFlows;
+  /** ML-side HTLC swap flows; demo pipeline in mock. */
+  htlc: HtlcFlows;
+  /** Persisted swap sessions (restart-survivable). */
+  swapSessions: SwapSessionStore;
 }

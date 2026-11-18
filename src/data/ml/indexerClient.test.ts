@@ -236,6 +236,58 @@ async function main() {
   assert.deepEqual(offsets, [2, 1]);
   assert.match(offsetCalls[1].url, /offset=2/);
 
+  // orders list and detail (M4): currency sides keep their type and token
+  // id; optional initial amounts parse when present.
+  const orderCalls: { url: string }[] = [];
+  const orderClient = new IndexerClient('https://indexer.test/api/v2', {
+    fetch: scriptedFetch(
+      [
+        {
+          status: 200,
+          body: [
+            {
+              order_id: 'mordr1abc',
+              give_balance: { atoms: '1000' },
+              ask_balance: { atoms: '100' },
+              give_currency: { type: 'Coin' },
+              ask_currency: { type: 'Token', token_id: 'mmltk1x' },
+              initially_given: { atoms: '2000' },
+              initially_asked: { atoms: '200' },
+              conclude_destination: 'mtc1qmaker',
+            },
+          ],
+        },
+        {
+          status: 200,
+          body: {
+            order_id: 'mordr1abc',
+            give_balance: { atoms: '950' },
+            ask_balance: { atoms: '95' },
+            give_currency: { type: 'Coin' },
+            ask_currency: { type: 'Token', token_id: 'mmltk1x' },
+            conclude_destination: 'mtc1qmaker',
+          },
+        },
+      ],
+      orderCalls,
+    ),
+    delay: noDelay,
+  });
+  const orders = await orderClient.orders();
+  assert.equal(orders.length, 1);
+  assert.equal(orders[0].orderId, 'mordr1abc');
+  assert.equal(orders[0].giveBalance.atoms, '1000');
+  assert.equal(orders[0].giveCurrency.type, 'Coin');
+  assert.equal(orders[0].askCurrency.tokenId, 'mmltk1x');
+  assert.equal(orders[0].initiallyGiven?.atoms, '2000');
+  assert.equal(orders[0].concludeDestination, 'mtc1qmaker');
+  assert.match(orderCalls[0].url, /items=100&offset=0/);
+  const detail = await orderClient.order('mordr1abc');
+  assert.equal(detail.askBalance.atoms, '95');
+  assert.equal(detail.initiallyGiven, null);
+  assert.equal(detail.frozen, false);
+  assert.match(orderCalls[1].url, /\/order\/mordr1abc$/);
+
   // Non-terminating cursor: the same next_cursor forever is cut off by the
   // page cap with a typed parse error, not an unbounded request loop.
   let endlessCursorCalls = 0;

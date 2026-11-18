@@ -21,8 +21,8 @@ import {
   TransportError as IndexerError, type FetchLike,
 } from '../transport';
 import type {
-  AmountJson, CoinStats, MlAddressInfo, MlNftInfo, MlOutput, MlOutpoint, MlTokenInfo,
-  MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
+  AmountJson, MlAddressInfo, MlNftInfo, MlOrderCurrency, MlOrderInfo, MlOutput, MlOutpoint,
+  MlTokenInfo, MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
 } from './types';
 
 export { IndexerError };
@@ -56,6 +56,30 @@ const DEFAULT_MAX_PAGES = 100;
 
 const DEFAULT_MAX_ITEMS = 50_000;
 
+/** Page size for the offset walkers (documented cap is 100). */
+const DEFAULT_PAGE_ITEMS = 100;
+
+function parseOrder(raw: unknown): MlOrderInfo {
+  const record = asRecord(raw);
+  const orderId = asString(record.order_id);
+  if (orderId === null) throw new IndexerError('parse', '/order', undefined);
+  const currency = (value: unknown): MlOrderCurrency => {
+    const side = asRecord(value);
+    return { type: asString(side.type) ?? 'Unknown', tokenId: asString(side.token_id) ?? undefined };
+  };
+  return {
+    orderId,
+    giveBalance: parseAmount(record.give_balance),
+    askBalance: parseAmount(record.ask_balance),
+    giveCurrency: currency(record.give_currency),
+    askCurrency: currency(record.ask_currency),
+    initiallyGiven: record.initially_given !== undefined && record.initially_given !== null ? parseAmount(record.initially_given) : null,
+    initiallyAsked: record.initially_asked !== undefined && record.initially_asked !== null ? parseAmount(record.initially_asked) : null,
+    concludeDestination: asString(record.conclude_destination) ?? '',
+    frozen: record.frozen === true,
+  };
+}
+
 /** Absorb every documented amount shape into the atoms/decimal pair.
  *  Numbers must be safe integers (Uint64 atom counts upstream); a 1e21
  *  scale number would stringify into e-notation and explode downstream.
@@ -77,6 +101,10 @@ export function parseAmount(raw: unknown): AmountJson {
         if (!Number.isSafeInteger(record.atoms) || record.atoms < 0) throw new IndexerError('parse', 'amount', undefined);
         out.atoms = String(record.atoms);
       } else if (typeof record.atoms === 'string') {
+        // Deliberately no digit validation here, unlike the bare-string
+        // form above: the book and order routes serve rational atom
+        // strings like '34/100' for prices, which must survive parsing
+        // (the money services handle the rational form downstream).
         out.atoms = record.atoms;
       } else {
         throw new IndexerError('parse', 'amount', undefined);
@@ -264,10 +292,6 @@ export class IndexerClient {
     return asArray(await this.request(`/address/${encodeURIComponent(address)}/spendable-utxos`)).map(parseUtxo);
   }
 
-  async allUtxos(address: string): Promise<MlUtxo[]> {
-    return asArray(await this.request(`/address/${encodeURIComponent(address)}/all-utxos`)).map(parseUtxo);
-  }
-
   async transaction(id: string): Promise<MlTransaction> {
     return parseTransaction(await this.request(`/transaction/${encodeURIComponent(id)}`));
   }
@@ -287,6 +311,31 @@ export class IndexerClient {
     });
   }
 
+  /** Every open order on the network (offset/items walk, F11). */
+  async orders(): Promise<MlOrderInfo[]> {
+    const out: MlOrderInfo[] = [];
+    await this.walkOffset('/order', undefined, DEFAULT_PAGE_ITEMS, async (items) => {
+      for (const entry of items) out.push(parseOrder(entry));
+    });
+    return out;
+  }
+
+  /** GET /order/{id}: one order, balances and currencies included. */
+  async order(id: string): Promise<MlOrderInfo> {
+    return parseOrder(await this.request(`/order/${encodeURIComponent(id)}`));
+  }
+
+  /** Open orders for one pair (GET /order/pair/{BASE}_{QUOTE}); sides are
+   *  the ML ticker or a raw token id, direction normalized upstream. */
+  async ordersByPair(base: string, quote: string): Promise<MlOrderInfo[]> {
+    const out: MlOrderInfo[] = [];
+    const path = `/order/pair/${encodeURIComponent(base)}_${encodeURIComponent(quote)}`;
+    await this.walkOffset(path, undefined, DEFAULT_PAGE_ITEMS, async (items) => {
+      for (const entry of items) out.push(parseOrder(entry));
+    });
+    return out;
+  }
+
   /** GET /nft/{id}; a 404 NFT not found (non-NFT id) resolves to null. */
   async nft(id: string): Promise<MlNftInfo | null> {
     try {
@@ -303,16 +352,6 @@ export class IndexerClient {
     const raw = await this.request('/feerate', query);
     if (typeof raw !== 'string' || !/^\d+$/.test(raw)) throw new IndexerError('parse', '/feerate', undefined);
     return raw;
-  }
-
-  async coinStatistics(): Promise<CoinStats> {
-    const raw = asRecord(await this.request('/statistics/coin'));
-    return {
-      preminted: parseAmount(raw.preminted),
-      staked: parseAmount(raw.staked),
-      circulatingSupply: parseAmount(raw.circulating_supply),
-      burned: parseAmount(raw.burned),
-    };
   }
 
   async orderBook(base: string, quote: string, side: OrderBookSide, cursor?: string): Promise<OrderBookPage> {

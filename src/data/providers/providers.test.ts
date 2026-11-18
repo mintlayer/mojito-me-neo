@@ -5,6 +5,8 @@
 //   npx tsx src/data/providers/providers.test.ts
 import { strict as assert } from 'node:assert/strict';
 
+import { bytesToHex } from '@noble/hashes/utils.js';
+
 import { createProviders, readDataMode } from './index';
 import { setNetwork } from '../../config/endpoints';
 import { BALANCE } from '../../data';
@@ -27,6 +29,7 @@ async function main() {
   assert.equal(activity.length, 2);
 
   const market = await providers.data.getMarket('ML/USDT');
+  assert.ok(market, 'the mock fixture market stays non-null');
   assert.equal(market.pair, 'ML/USDT');
 
   const snapshots = await providers.data.getPrices(['ML']);
@@ -64,6 +67,40 @@ async function main() {
   });
   assert.equal(await providers.bridge.status(handle), 'awaiting-deposit');
 
+  // M4 trade seams in mock mode: demo book rows in the live-service shape,
+  // demo order/HTLC flows over the mock broadcaster, persistent-enough
+  // demo swap sessions.
+  const asks = await providers.orderBook.levels('ML', 'USDT', 'ask');
+  assert.equal(asks.length, 6);
+  assert.equal(typeof asks[0].price, 'string');
+  assert.equal(await providers.orderBook.last(), null);
+  const demoOrder = await providers.orders.createOrder({ giveTokenId: 'coin', giveAtoms: '100000000000', askTokenId: 'tUSDT', askAtoms: '34' });
+  assert.match(demoOrder.orderId, /^mordr1demo/);
+  assert.deepEqual((await providers.orders.myOrders()).map((o) => o.orderId), [demoOrder.orderId]);
+  const demoLock = await providers.htlc.initiate(
+    { role: 'initiator', giveChain: 'ml', giveAtoms: '1000', wantAtoms: '280000', secretHash: new Uint8Array(32).fill(7), timelockSeconds: 172800 },
+    { address: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl' },
+    'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
+  );
+  assert.equal(demoLock.htlcOutpoint.index, 0);
+  assert.equal(demoLock.lockTx.length, 64, 'the demo lock answers the same bytes shape as the real seam');
+  // Split contract: broadcastLock is the second half, after the session
+  // row would have the bytes at rest (the demo follows the screen flow).
+  const demoBroadcast = await providers.htlc.broadcastLock(demoLock);
+  assert.equal(demoBroadcast.txId, demoLock.txId);
+  await providers.swapSessions.save({
+    id: demoLock.txId,
+    offer: { role: 'initiator', giveChain: 'ml', giveAtoms: '1000', wantAtoms: '280000', secretHash: new Uint8Array(32).fill(7), timelockSeconds: 172800 },
+    secretHashHex: '07'.repeat(32),
+    spendAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
+    refundAddress: 'mtc1q82twmwwxa3l2pe26gf0zgghu69jtez3qq2ajqyl',
+    lockTxHex: bytesToHex(demoLock.lockTx),
+    state: 'locked',
+    txIds: [demoBroadcast.txId],
+    updatedAt: Date.now(),
+  });
+  assert.equal((await providers.swapSessions.all()).length, 1);
+
   // Real mode constructs lazily (no network, no vault access until a data
   // call), keeps the R1 mock price source and the fixture seams for later
   // milestones; the data calls themselves are covered by the service gates.
@@ -73,7 +110,15 @@ async function main() {
   // btcBase is unconfigured (F13), so Bitcoin is not listed as connected and
   // only Mintlayer counts as an active network.
   assert.deepEqual(await real.data.getNetworks(), ['Mintlayer']);
-  assert.equal((await real.data.getMarket('ML/USDT')).pair, 'ML/USDT');
+  const realMarket = await real.data.getMarket('ML/USDT');
+  assert.ok(realMarket, 'the R1 mock price source serves the ML snapshot, so the header stays live');
+  assert.equal(realMarket.pair, 'ML/USDT');
+  // M4: the real bridge provider carries the R5 gates; E2M is refused
+  // typed before any network call (no EVM signer, scoped decision open).
+  await assert.rejects(
+    () => real.bridge.quote({ route: 'E2M', token: 'usdt', amount: '1', destAddr: 'mtc1q' }),
+    (e: unknown) => (e as { failure?: string }).failure === 'unsupported',
+  );
   // Unconfigured testnet base (action item A2): typed offline, no fetch.
   setNetwork('testnet');
   const offline = createProviders('real');

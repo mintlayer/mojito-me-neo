@@ -3,7 +3,6 @@
 
 import type { ActivityRow, AssetRow, CandleInterval, PriceRange } from './data/providers/types';
 import type { IconName } from './ui/icons';
-import type { StepState } from './ui/StepState';
 import type { ChainName, Tone } from './theme';
 
 export const PROFILE = {
@@ -33,13 +32,13 @@ export const ASSET_BALANCES = Object.fromEntries(ASSETS.map((a) => [a.sym, `${a.
 
 export const ASSET_SYMBOLS = ASSETS.map((a) => a.sym);
 
-// EVM demo chains (Ethereum, Arbitrum, Polygon, BNB) were removed in M2 per
+// The EVM demo chains of the M0 design were removed in M2 per
 // the M2 spec: no wallet backend exists for them. The bridge fixtures keep
 // their R5 pair until M4 wires bridge_v2 wholesale.
 export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer'];
 
 export const ACTIVITY: ActivityRow[] = [
-  { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
+  { icon: 'bridge', title: 'Bridge to Ethereum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
   { icon: 'swap', title: 'Swap on Mintlayer DEX', sub: '0.012 BTC → 3,420 ML', tone: 'amber', time: '14m', state: 'Filled · +0.4%', live: false },
   { icon: 'arrow_dn', title: 'Atomic swap received', sub: '+ 0.0184 BTC', tone: 'green', time: '1h', state: 'Settled', live: false },
 ];
@@ -77,48 +76,15 @@ export const BIDS = [
 
 export const TIMEFRAMES: CandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
-/* ── Swap ────────────────────────────────────────────────── */
+/* ── Bridge ───────────────────────────────────────── */
 
-export const HTLC_STEPS = [
-  { label: 'Initiate swap', detail: 'Generate secret hash · lock 0.025 BTC', state: 'done' },
-  { label: 'Counterparty matched', detail: 'Mintlayer node locks 7,012.45 ML', state: 'done' },
-  { label: 'Reveal preimage on Mintlayer', detail: 'Claim ML, hash exposed onchain', state: 'active', note: '~3 min' },
-  { label: 'Counterparty claims BTC', detail: 'Settles atomically', state: 'pending' },
-] satisfies { label: string; detail: string; state: StepState; note?: string }[];
-
-export const SWAP_STATS = [
-  ['Rate', '1 BTC = 280,498 ML'],
-  ['Slippage', '0.18%'],
-  ['Timelock', '24h refund'],
-  ['Est. time', '~18 min'],
-] satisfies [string, string][];
-
-/* ── Bridge ──────────────────────────────────────────────── */
-
-export const BRIDGE_CHAINS = [
-  { name: 'Mintlayer', sym: 'ML' },
-  { name: 'Bitcoin', sym: 'BTC' },
-  { name: 'Ethereum', sym: 'ETH' },
-  { name: 'Arbitrum', sym: 'ARB' },
-  { name: 'Polygon', sym: 'POL' },
-  { name: 'BNB', sym: 'BNB' },
-] satisfies { name: ChainName; sym: string }[];
-
-/** Arbitrum-side mint contract shown in the route and the bridge fixture. */
+/** Ethereum-side mint contract shown in the bridge fixture quote. The
+ *  swap/bridge fixture rows of the M0 design (HTLC_STEPS, SWAP_STATS,
+ *  BRIDGE_CHAINS, BRIDGE_ROUTE, BRIDGE_QUOTE) died with the M4 live
+ *  trade seams: the screens run the real session steps, the order book
+ *  service and the bridge_v2 provider, so the fixture rows are deleted
+ *  rather than kept as forward-declared API. */
 export const BRIDGE_CONTRACT = '0xA1c2…F39e';
-
-export const BRIDGE_ROUTE = [
-  { label: 'Lock on Mintlayer', detail: 'mojito.mlbridge.v2', icon: 'lock', eta: '~15s' },
-  { label: 'Validator attestation', detail: '7 of 11 signatures', icon: 'shield', eta: '~45s' },
-  { label: 'Mint on Arbitrum', detail: `${BRIDGE_CONTRACT} (mUSDT)`, icon: 'flash', eta: '~5s' },
-] satisfies { label: string; detail: string; icon: IconName; eta: string }[];
-
-export const BRIDGE_QUOTE = [
-  ['Bridge fee', '0.15% · $0.75'],
-  ['Est. time', '~65 sec'],
-  ['You receive', '499.25 USDT'],
-  ['Gas (ARB)', '0.00012 ETH'],
-] satisfies [string, string][];
 
 /* ── Card ────────────────────────────────────────────────── */
 

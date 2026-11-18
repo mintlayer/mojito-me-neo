@@ -1,6 +1,11 @@
-// TS mirror of the UniFFI surface we consume. Names follow the Kotlin/Swift
-// spellings from docs/build/sdks/mobile-bindings.md. Amounts are decimal atom
-// strings. All fallible calls reject with BindingsError.
+// TS mirror of the vendored UniFFI surface (vendor/mintlayer, release
+// wallet-bindings-v0.1.0). The signatures below are pinned byte-for-byte
+// against the vendored Swift/Kotlin facade by src/trade/bindingsParity.test.ts:
+// reshaping this file without the vendored source (or vice versa) fails the
+// gate. Swift UInt64/UInt32 arguments ride JS numbers (block heights, nonces
+// and indexes fit safely); amounts stay decimal atom strings and ids stay
+// bech32 strings, exactly the vendored String forms. All fallible calls
+// reject with BindingsError.
 export type MlNetwork = 'mainnet' | 'testnet' | 'regtest' | 'signet';
 
 export type BindingsError = {
@@ -31,6 +36,10 @@ export interface MintlayerBindings {
   getTransactionId(transaction: Uint8Array, strictByteSize: boolean): Promise<string>;
   decodeTransactionToJson(transaction: Uint8Array, network: MlNetwork): Promise<string>;
 
+  // timelock encoders: the HTLC refundTimelock argument is the blob one of
+  // these produces (the vendored facade exposes no bare-number form)
+  encodeLockForSeconds(totalSeconds: number): Promise<Uint8Array>;
+
   // signing and witnesses
   encodeWitness(params: WitnessParams): Promise<Uint8Array>;
   encodeWitnessNoSignature(): Promise<Uint8Array>;
@@ -41,10 +50,13 @@ export interface MintlayerBindings {
 
   // orders
   encodeCreateOrderOutput(params: OrderParams): Promise<Uint8Array>;
-  encodeInputForFillOrder(orderId: Uint8Array, destination: Uint8Array, amount: string): Promise<Uint8Array>;
-  encodeInputForConcludeOrder(orderId: Uint8Array, destination: Uint8Array): Promise<Uint8Array>;
-  getOrderId(transaction: Uint8Array, outputIndex: number): Promise<string>;
-  getTokenId(transaction: Uint8Array, outputIndex: number): Promise<string>;
+  encodeInputForFillOrder(orderId: string, fillAmount: string, destination: string, nonce: number, currentBlockHeight: number, network: MlNetwork): Promise<Uint8Array>;
+  encodeInputForConcludeOrder(orderId: string, nonce: number, currentBlockHeight: number, network: MlNetwork): Promise<Uint8Array>;
+  /** The bech32 order id derived from the create transaction inputs. */
+  getOrderId(inputs: Uint8Array[], network: MlNetwork): Promise<string>;
+  /** The bech32 token id derived from the issuing transaction inputs; the
+   *  id scheme depends on the upgrade active at currentBlockHeight. */
+  getTokenId(inputs: Uint8Array[], currentBlockHeight: number, network: MlNetwork): Promise<string>;
 
   // static fee schedule
   fungibleTokenIssuanceFee(): Promise<string>;
@@ -52,8 +64,15 @@ export interface MintlayerBindings {
 }
 
 export type HtlcParams = {
-  atoms: string; tokenId?: string; secretHash: Uint8Array;
-  spendAddress: string; spendPubkey: Uint8Array; refundAddress: string; refundTimelock: number;
+  /** Decimal atom amount (the vendored amount string). */
+  amount: string;
+  tokenId?: string;
+  /** Hex-encoded SHA-256 secret hash (the vendored hex string form). */
+  secretHash: string;
+  spendAddress: string;
+  refundAddress: string;
+  /** Blob from encodeLockForSeconds (the vendored Data form). */
+  refundTimelock: Uint8Array;
 };
 
 export type WitnessParams = {
@@ -61,6 +80,9 @@ export type WitnessParams = {
   privateKey: Uint8Array; address: string; transaction: Uint8Array;
   inputUtxos: (Uint8Array | null)[]; inputIndex: number;
   additionalInfo?: { tokenId: string }; inclusionHeight: number; network: MlNetwork;
+  /** F10 reveal field consumed by encodeWitnessHtlcSpend only (M4 atomic
+   *  swap claim): the preimage that satisfies the HTLC hash. */
+  secret?: Uint8Array;
 };
 
 export type OrderParams = {

@@ -241,6 +241,9 @@ export const MojitoCore: MojitoCore = {
   encodeOutpointSourceId(id32: Uint8Array, source: 'transaction' | 'block-reward') {
     return stub('encodeOutpointSourceId', [id32, source]);
   },
+  encodeLockForSeconds(totalSeconds: number) {
+    return stub('encodeLockForSeconds', [totalSeconds]);
+  },
   encodeInputForUtxo(outpointSource: Uint8Array, index: number) {
     return stub('encodeInputForUtxo', [outpointSource, index]);
   },
@@ -290,17 +293,17 @@ export const MojitoCore: MojitoCore = {
   encodeCreateOrderOutput(params: OrderParams) {
     return stub('encodeCreateOrderOutput', [params]);
   },
-  encodeInputForFillOrder(orderId: Uint8Array, destination: Uint8Array, amount: string) {
-    return stub('encodeInputForFillOrder', [orderId, destination, amount]);
+  encodeInputForFillOrder(orderId: string, fillAmount: string, destination: string, nonce: number, currentBlockHeight: number, network: MlNetwork) {
+    return stub('encodeInputForFillOrder', [orderId, fillAmount, destination, nonce, currentBlockHeight, network]);
   },
-  encodeInputForConcludeOrder(orderId: Uint8Array, destination: Uint8Array) {
-    return stub('encodeInputForConcludeOrder', [orderId, destination]);
+  encodeInputForConcludeOrder(orderId: string, nonce: number, currentBlockHeight: number, network: MlNetwork) {
+    return stub('encodeInputForConcludeOrder', [orderId, nonce, currentBlockHeight, network]);
   },
-  getOrderId(transaction: Uint8Array, outputIndex: number) {
-    return stub('getOrderId', [transaction, outputIndex]);
+  getOrderId(inputs: Uint8Array[], network: MlNetwork) {
+    return stub('getOrderId', [inputs, network]);
   },
-  getTokenId(transaction: Uint8Array, outputIndex: number) {
-    return stub('getTokenId', [transaction, outputIndex]);
+  getTokenId(inputs: Uint8Array[], currentBlockHeight: number, network: MlNetwork) {
+    return stub('getTokenId', [inputs, currentBlockHeight, network]);
   },
 
   // static fee schedule
