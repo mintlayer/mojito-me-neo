@@ -1,66 +1,209 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { Sheet } from './types';
-import { Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, TextInput, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { t, type I18nKey } from '../i18n';
-import { useData } from '../data/providers/context';
-import type { FeeTierId } from '../data/providers';
+import { useData, useProviders } from '../data/providers/context';
+import { endpointsFor } from '../config/endpoints';
+import type { FeeTierId, SendQuote, SendResult } from '../data/providers';
+import type { TrackedTx, TxTracker } from '../send/TxTracker';
+import { validateAddress, parseSendAmount, type AddressChain } from '../send/validation';
+import { addressErrorCopy, amountErrorCopy, sendErrorCopy } from '../send/errors';
 import { bioName } from '../onboarding/context';
 import { C, G } from '../theme';
-import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, quantizeAmount, tile, hairlineTop, usd } from '../ui';
+import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, quantizeAmount, tile, truncateMiddle, usd, hairlineTop } from '../ui';
 
-export function SendScreen({ onClose, bio = 'face' }: Sheet) {
+function chainOf(chainName: string): AddressChain {
+  return chainName === 'Bitcoin' ? 'btc' : 'ml';
+}
+
+/** Default decimals when the asset row carries none (fixture assets). */
+function decimalsOf(chainName: string, decimals?: number): number {
+  if (decimals !== undefined) return decimals;
+  return chainName === 'Bitcoin' ? 8 : 11;
+}
+
+/** Explorer URL per chain from the endpoints config; null hides the link. */
+function explorerUrl(kind: 'ml' | 'btc', txId: string, network: 'mainnet' | 'testnet'): string | null {
+  const endpoints = endpointsFor(network);
+  const base = kind === 'btc' ? endpoints.btcExplorerBase : endpoints.explorerBase;
+  return base === null ? null : `${base}/tx/${txId}`;
+}
+
+/** Subscribe to one tracked transaction while mounted. */
+function useTrackedTx(tracker: TxTracker, kind: 'ml' | 'btc' | null, txId: string | null): TrackedTx | null {
+  const [state, setState] = useState<TrackedTx | null>(null);
+  useEffect(() => {
+    if (kind === null || txId === null) return undefined;
+    const sync = () => setState(tracker.get(kind, txId));
+    sync();
+    return tracker.subscribe(sync);
+  }, [tracker, kind, txId]);
+  return state;
+}
+
+export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet) {
+  const { send, txTracker } = useProviders();
   const assets = useData((d) => d.getAssets());
   const assetBalances = useData((d) => d.getAssetBalances());
   const assetSymbols = useData((d) => d.getAssetSymbols());
   const contacts = useData((d) => d.getContacts());
-  const fees = useData((d) => d.getFees());
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [tokenSym, setTokenSym] = useState('ML');
   const [picker, setPicker] = useState(false);
   const [address, setAddress] = useState('');
+  const [addressError, setAddressError] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
+  const [amountError, setAmountError] = useState<string | null>(null);
   const [feeTier, setFeeTier] = useState<FeeTierId>('standard');
+  const [quote, setQuote] = useState<SendQuote | null>(null);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [result, setResult] = useState<SendResult | null>(null);
+  const txState = useTrackedTx(txTracker, result?.kind ?? null, result?.txId ?? null);
+  /** Quote debounce: a keystroke storm must not hammer the fee planners. */
+  const quoteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const token = assets?.find((a) => a.sym === tokenSym) ?? assets?.[0];
+  const chain = token === undefined ? 'ml' : chainOf(token.chain);
+  const decimals = token === undefined ? 11 : decimalsOf(token.chain, token.decimals);
+  const canBroadcast = send.canBroadcast(chain);
 
-  if (!assets || !assetBalances || !assetSymbols || !contacts || !fees || !token) return <Screen />;
-  const fee = fees[feeTier];
+  const onAddressChange = useCallback(
+    (text: string) => {
+      setAddress(text);
+      const error = validateAddress(text, chain, network);
+      setAddressError(error === null ? null : addressErrorCopy(error));
+    },
+    [chain, network],
+  );
 
-  if (step === 2) {
-    // ponytail: fixture tx hash and explorer link; M3 wires the real
-    // BroadcastProvider.broadcastMl result and status polling in their place.
+  const onAmountChange = useCallback(
+    (text: string) => {
+      setAmount(text);
+      const parsed = parseSendAmount(text, decimals);
+      setAmountError(parsed.ok ? null : amountErrorCopy(parsed.error));
+    },
+    [decimals],
+  );
+
+  // Live per-tier quotes (debounced) whenever the details settle.
+  useEffect(() => {
+    if (step !== 0 || addressError !== null || amountError !== null || address === '' || amount === '') {
+      setQuote(null);
+      setQuoteError(null);
+      return undefined;
+    }
+    if (quoteTimer.current !== null) clearTimeout(quoteTimer.current);
+    quoteTimer.current = setTimeout(() => {
+      const load =
+        chain === 'btc'
+          ? send.quoteBtc({ to: address.trim(), amountDecimal: amount })
+          : send.quoteMl({ to: address.trim(), amountDecimal: amount, decimals, tokenId: token?.tokenId });
+      load
+        .then((q) => {
+          setQuote(q);
+          setQuoteError(null);
+        })
+        .catch((e: unknown) => {
+          setQuote(null);
+          setQuoteError(sendErrorCopy(e));
+        });
+    }, 400);
+    return () => {
+      if (quoteTimer.current !== null) clearTimeout(quoteTimer.current);
+    };
+  }, [step, address, amount, addressError, amountError, chain, decimals, token, send]);
+
+  const paste = async () => {
+    try {
+      const text = await Clipboard.getStringAsync();
+      if (text.length > 0) onAddressChange(text.trim());
+    } catch {
+      // Clipboard unavailable: the field stays editable by hand.
+    }
+  };
+
+  const confirm = () => {
+    if (token === undefined || sending) return;
+    setSending(true);
+    setSendError(null);
+    const btcParams = { to: address.trim(), amountDecimal: amount, tier: feeTier };
+    const mlParams = { to: address.trim(), amountDecimal: amount, decimals, tier: feeTier, tokenId: token.tokenId };
+    const flow = chain === 'btc' ? send.sendBtc(btcParams) : send.sendMl(mlParams);
+    flow
+      .then((r) => {
+        setResult(r);
+        setStep(2);
+      })
+      .catch((e: unknown) => {
+        setSendError(sendErrorCopy(e));
+      })
+      .finally(() => setSending(false));
+  };
+
+  if (!assets || !assetBalances || !assetSymbols || !contacts || !token) return <Screen />;
+
+  if (step === 2 && result !== null) {
+    const txUrl = explorerUrl(result.kind, result.txId, network);
+    const confirmed = txState?.state === 'confirmed';
     return (
       <SuccessScreen
-        title={t('send.step.sent')}
-        summary={`${amount} ${token.sym} → ${address.slice(0, 10)}…`}
+        title={t('send.success.title')}
+        summary={`${amount} ${token.sym} → ${truncateMiddle(address, 12, 8)}`}
         onDone={onClose}
         header={<SheetHeader onClose={onClose} />}
         secondary={
-          <Btn
-            tone="ghost"
-            className="w-full mt-1"
-            onPress={() => Linking.openURL('https://explorer.mintlayer.org/tx/0x4f2ab91c')}>
-            {t('common.seeExplorer')}
-          </Btn>
+          txUrl !== null ? (
+            <Btn tone="ghost" className="w-full mt-1" onPress={() => void Linking.openURL(txUrl)}>
+              {t('common.seeExplorer')}
+            </Btn>
+          ) : (
+            <Txt className="text-[11px] text-text3 mt-2 text-center">{t('common.explorer.unavailable')}</Txt>
+          )
         }>
         <Card className="w-full mt-6 p-3.5 rounded-[14px] gap-2">
-          <KVRow k={t('send.txHash')} v="0x4f2a…b91c" tone={C.text1} />
-          <KVRow k={t('send.status')} v={t('send.statusConfirming')} tone={C.amber} />
+          <KVRow k={t('send.txHash')} v={truncateMiddle(result.txId)} tone={C.text1} />
+          {confirmed ? (
+            <KVRow k={t('send.status')} v={t('send.success.confirmed', { count: txState?.confirmations ?? 0 })} tone={C.green} />
+          ) : (
+            <KVRow k={t('send.status')} v={t('send.success.pending')} tone={C.amber} />
+          )}
         </Card>
+        {result.demo ? (
+          <Callout glyph="ⓘ" className="mt-3.5">
+            <Txt className="text-[12px]">{t('home.demoData')}</Txt>
+          </Callout>
+        ) : null}
       </SuccessScreen>
     );
   }
 
   if (step === 1) {
+    const leg = quote?.[feeTier];
+    const feeText = leg !== undefined ? `${leg.feeDecimal} ${chain === 'btc' ? 'BTC' : token.sym}` : t('send.fee.unavailable');
+    const rateText =
+      leg === undefined
+        ? undefined
+        : chain === 'btc'
+          ? t('send.fee.rateBtc', { rate: leg.satPerVbyte ?? '' })
+          : t('send.fee.rate', { rate: leg.rateAtomsPerKb ?? '' });
+    const total =
+      leg !== undefined && chain === 'ml'
+        ? (parseFloat(amount || '0') + parseFloat(leg.feeDecimal)).toFixed(decimals > 8 ? 8 : decimals)
+        : amount;
     const rows: [string, React.ReactNode][] = [
-      [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{address}</Txt>],
+      [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{truncateMiddle(address, 14, 10)}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
-      [t('common.networkFee'), t('send.feeValue', { fee: String(fee.cost), sym: token.sym, usd: `$${usd(fee.cost, token.price)}` })],
+      [t('common.networkFee'), feeText],
       [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(`send.fee.eta.${feeTier}` as I18nKey)}</Txt>],
-      [t('common.total'), `${(parseFloat(amount || '0') + fee.cost).toFixed(5)} ${token.sym}`],
     ];
+    if (rateText !== undefined) rows.push([t('send.fee.rate'), rateText]);
+    rows.push([t('common.total'), `${total} ${token.sym}`]);
     return (
       <Screen>
-        <SheetHeader title={t('send.step.review')} onClose={onClose} onBack={() => setStep(0)} />
+        <SheetHeader title={t('send.review.title')} onClose={onClose} onBack={() => setStep(0)} />
         <View className="px-6 pt-5">
           <View className="items-center mb-4">
             <Label>{t('common.youSend')}</Label>
@@ -83,17 +226,36 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
             ))}
           </Card>
 
+          {leg?.rateIsFallback ? (
+            <Callout tone={C.amber} glyph="!" className="mt-3.5">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('send.fee.fallback')}</Txt>
+            </Callout>
+          ) : null}
+          {!canBroadcast ? (
+            <Callout tone={C.amber} glyph="!" className="mt-3.5">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('send.error.broadcast.disabled')}</Txt>
+            </Callout>
+          ) : null}
+          {sendError !== null ? (
+            <Callout tone={C.red} glyph="!" className="mt-3.5">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{sendError}</Txt>
+            </Callout>
+          ) : null}
+
           <Callout icon="fingerprint" className="mt-3.5">
             <Txt className="text-[12px]">{t('send.authBio', { bio: bioName(bio) })}</Txt>
           </Callout>
 
-          <Btn tone="primary" icon="lock" className="mt-4" onPress={() => setStep(2)}>
-            {t('send.confirm', { amount, token: token.sym })}
+          <Btn tone="primary" icon="lock" className="mt-4" disabled={sending || leg === undefined} onPress={confirm}>
+            {sending ? t('send.review.broadcasting') : t('send.review.confirm')}
           </Btn>
         </View>
       </Screen>
     );
   }
+
+  const detailsReady =
+    addressError === null && amountError === null && address.trim().length > 0 && amount.length > 0 && quote !== null;
 
   return (
     <Screen>
@@ -129,6 +291,8 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
           if (assets.some((a) => a.sym === s)) {
             setTokenSym(s);
             setAmount('');
+            setAmountError(null);
+            setQuote(null);
           }
         }}
       />
@@ -138,7 +302,7 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
         <View className="flex-row items-baseline gap-1.5">
           <TextInput
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={onAmountChange}
             placeholder="0"
             placeholderTextColor={C.text3}
             keyboardType="decimal-pad"
@@ -150,8 +314,13 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
         <Txt mono className="text-[13px] text-text2 mt-1">
           {t('common.approxUsd', { usd: `$${usd(amount, token.price)}` })}
         </Txt>
+        {amountError !== null ? (
+          <Txt className="text-[11px] mt-1" style={{ color: C.red }}>
+            {amountError}
+          </Txt>
+        ) : null}
         <View className="w-full mt-3.5">
-          <PctButtons onPick={(f) => setAmount(quantizeAmount(token.amt * f))} />
+          <PctButtons onPick={(f) => onAmountChange(quantizeAmount(token.amt * f, decimals))} />
         </View>
       </View>
 
@@ -166,22 +335,37 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
         <Card className="p-3.5 rounded-[14px] flex-row items-center gap-2.5">
           <TextInput
             value={address}
-            onChangeText={setAddress}
-            placeholder={t('send.address.placeholder')}
+            onChangeText={onAddressChange}
+            placeholder={t('send.to.placeholder')}
             placeholderTextColor={C.text3}
             autoCapitalize="none"
+            autoCorrect={false}
             accessibilityLabel={t('send.address.a11y')}
             className="flex-1 font-mono text-[13px] text-text0 p-0"
           />
-          <Icon name="scan" size={18} color={C.amber} />
-          <Icon name="qr" size={18} color={C.text2} />
+          <Pressable onPress={() => void paste()} accessibilityLabel={t('send.to.paste')} hitSlop={8}>
+            <Txt className="text-[11px] font-semibold" style={{ color: C.amber }}>
+              {t('send.to.paste')}
+            </Txt>
+          </Pressable>
+          <Pressable
+            onPress={() => Alert.alert(t('send.title'), t('send.scan.unavailable'))}
+            accessibilityLabel={t('send.scan.unavailable')}
+            hitSlop={8}>
+            <Icon name="qr" size={18} color={C.text2} />
+          </Pressable>
         </Card>
+        {addressError !== null ? (
+          <Txt className="text-[11px] mt-1.5" style={{ color: C.red }}>
+            {addressError}
+          </Txt>
+        ) : null}
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingTop: 10 }}>
           {contacts.map((c) => (
             <Pressable
               key={c.name}
-              onPress={() => setAddress(c.address)}
+              onPress={() => onAddressChange(c.address)}
               className="flex-row items-center gap-2 px-3 py-2 rounded-full"
               style={tile()}>
               <Avatar letter={c.name[0]} size={22} radius={11} colors={G.avatar} />
@@ -195,8 +379,9 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
       <View className="px-6 pt-5">
         <Label className="mb-2">{t('common.networkFee')}</Label>
         <View className="flex-row gap-1.5">
-          {(Object.keys(fees) as FeeTierId[]).map((k) => {
+          {(['economy', 'standard', 'fast'] as FeeTierId[]).map((k) => {
             const on = feeTier === k;
+            const leg = quote?.[k];
             return (
               <Pressable
                 key={k}
@@ -210,16 +395,27 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
                   {t(`send.fee.eta.${k}` as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
-                  {fees[k].cost} {token.sym}
+                  {leg !== undefined ? `${leg.feeDecimal} ${token.sym}` : t('send.fee.unavailable')}
                 </Txt>
               </Pressable>
             );
           })}
         </View>
+        {quoteError !== null ? (
+          <Callout tone={C.amber} glyph="!" className="mt-2.5">
+            <Txt className="text-[11.5px] text-text1 leading-[17px]">{quoteError}</Txt>
+          </Callout>
+        ) : null}
+        {chain === 'ml' && !send.canBroadcast('ml') ? (
+          <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('send.chain.mlPending')}</Txt>
+        ) : null}
+        {chain === 'btc' && !send.canBroadcast('btc') ? (
+          <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('send.chain.btcUnconfigured')}</Txt>
+        ) : null}
       </View>
 
       <View className="px-6 pt-6">
-        <Btn tone="primary" disabled={!amount || !address} onPress={() => setStep(1)}>
+        <Btn tone="primary" disabled={!detailsReady} onPress={() => setStep(1)}>
           {t('send.review.cta')}
         </Btn>
       </View>
@@ -227,4 +423,4 @@ export function SendScreen({ onClose, bio = 'face' }: Sheet) {
   );
 }
 
-/* ══ Send ═══════════════════════════════════════════════════ */
+/* ══ Send ═════════════════════════════════════════════════ */

@@ -7,22 +7,25 @@ import { FEES } from '../../data';
 import { SendError } from '../../send/errors';
 import { validateAddress, parseSendAmount } from '../../send/validation';
 import type { NetworkFlag } from '../../config/endpoints';
-import type { BroadcastProvider, SendQuote, SendService } from '../providers/types';
+import type { BroadcastProvider, FeeSchedule, SendQuote, SendService } from '../providers/types';
 
 export type MockSendConfig = {
   broadcast: BroadcastProvider;
   network: NetworkFlag;
 };
 
-function quoteFor(cost: number, decimals: number): SendQuote {
-  const feeAtoms = (BigInt(Math.round(cost * 10 ** decimals)) ).toString();
-  const leg = (rateIsFallback: boolean) => ({
+function quote(decimals: number, tierCosts: FeeSchedule): SendQuote {
+  const leg = (cost: number): SendQuote['economy'] => ({
     feeDecimal: String(cost),
-    feeAtoms,
+    feeAtoms: BigInt(Math.round(cost * 10 ** decimals)).toString(),
     sizeBytes: 0,
-    rateIsFallback,
+    rateIsFallback: true,
   });
-  return { economy: leg(true), standard: leg(true), fast: leg(true) };
+  return {
+    economy: leg(tierCosts.economy.cost),
+    standard: leg(tierCosts.standard.cost),
+    fast: leg(tierCosts.fast.cost),
+  };
 }
 
 export function createMockSend(cfg: MockSendConfig): SendService {
@@ -63,13 +66,18 @@ export function createMockSend(cfg: MockSendConfig): SendService {
     async quoteMl(params) {
       requireValid(params.to, 'ml');
       requireAmount(params.amountDecimal, params.decimals);
-      return quoteFor(FEES.standard.cost, 11);
+      return quote(11, FEES);
     },
 
     async quoteBtc(params) {
       requireValid(params.to, 'btc');
       requireAmount(params.amountDecimal, 8);
-      return quoteFor(FEES.standard.cost / 1000, 8);
+      const scaled: FeeSchedule = {
+        economy: { cost: FEES.economy.cost / 1000 },
+        standard: { cost: FEES.standard.cost / 1000 },
+        fast: { cost: FEES.fast.cost / 1000 },
+      };
+      return quote(8, scaled);
     },
 
     async sendMl(params) {

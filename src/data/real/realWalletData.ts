@@ -83,7 +83,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
     };
 
     const mlDecimal = atomsToDecimal(portfolio.coinAtoms, ML_DECIMALS);
-    pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML')), mlDecimal);
+    pushAsset(assetRow('ML', 'Mintlayer', 'Mintlayer', mlDecimal, snapshots.get('ML') ?? null, await sparkFor(price, 'ML'), false, { decimals: ML_DECIMALS }), mlDecimal);
 
     let btcDecimal = '0';
     // Unconfigured btc-api base (F13): the BTC amount is unknown, not zero,
@@ -113,7 +113,7 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
         if (!(e instanceof IndexerError)) throw e;
       }
     }
-    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable), btcDecimal);
+    pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable, { decimals: 8 }), btcDecimal);
 
     for (const entry of portfolio.tokens) {
       if (nftIds.has(entry.tokenId)) continue; // NFT units live on the NFTs tab.
@@ -128,6 +128,8 @@ export function createRealWalletData(context: RealAccountContext): WalletData {
           decimal,
           snapshots.get(entry.tokenId) ?? null,
           await sparkFor(price, ticker ?? entry.tokenId),
+          false,
+          { decimals: meta.decimals, tokenId: entry.tokenId },
         ),
         decimal,
       );
@@ -240,6 +242,7 @@ function assetRow(
   snapshot: PriceSnapshot | null,
   spark: number[],
   unavailable = false,
+  extra?: { decimals: number; tokenId?: string },
 ): AssetRow {
   const amt = Number(decimal);
   const price = snapshot ? Number(snapshot.usd) : 0;
@@ -253,6 +256,8 @@ function assetRow(
     value: amt * price,
     spark,
     unavailable: unavailable || undefined,
+    decimals: extra?.decimals,
+    tokenId: extra?.tokenId,
   };
 }
 

@@ -19,6 +19,11 @@ export type AssetRow = {
    *  value are unknown, not zero. The row renders an explicit unavailable
    *  state and contributes nothing to the total. */
   unavailable?: boolean;
+  /** Send precision (M3): exact decimals for the amount parser; absent in
+   *  fixture rows, where the screen falls back to the chain default. */
+  decimals?: number;
+  /** On-chain token id for MLS-01 sends; absent for coin rows. */
+  tokenId?: string;
 };
 
 export type ActivityRow = { icon: IconName; title: string; sub: string; tone: Tone; time: string; state: string; /** True while the row is still settling; drives the live colour. */ live: boolean };

@@ -4,9 +4,9 @@ import QRCodeSvg from 'react-native-qrcode-svg';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { useData, useDataState, useProviders } from '../data/providers/context';
+import { useData, useDataState } from '../data/providers/context';
 import { C, CHAINS, type ChainName } from '../theme';
-import { Btn, Callout, Card, FakeQR, Label, Screen, Segmented, SheetHeader, Txt } from '../ui';
+import { Btn, Callout, Card, Label, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
 /** Chain segment labels from i18n; unknown chains fall back to the raw key. */
 const CHAIN_LABELS: Partial<Record<ChainName, I18nKey>> = {
@@ -17,7 +17,6 @@ const CHAIN_LABELS: Partial<Record<ChainName, I18nKey>> = {
 export function ReceiveScreen({ onClose }: Sheet) {
   const addresses = useDataState((d) => d.getAddresses(), 0);
   const chainGlyphs = useData((d) => d.getChainGlyphs());
-  const { mode } = useProviders();
   const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
   const addr = addresses.data?.[chain] ?? '';
@@ -91,15 +90,12 @@ export function ReceiveScreen({ onClose }: Sheet) {
           {/* QR */}
           <View className="px-6 pt-6">
             <View className="p-6 rounded-[24px] items-center justify-center" style={{ backgroundColor: C.text0 }}>
-              {mode === 'real' ? (
-                // Real mode encodes the address itself: the funds-transfer
-                // path must render a scannable QR, never the demo grid. The
-                // card padding is the quiet zone; ECC level H keeps the code
-                // decodable under the centered chain badge.
-                <QRCodeSvg value={addr} size={240} color={C.ink} backgroundColor="transparent" ecl="H" quietZone={0} />
-              ) : (
-                <FakeQR seed={addr} />
-              )}
+              {/* The funds-transfer path renders a scannable QR in both
+                  modes (M3 retired the decorative grid): the demo flow must
+                  scan exactly like the real one. The card padding is the
+                  quiet zone; ECC level H keeps the code decodable under the
+                  centered chain badge. */}
+              <QRCodeSvg value={addr} size={240} color={C.ink} backgroundColor="transparent" ecl="H" quietZone={0} />
               <View
                 className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
                 style={{ backgroundColor: accent }}>
@@ -140,6 +136,7 @@ export function ReceiveScreen({ onClose }: Sheet) {
                 {t('receive.warning', { chain: label(chain) })}
               </Txt>
             </Callout>
+            <Txt className="text-[11px] text-text2 mt-2 leading-[16px]">{t('receive.freshNote')}</Txt>
           </View>
         </>
       )}
