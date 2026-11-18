@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
+import QRCodeSvg from 'react-native-qrcode-svg';
 import type { Sheet } from './types';
 import { Alert, ScrollView, Share, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
-import { useData, useDataState } from '../data/providers/context';
+import { useData, useDataState, useProviders } from '../data/providers/context';
 import { C, CHAINS, type ChainName } from '../theme';
 import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
@@ -16,6 +17,7 @@ const CHAIN_LABELS: Partial<Record<ChainName, I18nKey>> = {
 export function ReceiveScreen({ onClose }: Sheet) {
   const addresses = useDataState((d) => d.getAddresses(), 0);
   const chainGlyphs = useData((d) => d.getChainGlyphs());
+  const { mode } = useProviders();
   const [chain, setChain] = useState<ChainName>('Mintlayer');
   const [copied, setCopied] = useState(false);
   const addr = addresses.data?.[chain] ?? '';
@@ -75,7 +77,15 @@ export function ReceiveScreen({ onClose }: Sheet) {
           {/* QR */}
           <View className="px-6 pt-6">
             <View className="p-6 rounded-[24px] items-center justify-center" style={{ backgroundColor: C.text0 }}>
-              <FakeQR seed={addr} />
+              {mode === 'real' ? (
+                // Real mode encodes the address itself: the funds-transfer
+                // path must render a scannable QR, never the demo grid. The
+                // card padding is the quiet zone; ECC level H keeps the code
+                // decodable under the centered chain badge.
+                <QRCodeSvg value={addr} size={240} color={C.ink} backgroundColor="transparent" ecl="H" quietZone={0} />
+              ) : (
+                <FakeQR seed={addr} />
+              )}
               <View
                 className="absolute w-14 h-14 rounded-[14px] items-center justify-center border-4 border-white"
                 style={{ backgroundColor: accent }}>
