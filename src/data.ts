@@ -33,13 +33,13 @@ export const ASSET_BALANCES = Object.fromEntries(ASSETS.map((a) => [a.sym, `${a.
 
 export const ASSET_SYMBOLS = ASSETS.map((a) => a.sym);
 
-// EVM demo chains (Ethereum, Arbitrum, Polygon, BNB) were removed in M2 per
+// The EVM demo chains of the M0 design were removed in M2 per
 // the M2 spec: no wallet backend exists for them. The bridge fixtures keep
 // their R5 pair until M4 wires bridge_v2 wholesale.
 export const NETWORKS: readonly ChainName[] = ['Bitcoin', 'Mintlayer'];
 
 export const ACTIVITY: ActivityRow[] = [
-  { icon: 'bridge', title: 'Bridge to Arbitrum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
+  { icon: 'bridge', title: 'Bridge to Ethereum', sub: '120 ML → 41.04 USDC', tone: 'violet', time: '2m', state: 'Confirming · 3/12', live: true },
   { icon: 'swap', title: 'Swap on Mintlayer DEX', sub: '0.012 BTC → 3,420 ML', tone: 'amber', time: '14m', state: 'Filled · +0.4%', live: false },
   { icon: 'arrow_dn', title: 'Atomic swap received', sub: '+ 0.0184 BTC', tone: 'green', time: '1h', state: 'Settled', live: false },
 ];
