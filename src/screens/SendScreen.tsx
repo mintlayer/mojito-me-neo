@@ -10,11 +10,34 @@ import type { TrackedTx, TxTracker } from '../send/TxTracker';
 import { validateAddress, parseSendAmount, type AddressChain } from '../send/validation';
 import { addressErrorCopy, amountErrorCopy, sendErrorCopy } from '../send/errors';
 import { bioName } from '../onboarding/context';
+import { atomsToDecimal, decimalsToAtoms } from '../money';
 import { C, G } from '../theme';
 import { Avatar, Btn, Callout, Card, ChainBadge, Icon, KVRow, Label, PctButtons, Screen, SheetHeader, SuccessScreen, TokenIcon, TokenPicker, Txt, tint, quantizeAmount, tile, truncateMiddle, usd, hairlineTop } from '../ui';
 
 function chainOf(chainName: string): AddressChain {
   return chainName === 'Bitcoin' ? 'btc' : 'ml';
+}
+
+/** True when the reviewed asset is an MLS-01 token (the fee is then paid
+ *  in ML coin, never in the token, so fee and total keep single units). */
+function isTokenSend(chain: AddressChain, tokenId?: string): boolean {
+  return chain === 'ml' && tokenId !== undefined;
+}
+
+/** Fee unit per reviewed asset: BTC sends show sat-denominated BTC, ML
+ *  token sends pay the fee in ML, everything else in the asset itself. */
+function feeSymbol(chain: AddressChain, tokenSym: string, tokenId?: string): string {
+  if (chain === 'btc') return 'BTC';
+  return isTokenSend(chain, tokenId) ? 'ML' : tokenSym;
+}
+
+/** Review total on exact digit strings (money.ts, no float arithmetic):
+ *  both legs convert to atoms, add on BigInt and render back. Token sends
+ *  total the token leg only; their fee is its own ML row. */
+function reviewTotal(amountDecimal: string, feeDecimal: string, decimals: number, token: boolean): string {
+  if (token) return amountDecimal;
+  const sum = BigInt(decimalsToAtoms(amountDecimal || '0', decimals)) + BigInt(decimalsToAtoms(feeDecimal, decimals));
+  return atomsToDecimal(sum.toString(), decimals);
 }
 
 /** Default decimals when the asset row carries none (fixture assets). */
@@ -182,17 +205,15 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
 
   if (step === 1) {
     const leg = quote?.[feeTier];
-    const feeText = leg !== undefined ? `${leg.feeDecimal} ${chain === 'btc' ? 'BTC' : token.sym}` : t('send.fee.unavailable');
+    const feeText = leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable');
     const rateText =
       leg === undefined
         ? undefined
         : chain === 'btc'
           ? t('send.fee.rateBtc', { rate: leg.satPerVbyte ?? '' })
           : t('send.fee.rate', { rate: leg.rateAtomsPerKb ?? '' });
-    const total =
-      leg !== undefined && chain === 'ml'
-        ? (parseFloat(amount || '0') + parseFloat(leg.feeDecimal)).toFixed(decimals > 8 ? 8 : decimals)
-        : amount;
+    const total = leg !== undefined ? reviewTotal(amount, leg.feeDecimal, decimals, isTokenSend(chain, token.tokenId)) : amount;
+    const totalText = `${total} ${token.sym}`;
     const rows: [string, React.ReactNode][] = [
       [t('send.to.label'), <Txt key="to" mono className="text-[12px]">{truncateMiddle(address, 14, 10)}</Txt>],
       [t('send.network'), <ChainBadge key="net" chain={token.chain} />],
@@ -200,7 +221,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
       [t('send.arrival'), <Txt key="eta" className="text-[12px]" style={{ color: C.amber }}>{t(`send.fee.eta.${feeTier}` as I18nKey)}</Txt>],
     ];
     if (rateText !== undefined) rows.push([t('send.fee.rate'), rateText]);
-    rows.push([t('common.total'), `${total} ${token.sym}`]);
+    rows.push([t('common.total'), totalText]);
     return (
       <Screen>
         <SheetHeader title={t('send.review.title')} onClose={onClose} onBack={() => setStep(0)} />
@@ -395,7 +416,7 @@ export function SendScreen({ onClose, bio = 'face', network = 'mainnet' }: Sheet
                   {t(`send.fee.eta.${k}` as I18nKey)}
                 </Txt>
                 <Txt mono className="text-[10px] text-text3 mt-0.5">
-                  {leg !== undefined ? `${leg.feeDecimal} ${token.sym}` : t('send.fee.unavailable')}
+                  {leg !== undefined ? `${leg.feeDecimal} ${feeSymbol(chain, token.sym, token.tokenId)}` : t('send.fee.unavailable')}
                 </Txt>
               </Pressable>
             );

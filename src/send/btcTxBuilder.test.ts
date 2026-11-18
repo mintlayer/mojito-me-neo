@@ -7,7 +7,8 @@
 //   tsx src/send/btcTxBuilder.test.ts
 import { strict as assert } from 'node:assert/strict';
 
-import { Transaction } from '@scure/btc-signer';
+import { HDKey } from '@scure/bip32';
+import { NETWORK, Transaction, p2wpkh } from '@scure/btc-signer';
 
 import { deriveBtcAccount } from '../keys/BtcKeyring';
 import type { BtcUtxo } from '../data/btc/BtcChainService';
@@ -25,14 +26,14 @@ const BIP84_CHANGE_0 = 'bc1q8c6fshw2dlwun7ekn9qwf37cu2rn755upcp6el';
 const TXID_A = '11'.repeat(32);
 const TXID_B = '22'.repeat(32);
 
-function utxo(txid: string, vout: number, valueSat: string): BtcUtxo {
-  return { txid, vout, valueSat, confirmed: true, blockTime: null };
+function utxo(txid: string, vout: number, valueSat: string, confirmed = true): BtcUtxo {
+  return { txid, vout, valueSat, confirmed, blockTime: null };
 }
 
-function builderFor(utxos: BtcUtxo[], rate: { satPerVbyte: number; fallback: boolean }, changeAddress: string): BtcTxBuilder {
+function builderFor(funded: Record<string, BtcUtxo[]>, rate: { satPerVbyte: number; fallback: boolean }, changeAddress: string): BtcTxBuilder {
   return new BtcTxBuilder({
     network: 'mainnet',
-    utxos: { async utxos() { return utxos; } },
+    utxos: { async utxos(address) { return funded[address] ?? []; } },
     rateSource: async () => rate,
     changeAddress,
   });
@@ -42,14 +43,20 @@ async function main() {
   const account = await deriveBtcAccount(VECTOR_12, 'mainnet');
   assert.equal(account.xpub.length > 0, true);
   const seed = mnemonicToSeedSync(VECTOR_12);
+  const walk = HDKey.fromExtendedKey(account.xpub);
+  const addressAt = (branch: 0 | 1, index: number): string => {
+    const pay = p2wpkh(walk.derive(`m/${branch}/${index}`).publicKey!, NETWORK);
+    if (pay.address === undefined) throw new Error('vector derivation failed');
+    return pay.address;
+  };
 
   // 1. Plan and sign one input at 1 sat/vB, sending back to the change
   //    address so the vector addresses pin both legs.
   {
-    const builder = builderFor([utxo(TXID_A, 0, '100000')], { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    const builder = builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000')] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
     const plan = await builder.plan({
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_0,
+      fromAddresses: [BIP84_RECEIVING_0],
       to: BIP84_CHANGE_0,
       amountSat: 40000n,
       tier: 'standard',
@@ -64,7 +71,7 @@ async function main() {
     const result = await builder.buildAndSign({
       seed,
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_0,
+      fromAddresses: [BIP84_RECEIVING_0],
       to: BIP84_CHANGE_0,
       amountSat: 40000n,
       tier: 'standard',
@@ -86,10 +93,10 @@ async function main() {
     assert.equal(result.sentSat, '40000');
 
     // Deterministic signing (RFC6979): same inputs, same signature bytes.
-    const again = await builderFor([utxo(TXID_A, 0, '100000')], { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0).buildAndSign({
+    const again = await builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000')] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0).buildAndSign({
       seed,
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_0,
+      fromAddresses: [BIP84_RECEIVING_0],
       to: BIP84_CHANGE_0,
       amountSat: 40000n,
       tier: 'standard',
@@ -101,11 +108,11 @@ async function main() {
   // 2. Recipient on a different receiving index: the input key must be the
   //    one the xpub walk maps for that address (finalize fails otherwise).
   {
-    const builder = builderFor([utxo(TXID_A, 1, '80000')], { satPerVbyte: 2, fallback: false }, BIP84_CHANGE_0);
+    const builder = builderFor({ [BIP84_RECEIVING_1]: [utxo(TXID_A, 1, '80000')] }, { satPerVbyte: 2, fallback: false }, BIP84_CHANGE_0);
     const result = await builder.buildAndSign({
       seed,
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_1,
+      fromAddresses: [BIP84_RECEIVING_1],
       to: BIP84_RECEIVING_0,
       amountSat: 30000n,
       tier: 'fast',
@@ -120,14 +127,14 @@ async function main() {
   // 3. Two inputs when one cannot cover the send.
   {
     const builder = builderFor(
-      [utxo(TXID_A, 0, '60000'), utxo(TXID_B, 0, '60000')],
+      { [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '60000'), utxo(TXID_B, 0, '60000')] },
       { satPerVbyte: 1, fallback: false },
       BIP84_CHANGE_0,
     );
     const result = await builder.buildAndSign({
       seed,
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_0,
+      fromAddresses: [BIP84_RECEIVING_0],
       to: BIP84_CHANGE_0,
       amountSat: 100000n,
       tier: 'standard',
@@ -141,10 +148,10 @@ async function main() {
 
   // 4. Fallback rate flag rides the plan.
   {
-    const builder = builderFor([utxo(TXID_A, 0, '100000')], { satPerVbyte: 10, fallback: true }, BIP84_CHANGE_0);
+    const builder = builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000')] }, { satPerVbyte: 10, fallback: true }, BIP84_CHANGE_0);
     const plan = await builder.plan({
       accountXpub: account.xpub,
-      from: BIP84_RECEIVING_0,
+      fromAddresses: [BIP84_RECEIVING_0],
       to: BIP84_CHANGE_0,
       amountSat: 40000n,
       tier: 'economy',
@@ -155,13 +162,13 @@ async function main() {
 
   // 5. Insufficient funds is typed.
   {
-    const builder = builderFor([utxo(TXID_A, 0, '100000')], { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    const builder = builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000')] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
     await assert.rejects(
       () =>
         builder.buildAndSign({
           seed,
           accountXpub: account.xpub,
-          from: BIP84_RECEIVING_0,
+          fromAddresses: [BIP84_RECEIVING_0],
           to: BIP84_CHANGE_0,
           amountSat: 200000n,
           tier: 'standard',
@@ -172,13 +179,13 @@ async function main() {
 
   // 6. Dust is typed, before any UTXO fetch.
   {
-    const builder = builderFor([], { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    const builder = builderFor({}, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
     await assert.rejects(
       () =>
         builder.buildAndSign({
           seed,
           accountXpub: account.xpub,
-          from: BIP84_RECEIVING_0,
+          fromAddresses: [BIP84_RECEIVING_0],
           to: BIP84_CHANGE_0,
           amountSat: BTC_DUST_SAT - 1n,
           tier: 'standard',
@@ -190,7 +197,7 @@ async function main() {
         builder.buildAndSign({
           seed,
           accountXpub: account.xpub,
-          from: BIP84_RECEIVING_0,
+          fromAddresses: [BIP84_RECEIVING_0],
           to: BIP84_CHANGE_0,
           amountSat: BTC_DUST_SAT,
           tier: 'standard',
@@ -203,19 +210,91 @@ async function main() {
   // 7. Foreign wallet address rejects before signing.
   {
     const foreignAccount = await deriveBtcAccount([...Array(23).fill('abandon'), 'art'], 'mainnet');
-    const builder = builderFor([utxo(TXID_A, 0, '100000')], { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    const builder = builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000')] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
     await assert.rejects(
       () =>
         builder.buildAndSign({
           seed,
           accountXpub: foreignAccount.xpub,
-          from: BIP84_RECEIVING_0,
+          fromAddresses: [BIP84_RECEIVING_0],
           to: BIP84_CHANGE_0,
           amountSat: 40000n,
           tier: 'standard',
         }),
       (e: unknown) => e instanceof SendError && e.kind === 'rejected',
     );
+  }
+
+  // 8. Two funded origins (receiving 0 and change 0): the send spends both
+  //    and the change lands on a fresh branch 1 address, so the second send
+  //    of a real wallet flow keeps every UTXO reachable.
+  {
+    const freshChange = addressAt(1, 1);
+    assert.notEqual(freshChange, BIP84_CHANGE_0, 'the fresh change address is a different branch 1 index');
+    const builder = builderFor(
+      { [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '60000')], [BIP84_CHANGE_0]: [utxo(TXID_B, 0, '60000')] },
+      { satPerVbyte: 1, fallback: false },
+      freshChange,
+    );
+    const result = await builder.buildAndSign({
+      seed,
+      accountXpub: account.xpub,
+      fromAddresses: [BIP84_RECEIVING_0, BIP84_CHANGE_0],
+      to: BIP84_RECEIVING_1,
+      amountSat: 100000n,
+      tier: 'standard',
+    });
+    const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(result.hex, 'hex')));
+    assert.equal(parsed.inputsLength, 2, 'both funded origins are selected');
+    // BIP69 orders outputs by amount ascending, so match legs by value.
+    const legs = [0, 1].map((i) => ({ address: parsed.getOutputAddress(i), amount: parsed.getOutput(i)?.amount ?? 0n }));
+    assert.deepEqual(
+      legs.map((l) => l.address).sort(),
+      [BIP84_RECEIVING_1, freshChange].sort(),
+      'recipient and fresh branch 1 change legs are both present',
+    );
+    assert.equal(legs.find((l) => l.address === BIP84_RECEIVING_1)?.amount, 100000n, 'recipient amount is exact');
+    assert.equal(legs.find((l) => l.address === freshChange)?.amount, 120000n - 100000n - BigInt(result.feeSat));
+    assert.equal(BigInt(result.feeSat), BigInt(result.vsize) * 1n);
+    // The mixed-origin transaction must be valid: signing with one shared
+    // origin (the pre-fix behavior) fails to finalize here.
+    assert.match(result.txid, /^[0-9a-f]{64}$/);
+  }
+
+  // 9. An unconfirmed external receipt (receiving branch) is not spendable
+  //    until it confirms (header policy): it filters out before selection.
+  {
+    const builder = builderFor({ [BIP84_RECEIVING_0]: [utxo(TXID_A, 0, '100000', false)] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    await assert.rejects(
+      () =>
+        builder.buildAndSign({
+          seed,
+          accountXpub: account.xpub,
+          fromAddresses: [BIP84_RECEIVING_0],
+          to: BIP84_CHANGE_0,
+          amountSat: 40000n,
+          tier: 'standard',
+        }),
+      (e: unknown) => e instanceof SendError && e.kind === 'insufficient-funds',
+      'unconfirmed external receipt stays out of coin selection',
+    );
+  }
+
+  // 10. Own unconfirmed change (change branch) is spendable by policy: it
+  //     is the back to back send case, documented in the module header.
+  {
+    const builder = builderFor({ [BIP84_CHANGE_0]: [utxo(TXID_A, 0, '100000', false)] }, { satPerVbyte: 1, fallback: false }, BIP84_CHANGE_0);
+    const result = await builder.buildAndSign({
+      seed,
+      accountXpub: account.xpub,
+      fromAddresses: [BIP84_CHANGE_0],
+      to: BIP84_RECEIVING_0,
+      amountSat: 40000n,
+      tier: 'standard',
+    });
+    const parsed = Transaction.fromRaw(new Uint8Array(Buffer.from(result.hex, 'hex')));
+    assert.equal(parsed.inputsLength, 1);
+    assert.equal(parsed.getOutputAddress(0), BIP84_RECEIVING_0);
   }
 
   console.log('btcTxBuilder.test: ok');

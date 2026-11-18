@@ -125,6 +125,7 @@ export const en = {
   'send.error.timeout': 'The network took too long to answer. Try again.',
   'send.error.rejected': 'The transaction was rejected: {detail}',
   'send.error.bindings': 'Signing needs the native crypto module, which this build cannot verify yet.',
+  'send.error.busy': 'A send is already in progress. Wait for it to finish before starting another.',
   'send.address.a11y': 'Recipient address',
   'send.amount.a11y': 'Amount to send',
   'send.fee.economy': 'economy',

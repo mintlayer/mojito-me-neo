@@ -61,6 +61,22 @@ export function createRealSend(cfg: RealSendConfig): SendService {
     return bindings;
   }
 
+  /** Send serialization (one send at a time per service): the plan, sign,
+   *  broadcast and rotate section reads live UTXOs and read-modify-writes
+   *  the persisted derivation indexes, so a second overlapping send would
+   *  select the same UTXOs and race the counters. Refused typed instead of
+   *  queued: a queued send would sign a plan built on state the first send
+   *  is about to invalidate. The per-screen sending flag cannot provide
+   *  this: any second consumer of the service must hit the same guard. */
+  let inFlight = false;
+  function serialize<T>(fn: () => Promise<T>): Promise<T> {
+    if (inFlight) return Promise.reject(new SendError('busy', 'another send is still in progress'));
+    inFlight = true;
+    return fn().finally(() => {
+      inFlight = false;
+    });
+  }
+
   /** Public xpubs, derived once per service instance (public material,
    *  persistable; the vault session releases right after derivation). */
   let xpubs: Promise<{ btcXpub: string }> | null = null;
@@ -137,27 +153,31 @@ export function createRealSend(cfg: RealSendConfig): SendService {
     },
 
     async sendMl(params) {
-      const to = params.to.trim();
-      if (validateAddress(to, 'ml', context.cfg.network) !== null) throw new SendError('invalid-address', to);
-      const plan = await mlPlan({ ...params, tier: params.tier });
-      const { builder, indexer } = await mlBuilder();
-      const acct = await context.ensureAccount();
-      const changeAddress = await acct.manager.allocateChangeAddress('ml');
-      const unsigned = await builder.build({ ...plan, to, changeAddress });
-      const tip = await indexer.tip();
-      const signer = new MlTxSigner(requireBindings(), mlNetwork);
-      const signedHex = await withSession((session) => signer.sign(unsigned, session, tip.blockHeight + 1));
-      let result: { txId: string };
-      try {
-        result = await broadcast.broadcastMl(signedHex);
-      } catch (e) {
-        throw mapBroadcastError(e);
-      }
-      // Fresh-address policy (AddressManager): every outbound transaction
-      // advances the receiving index; the next Receive visit shows it.
-      await acct.manager.freshReceivingAddress('ml');
-      tracker.track({ id: result.txId, chain: 'ml' });
-      return { txId: result.txId, kind: 'ml', demo: false };
+      return serialize(async () => {
+        const to = params.to.trim();
+        if (validateAddress(to, 'ml', context.cfg.network) !== null) throw new SendError('invalid-address', to);
+        const plan = await mlPlan({ ...params, tier: params.tier });
+        const { builder, indexer } = await mlBuilder();
+        const acct = await context.ensureAccount();
+        // Address allocation happens inside the serialized section, after
+        // every await of the plan, so two sends can never share an index.
+        const changeAddress = await acct.manager.allocateChangeAddress('ml');
+        const unsigned = await builder.build({ ...plan, to, changeAddress });
+        const tip = await indexer.tip();
+        const signer = new MlTxSigner(requireBindings(), mlNetwork);
+        const signedHex = await withSession((session) => signer.sign(unsigned, session, tip.blockHeight + 1));
+        let result: { txId: string };
+        try {
+          result = await broadcast.broadcastMl(signedHex);
+        } catch (e) {
+          throw mapBroadcastError(e);
+        }
+        // Fresh-address policy (AddressManager): every outbound transaction
+        // advances the receiving index; the next Receive visit shows it.
+        await acct.manager.freshReceivingAddress('ml');
+        tracker.track({ id: result.txId, chain: 'ml' });
+        return { txId: result.txId, kind: 'ml', demo: false };
+      });
     },
 
     async quoteBtc(params) {
@@ -166,14 +186,18 @@ export function createRealSend(cfg: RealSendConfig): SendService {
       const amountSat = BigInt(amount.atoms);
       const acct = await context.ensureAccount();
       if (acct.btc === null) throw new SendError('broadcast-disabled', 'no btc-api base is configured');
-      const from = await acct.manager.currentReceivingAddress('btc');
+      // A quote reads the full managed address list so its fee preview
+      // matches what sendBtc will select; the change bookkeeping is only
+      // mutated by sendBtc (the quote previews on the next branch 1
+      // address once peekChangeAddress lands with the quote purity fix).
+      const fromAddresses = await acct.manager.allAddresses('btc');
       const changeAddress = await acct.manager.allocateChangeAddress('btc');
       const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
       const { btcXpub } = await publicXpubs();
       const tiers: FeeTierId[] = ['economy', 'standard', 'fast'];
       const quotes = {} as Record<FeeTierId, SendQuote[FeeTierId]>;
       for (const tier of tiers) {
-        const plan = await builder.plan({ accountXpub: btcXpub, from, to: params.to.trim(), amountSat, tier });
+        const plan = await builder.plan({ accountXpub: btcXpub, fromAddresses, to: params.to.trim(), amountSat, tier });
         quotes[tier] = {
           feeDecimal: atomsToDecimal(plan.feeSat, 8),
           feeAtoms: plan.feeSat,
@@ -187,30 +211,37 @@ export function createRealSend(cfg: RealSendConfig): SendService {
     },
 
     async sendBtc(params) {
-      const to = params.to.trim();
-      if (validateAddress(to, 'btc', context.cfg.network) !== null) throw new SendError('invalid-address', to);
-      const amount = parseSendAmount(params.amountDecimal, 8);
-      if (!amount.ok) throw new SendError('rejected', amount.error === 'tooManyDecimals' ? 'too many decimals' : 'amount not parseable');
-      const acct = await context.ensureAccount();
-      if (acct.btc === null) throw new SendError('broadcast-disabled', 'no btc-api base is configured');
-      const from = await acct.manager.currentReceivingAddress('btc');
-      const changeAddress = await acct.manager.allocateChangeAddress('btc');
-      const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
-      const { btcXpub } = await publicXpubs();
-      const signed = await withSession((session) =>
-        session.withSeed((seed) =>
-          builder.buildAndSign({ seed, accountXpub: btcXpub, from, to, amountSat: BigInt(amount.atoms), tier: params.tier }),
-        ),
-      );
-      let result: { txId: string };
-      try {
-        result = await broadcast.broadcastBtc(signed.hex);
-      } catch (e) {
-        throw mapBroadcastError(e);
-      }
-      await acct.manager.freshReceivingAddress('btc');
-      tracker.track({ id: result.txId, chain: 'btc' });
-      return { txId: result.txId, kind: 'btc', demo: false };
+      return serialize(async () => {
+        const to = params.to.trim();
+        if (validateAddress(to, 'btc', context.cfg.network) !== null) throw new SendError('invalid-address', to);
+        const amount = parseSendAmount(params.amountDecimal, 8);
+        if (!amount.ok) throw new SendError('rejected', amount.error === 'tooManyDecimals' ? 'too many decimals' : 'amount not parseable');
+        const acct = await context.ensureAccount();
+        if (acct.btc === null) throw new SendError('broadcast-disabled', 'no btc-api base is configured');
+        // Fund across every managed address: change from earlier sends sits
+        // on branch 1 and older UTXOs on earlier receiving indexes, and the
+        // builder signs each selected input with its own origin.
+        const fromAddresses = await acct.manager.allAddresses('btc');
+        // Allocation stays inside the serialized section, so a concurrent
+        // send can never share this change address or race the counter.
+        const changeAddress = await acct.manager.allocateChangeAddress('btc');
+        const builder = new BtcTxBuilder({ network: context.cfg.network, utxos: acct.btc, rateSource: btcRateSource, changeAddress });
+        const { btcXpub } = await publicXpubs();
+        const signed = await withSession((session) =>
+          session.withSeed((seed) =>
+            builder.buildAndSign({ seed, accountXpub: btcXpub, fromAddresses, to, amountSat: BigInt(amount.atoms), tier: params.tier }),
+          ),
+        );
+        let result: { txId: string };
+        try {
+          result = await broadcast.broadcastBtc(signed.hex);
+        } catch (e) {
+          throw mapBroadcastError(e);
+        }
+        await acct.manager.freshReceivingAddress('btc');
+        tracker.track({ id: result.txId, chain: 'btc' });
+        return { txId: result.txId, kind: 'btc', demo: false };
+      });
     },
   };
 }

@@ -6,6 +6,15 @@
 // configured the injected source reports a fixed fallback and the plan
 // flags it (rateIsFallback) so the UI can say the rate is a guess.
 //
+// Unconfirmed-input policy: external receipts are spendable only after they
+// confirm (a mempool receipt can be RBF-replaced or evicted, which would
+// invalidate a signed spend of it). The one deliberate exception is our own
+// change: after send N the change output sits unconfirmed on branch 1, and
+// refusing it would make back to back sends fail with typed insufficient
+// funds while the balance display already counts it. UTXOs on a change
+// (branch 1) address are therefore spendable while unconfirmed; they can
+// only confirm or drop together with the transaction that created them.
+//
 // Secrets: the seed and every input private key exist only inside the
 // caller's KeySession.withSeed closure (buildAndSign receives the seed);
 // inputs are matched to derivation paths over the public account xpub, and
@@ -74,7 +83,7 @@ export class BtcTxBuilder {
   }
 
   /** Fee plan per tier for the current UTXO set (review screen). */
-  async plan(params: { accountXpub: string; from: string; to: string; amountSat: bigint; tier: FeeTierId }): Promise<BtcFeePlan> {
+  async plan(params: { accountXpub: string; fromAddresses: string[]; to: string; amountSat: bigint; tier: FeeTierId }): Promise<BtcFeePlan> {
     const { tx, inputSat, weight } = await this.buildUnsigned(params);
     const feeSat = tx.fee;
     return {
@@ -92,18 +101,24 @@ export class BtcTxBuilder {
 
   /** Build, sign every input with the wallet's child keys, and return the
    *  raw signed transaction for BroadcastProvider.broadcastBtc. The seed
-   *  argument must come from inside a KeySession.withSeed closure. */
+   *  argument must come from inside a KeySession.withSeed closure. Each
+   *  selected input is signed with the child key of the address it pays:
+   *  inputs may mix receiving and change origins across the wallet. */
   async buildAndSign(params: {
     seed: Uint8Array;
     accountXpub: string;
-    from: string;
+    fromAddresses: string[];
     to: string;
     amountSat: bigint;
     tier: FeeTierId;
   }): Promise<BtcSendResult> {
-    const { tx, rate, fallback, fromOrigin } = await this.buildUnsigned(params);
+    const { tx, rate, fallback, inputOrigins } = await this.buildUnsigned(params);
     for (let index = 0; index < tx.inputsLength; index++) {
-      const privateKey = btcPrivateKeyFromSeed(params.seed, this.opts.network, fromOrigin.branch, fromOrigin.index);
+      const input = tx.getInput(index);
+      if (input.txid === undefined || input.index === undefined) throw new SendError('rejected', 'selected input is missing its outpoint');
+      const origin = inputOrigins.get(`${bytesToHex(input.txid)}:${input.index}`);
+      if (origin === undefined) throw new SendError('rejected', 'selected input has no wallet origin');
+      const privateKey = btcPrivateKeyFromSeed(params.seed, this.opts.network, origin.branch, origin.index);
       tx.signIdx(privateKey, index);
     }
     tx.finalize();
@@ -122,17 +137,18 @@ export class BtcTxBuilder {
 
   private currentRateFallback = false;
 
-  /** Shared selection: dust guard, rate resolution, UTXO fetch, public
-   *  address to path mapping, scure selection with an auto change output.
-   *  One call spends one wallet address, so every selected input shares the
-   *  `from` origin. */
+  /** Shared selection: dust guard, rate resolution, UTXO fetch across the
+   *  managed wallet addresses, public address to path mapping, scure
+   *  selection with an auto change output. Inputs may come from any managed
+   *  address, so the returned map keys every selected outpoint to the
+   *  (branch, index) origin its address derives from. */
   private async buildUnsigned(params: {
     accountXpub: string;
-    from: string;
+    fromAddresses: string[];
     to: string;
     amountSat: bigint;
     tier: FeeTierId;
-  }): Promise<{ tx: Transaction; inputSat: bigint; weight: number; rate: bigint; fallback: boolean; fromOrigin: WalletOrigin }> {
+  }): Promise<{ tx: Transaction; inputSat: bigint; weight: number; rate: bigint; fallback: boolean; inputOrigins: Map<string, WalletOrigin> }> {
     if (params.amountSat < BTC_DUST_SAT) throw new SendError('dust', `${params.amountSat} sat is below dust`);
     const { satPerVbyte, fallback } = await this.opts.rateSource(params.tier);
     if (!(satPerVbyte > 0) || !Number.isFinite(satPerVbyte)) {
@@ -143,12 +159,24 @@ export class BtcTxBuilder {
     this.currentRateFallback = fallback;
 
     const origins = await this.walletOrigins(params.accountXpub);
-    const fromOrigin = origins.get(params.from);
-    if (fromOrigin === undefined) throw new SendError('rejected', 'from address is not from this wallet');
-
-    const utxos = await this.opts.utxos.utxos(params.from);
-    if (utxos.length === 0) throw new SendError('insufficient-funds', 'no spendable UTXOs');
-    const scureInputs = utxos.map((utxo) => this.toScureInput(utxo, fromOrigin.script));
+    // Change and older receiving UTXOs are only reachable through the full
+    // managed address list; funding on one address would strand the rest
+    // (the balance display already sums every managed address).
+    const inputOrigins = new Map<string, WalletOrigin>();
+    const scureInputs: ReturnType<BtcTxBuilder['toScureInput']>[] = [];
+    let managed = 0;
+    for (const address of params.fromAddresses) {
+      const origin = origins.get(address);
+      if (origin === undefined) continue;
+      managed++;
+      for (const utxo of await this.opts.utxos.utxos(address)) {
+        if (!utxo.confirmed && origin.branch !== 1) continue; // header policy: external receipts need a confirmation
+        scureInputs.push(this.toScureInput(utxo, origin.script));
+        inputOrigins.set(`${utxo.txid}:${utxo.vout}`, origin);
+      }
+    }
+    if (managed === 0) throw new SendError('rejected', 'no managed wallet address was provided');
+    if (scureInputs.length === 0) throw new SendError('insufficient-funds', 'no spendable UTXOs');
     let selection;
     try {
       selection = selectUTXO(scureInputs, [{ address: params.to, amount: params.amountSat }], 'default', {
@@ -167,7 +195,7 @@ export class BtcTxBuilder {
       throw new SendError('insufficient-funds', 'UTXOs cannot cover the amount plus fee');
     }
     const inputSat = selection.inputs.reduce((acc, input) => acc + (input.witnessUtxo?.amount ?? 0n), 0n);
-    return { tx: selection.tx, inputSat, weight: selection.weight, rate, fallback, fromOrigin };
+    return { tx: selection.tx, inputSat, weight: selection.weight, rate, fallback, inputOrigins };
   }
 
   private originsCache: { xpub: string; map: Map<string, WalletOrigin> } | null = null;

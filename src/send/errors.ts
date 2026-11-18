@@ -24,7 +24,8 @@ export type SendErrorKind =
   | 'broadcast-failed'
   | 'timeout'
   | 'rejected'
-  | 'bindings';
+  | 'bindings'
+  | 'busy';
 
 /** Typed failure of one send pipeline step (plan, build, sign, broadcast). */
 export class SendError extends Error {
@@ -56,6 +57,8 @@ export function sendErrorCopy(e: unknown): string {
         return t('send.error.rejected', { detail: e.detail ?? '' });
       case 'bindings':
         return t('send.error.bindings');
+      case 'busy':
+        return t('send.error.busy');
     }
   }
   // Chain read failures during planning keep the shared provider copy.
