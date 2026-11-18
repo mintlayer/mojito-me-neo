@@ -187,7 +187,11 @@ export function createRealWalletData(cfg: RealWalletDataConfig): WalletData {
         }
         btcDecimal = atomsToDecimal(sat.toString(), 8);
       } catch (e) {
-        if (!(e instanceof IndexerError && e.kind === 'transport')) throw e;
+        // Any configured-backend failure (transport, http after retries, a
+        // parse rule) degrades to the zero BTC row while the ML surfaces
+        // keep rendering; the failure surfaces through the offline banner,
+        // not a crash of the whole home bundle.
+        if (!(e instanceof IndexerError)) throw e;
       }
     }
     pushAsset(assetRow('BTC', 'Bitcoin', 'Bitcoin', btcDecimal, snapshots.get('BTC') ?? null, await sparkFor(price, 'BTC'), btcUnavailable), btcDecimal);

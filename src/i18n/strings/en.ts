@@ -11,7 +11,6 @@ export const en = {
   'common.copy': 'Copy',
   'common.copied': '✓ Copied',
   'common.share': 'Share',
-  'common.seeAll': 'See all →',
   'common.seeExplorer': 'View on explorer →',
   'common.continue': 'Continue',
   'common.max': 'Max',
@@ -81,6 +80,8 @@ export const en = {
   'home.balance.error': 'Could not load the balance. Check the connection and try again.',
   'home.activity.empty': 'No activity yet. Sends and receives will appear here.',
   'home.nfts.empty': 'No NFTs on this account yet. Collectibles you own will appear here.',
+  'home.nfts.error': 'Could not load your NFTs. Check the connection and try again.',
+  'home.defi.empty': 'DeFi positions appear here once delegations ship.',
   'home.ranges.1H': '1H',
   'home.ranges.4H': '4H',
   'home.ranges.1D': '1D',
@@ -122,8 +123,6 @@ export const en = {
   'receive.chain.btc': 'Bitcoin',
   'receive.address.none': 'No address yet. Unlock the wallet and try again.',
   'receive.address.label': '{chain} address',
-  'receive.request': 'Request specific amount',
-  'receive.requestSub': 'Encode the amount in your QR code',
   'receive.warning': 'Send only {chain} assets to this address. Sending other assets may result in permanent loss.',
   'receive.copyError.title': 'Could not copy',
   'receive.copyError.body': 'Copy the address manually - it is shown in full above.',
@@ -207,7 +206,6 @@ export const en = {
 
   // settings
   'settings.title': 'Settings',
-  'settings.edit': 'Edit',
   'settings.section.security': 'Security',
   'settings.section.networks': 'Networks',
   'settings.section.preferences': 'Preferences',
@@ -223,10 +221,8 @@ export const en = {
   'settings.changePin': 'Change PIN',
   'settings.changePin.verifyOld': 'Verify your current PIN',
   'settings.changePin.verifyOldSub': 'Enter the PIN you use today, then choose a new one.',
-  'settings.dapps': 'Connected dApps',
-  'settings.dappsSub': '{count} active sessions',
   'settings.networks.manage': 'Manage networks',
-  'settings.networks.manageSub': '{count} enabled · Add custom RPC',
+  'settings.networks.manageSub': '{count} enabled',
   'settings.network.mode': 'Testnet mode',
   'settings.network.mainnet': 'Mainnet',
   'settings.network.testnet': 'Testnet',
@@ -261,6 +257,7 @@ export const en = {
   // data errors
   'errors.indexer.http': 'The Mintlayer index answered with an error ({status}). Try again later.',
   'errors.indexer.network': 'Could not reach the Mintlayer index. Check your connection.',
+  'errors.indexer.testnet': "Testnet data isn't connected yet. Balances and activity will appear once the testnet index ships.",
   'errors.price.unavailable': 'Price data is unavailable right now.',
 
   // onboarding

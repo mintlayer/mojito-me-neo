@@ -11,36 +11,23 @@
 // Failure policy: network failures, timeouts and non-JSON bodies map to
 // typed IndexerError values (transport, http, parse); raw server bodies
 // never surface to the UI. 429 and 5xx responses retry with backoff,
-// honoring a capped Retry-After header when present. Every request carries
-// an AbortController timeout. Transport is injectable so the whole client
-// is testable offline against fixture responses.
+// honoring a capped Retry-After header when present. The retry loop, size
+// caps and parse guards live in ../transport.ts, shared with the BTC
+// client; this module owns the indexer parse layer and re-exports the
+// shared TransportError class under its historical IndexerError name so
+// one concept keeps one class identity across both clients.
+import {
+  asArray, asNumberOrNull, asRecord, assertHttpsBase, requestJson,
+  TransportError as IndexerError, type FetchLike,
+} from '../transport';
 import type {
   AmountJson, CoinStats, MlAddressInfo, MlNftInfo, MlOutput, MlOutpoint, MlTokenInfo,
   MlTransaction, MlTransactionInput, MlUtxo, OrderBookLevel, OrderBookPage,
 } from './types';
 
-export type FetchLike = (url: string, init: { signal: AbortSignal; headers?: Record<string, string> }) => Promise<{
-  ok: boolean;
-  status: number;
-  headers: { get(name: string): string | null };
-  text: () => Promise<string>;
-}>;
-
-export type IndexerErrorKind = 'http' | 'transport' | 'parse';
-
-export class IndexerError extends Error {
-  /** Milliseconds from a Retry-After header, capped; read by the retry loop. */
-  retryAfterMs?: number;
-
-  constructor(
-    readonly kind: IndexerErrorKind,
-    readonly endpoint: string,
-    readonly status?: number,
-  ) {
-    super(`indexer ${kind} error on ${endpoint}${status !== undefined ? ` (http ${status})` : ''}`);
-    this.name = 'IndexerError';
-  }
-}
+export { IndexerError };
+export type { TransportErrorKind as IndexerErrorKind, FetchLike } from '../transport';
+export { MAX_RESPONSE_BYTES } from '../transport';
 
 export type IndexerClientOptions = {
   /** Per-request abort timeout; 15s covers the slow aggregate endpoints. */
@@ -59,44 +46,15 @@ export type OrderBookSide = 'ask' | 'bid';
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_RETRIES = 2;
-const BACKOFF_BASE_MS = 500;
-const BACKOFF_CAP_MS = 8_000;
 /** Ceiling for a server-provided Retry-After so a hostile header cannot pin the wallet. */
 const RETRY_AFTER_CAP_MS = 30_000;
 
-/** Cap on one response body before JSON.parse: a hostile endpoint must not
- *  read a multi-GB body into memory. 4 MiB is far above any documented
- *  endpoint payload; shared with the BTC client so both transports agree. */
-export const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-
-/** Cap on one parsed array (transactions, tokens, utxos): bounds the work
- *  a single hostile response can force. */
-export const MAX_ARRAY_ITEMS = 5_000;
-
-/** Config guard: chain bases are https; plaintext is allowed only for the
- *  documented localhost dev fallbacks, so a config regression fails fast
- *  at construction instead of shipping plaintext traffic. */
-export function assertHttpsBase(base: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(base);
-  } catch {
-    throw new Error(`invalid base URL: ${base}`);
-  }
-  if (parsed.protocol === 'https:') return;
-  if (parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(parsed.hostname)) return;
-  throw new Error(`base must use https (http only for localhost dev): ${base}`);
-}
 /** Walker bounds: a non-terminating listing is a parse error, not a loop. */
 export type WalkerCaps = { maxPages?: number; maxItems?: number };
 
 const DEFAULT_MAX_PAGES = 100;
 
 const DEFAULT_MAX_ITEMS = 50_000;
-
-function backoffMs(attempt: number): number {
-  return Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** attempt);
-}
 
 /** Absorb every documented amount shape into the atoms/decimal pair.
  *  Numbers must be safe integers (Uint64 atom counts upstream); a 1e21
@@ -147,25 +105,6 @@ function unquoted(value: unknown): string | null {
   } catch {
     return raw;
   }
-}
-
-function asNumberOrNull(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.length > 0 && /^\d+$/.test(value)) return Number(value);
-  return null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new IndexerError('parse', 'response', undefined);
-  }
-  return value as Record<string, unknown>;
-}
-
-function asArray(value: unknown, max = MAX_ARRAY_ITEMS): unknown[] {
-  if (!Array.isArray(value)) throw new IndexerError('parse', 'response', undefined);
-  if (value.length > max) throw new IndexerError('parse', 'response', undefined);
-  return value;
 }
 
 function parseOutpoint(raw: unknown): MlOutpoint {
@@ -452,50 +391,19 @@ export class IndexerClient {
     }
   }
 
-  /** One request with timeout, typed errors and 429/5xx retry with backoff. */
+  /** One request with timeout, typed errors and 429/5xx retry with backoff;
+   *  the shared transport owns the loop, this adds the Retry-After hook. */
   private async request(path: string, query?: Record<string, string>): Promise<unknown> {
-    const qs = query && Object.keys(query).length > 0 ? `?${new URLSearchParams(query).toString()}` : '';
-    const url = `${this.base}${path}${qs}`;
-    let lastError: IndexerError | null = null;
-    for (let attempt = 0; attempt <= this.retries; attempt++) {
-      if (attempt > 0) {
-        const wait = lastError !== null && lastError.kind === 'http' && lastError.retryAfterMs !== undefined
-          ? lastError.retryAfterMs
-          : backoffMs(attempt - 1);
-        await this.delay(wait);
-      }
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      let response: Awaited<ReturnType<FetchLike>>;
-      try {
-        response = await this.fetchImpl(url, { signal: controller.signal });
-      } catch {
-        // Transport failure or our own timeout abort: typed, retriable.
-        lastError = new IndexerError('transport', path, undefined);
-        continue;
-      } finally {
-        clearTimeout(timer);
-      }
-      if (response.ok) {
-        const declared = response.headers.get('content-length');
-        if (declared !== null && /^\d+$/.test(declared) && Number(declared) > MAX_RESPONSE_BYTES) {
-          throw new IndexerError('parse', path, response.status);
-        }
-        const text = await response.text();
-        if (text.length > MAX_RESPONSE_BYTES) throw new IndexerError('parse', path, response.status);
-        try {
-          return text.length === 0 ? null : (JSON.parse(text) as unknown);
-        } catch {
-          throw new IndexerError('parse', path, response.status);
-        }
-      }
-      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
-      lastError = new IndexerError('http', path, response.status);
-      lastError.retryAfterMs = retryAfterMs;
-      const retriable = response.status === 429 || response.status >= 500;
-      if (!retriable) throw lastError;
-    }
-    throw lastError ?? new IndexerError('http', path, undefined);
+    return requestJson({
+      base: this.base,
+      path,
+      query,
+      timeoutMs: this.timeoutMs,
+      retries: this.retries,
+      fetchImpl: this.fetchImpl,
+      delay: this.delay,
+      retryAfterMs: (headers) => parseRetryAfter(headers.get('retry-after')),
+    });
   }
 }
 

@@ -8,12 +8,11 @@ import { loadAppSettings, saveAppSettings } from '../storage/appSettings';
 import { Keypad, PinDots, pinEntryCheck, usePinEntry } from '../onboarding/ui';
 import { detectBio } from '../onboarding/ui/useBioScan';
 import { C, G } from '../theme';
-import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint, tile } from '../ui';
+import { Avatar, Btn, Card, ListRow, PickerSheet, Screen, Section, SheetHeader, Toggle, Txt, tint } from '../ui';
 
 export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignOut, wordCount, network, onNetworkChange }: Sheet) {
   const profile = useData((d) => d.getProfile());
   const networks = useData((d) => d.getNetworks());
-  const dapps = useData((d) => d.getDapps());
   // Security toggles are persisted (storage/appSettings); the other flags
   // stay local until their features ship. The network switch is app-level
   // (ProvidersProvider rebuilds on change), not a local flag.
@@ -108,7 +107,7 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       ],
     );
 
-  if (!profile || !networks || !dapps) return <Screen />;
+  if (!profile || !networks) return <Screen />;
 
   // Displayed biometrics state folds in the capability probe: a persisted
   // true on hardware without biometrics reads as off (the unlock flow treats
@@ -129,9 +128,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
               {profile.address} · {profile.chains} chains
             </Txt>
           </View>
-          <Pressable className="px-2.5 py-1.5 rounded-lg" style={tile(0.05, C.line)}>
-            <Txt className="text-[11px] font-medium text-text1">{t('settings.edit')}</Txt>
-          </Pressable>
+          {/* Profile editing has no backend in M2: the dead-end Edit control
+              stays hidden until it does something. */}
         </Card>
       </View>
 
@@ -148,7 +146,8 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
         </ListRow>
         <ListRow icon="shield" iconColor={C.green} label={t('settings.backup.reveal')} sub={t('settings.backup.revealSub', { count: wordCount ?? 24 })} trailing="→" divider onPress={onBackup} />
         <ListRow icon="lock" label={t('settings.changePin')} trailing="→" divider onPress={onChangePin} />
-        <ListRow icon="history" label={t('settings.dapps')} sub={t('settings.dappsSub', { count: dapps.active })} trailing="→" divider />
+        {/* dApp sessions have no backend in M2: the dead-end row stays hidden
+            until real sessions exist. */}
         {confirm && (
           <Card variant="inset" accent={C.amber} className="mt-2.5 p-4 rounded-[16px]">
             <Txt className="text-[14px] font-semibold">{t('settings.security.confirmTitle')}</Txt>
@@ -184,7 +183,10 @@ export function SettingsScreen({ onClose, onBackup, onChangePin, onLock, onSignO
       </Section>
 
       <Section title={t('settings.section.networks')}>
-        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} trailing="→" />
+        {/* A status row, not a button: network management beyond the testnet
+            switch does not exist yet, and the sub must not overclaim a
+            custom-RPC editor. */}
+        <ListRow icon="bridge" iconColor={C.violet} label={t('settings.networks.manage')} sub={t('settings.networks.manageSub', { count: networks.length })} divider />
         <ListRow
           icon="flash"
           iconColor={C.amber}

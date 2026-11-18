@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData, useDataState, useProviders } from '../data/providers/context';
 import { dataErrorCopy } from '../data/errors';
+import { currentNetwork, endpointsFor } from '../config/endpoints';
 import { usePoll } from '../data/polling';
 import type { AssetRow, NftRow, PriceRange } from '../data/providers';
 import { C, CHAINS, G, alpha, white } from '../theme';
@@ -86,7 +87,13 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
   if (!networks || !ranges || !profile) return <Screen />;
 
   // One sync banner at a time, most severe first: offline, syncing, stale.
-  const offline = [balance, assets, activity].some((state) => state.error !== null);
+  // The NFT load joins the check: an indexer failure must never read as an
+  // empty gallery (the NFT tab also carries its own retry callout).
+  const offline = [balance, assets, activity, nfts].some((state) => state.error !== null);
+  // Testnet without a configured base (pending action item A2) fails by
+  // design: the banner reports "not connected yet" instead of blaming the
+  // connection.
+  const indexerUnconfigured = endpointsFor(currentNetwork()).indexerBase === null;
   const syncing = !offline && balance.data === null && balance.error === null;
   const lastSync = Math.max(balance.loadedAt, assets.loadedAt, activity.loadedAt, nfts.loadedAt);
   const stale = !offline && !syncing && lastSync > 0 && Date.now() - lastSync > STALE_AFTER_MS;
@@ -118,15 +125,20 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
         <View className="flex-row gap-2">
           {onLock && <IconBtn name="lock" label={t('home.lock')} onPress={onLock} />}
           <IconBtn name="settings" label={t('settings.title')} onPress={onOpenSettings} />
-          <IconBtn name="bell" label={t('settings.notifications')} badge={C.amber} />
         </View>
       </View>
 
       {offline && (
         <View className="px-5 pt-3">
-          <Callout tone={C.red} icon="flash">
-            <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.offline')}</Txt>
-          </Callout>
+          {indexerUnconfigured ? (
+            <Callout tone={C.amber} glyph="‹">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('errors.indexer.testnet')}</Txt>
+            </Callout>
+          ) : (
+            <Callout tone={C.red} icon="flash">
+              <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('common.offline')}</Txt>
+            </Callout>
+          )}
         </View>
       )}
       {!offline && syncing && (
@@ -172,7 +184,7 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
             <View className="w-[180px] h-[180px] rounded-full" style={{ backgroundColor: alpha(C.amber, 0.18) }} />
           </Float>
 
-          {balance.error !== null ? (
+          {balance.error !== null && balance.data === null ? (
             <View>
               <Label>{t('home.balance.total')}</Label>
               <Callout tone={C.red} glyph="!" className="mt-3">
@@ -294,7 +306,26 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
         </View>
 
         {tab === 'NFTs' ? (
-          <NftList nfts={nfts.data} />
+          nfts.data === null && nfts.error !== null ? (
+            // Indexer failure: an explicit error state with a retry, never
+            // blank space a scanning user reads as "no NFTs".
+            <Card variant="glass" className="p-4">
+              <Callout tone={C.red} glyph="!">
+                <Txt className="text-[11.5px] text-text1 leading-[17px]">{t('home.nfts.error')}</Txt>
+              </Callout>
+              <View className="mt-3">
+                <Btn onPress={refresh}>{t('common.retry')}</Btn>
+              </View>
+            </Card>
+          ) : (
+            <NftList nfts={nfts.data} />
+          )
+        ) : tab === 'DeFi' ? (
+          // No DeFi backend in M2: an honest empty state, not the tokens
+          // list wearing another label.
+          <Card variant="glass" className="p-4">
+            <Txt className="text-[12px] text-text2 text-center leading-[17px]">{t('home.defi.empty')}</Txt>
+          </Card>
         ) : (
           (assets.data ?? []).map((a, i) => (
             <Enter key={a.sym} delay={400 + i * 70}>
@@ -308,7 +339,6 @@ export function HomeScreen({ onOpenSend, onOpenReceive, onOpenSettings, onGoto, 
       <View className="px-5 pt-6">
         <View className="flex-row items-center justify-between mb-3">
           <Txt className="text-[14px] font-semibold">{t('home.activity.title')}</Txt>
-          <Txt className="text-[11px] text-text2">{t('common.seeAll')}</Txt>
         </View>
         {activity.data !== null && activity.data.length === 0 ? (
           <Card variant="glass" className="p-4">

@@ -69,7 +69,13 @@ export function useDataState<T>(
         if (live) setState({ data: resolved, error: null, loadedAt: Date.now() });
       },
       (e: unknown) => {
-        if (live) setState({ data: null, error: e instanceof Error ? e : new Error(String(e)), loadedAt: Date.now() });
+        // A failed refresh retains the last-known-good data: the offline and
+        // stale banners render over it instead of blanking the portfolio,
+        // assets and activity mid-session. A first load (no data yet) still
+        // surfaces the error states.
+        if (live) {
+          setState((s) => ({ data: s.data, error: e instanceof Error ? e : new Error(String(e)), loadedAt: Date.now() }));
+        }
       },
     );
     return () => {

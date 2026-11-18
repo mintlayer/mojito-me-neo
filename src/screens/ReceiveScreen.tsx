@@ -6,7 +6,7 @@ import { Alert, ScrollView, Share, View } from 'react-native';
 import { t, type I18nKey } from '../i18n';
 import { useData, useDataState, useProviders } from '../data/providers/context';
 import { C, CHAINS, type ChainName } from '../theme';
-import { Btn, Callout, Card, FakeQR, Icon, Label, ListRow, Screen, Segmented, SheetHeader, Txt } from '../ui';
+import { Btn, Callout, Card, FakeQR, Label, Screen, Segmented, SheetHeader, Txt } from '../ui';
 
 /** Chain segment labels from i18n; unknown chains fall back to the raw key. */
 const CHAIN_LABELS: Partial<Record<ChainName, I18nKey>> = {
@@ -130,18 +130,8 @@ export function ReceiveScreen({ onClose }: Sheet) {
             </View>
           </View>
 
-          {/* Request amount */}
-          <View className="px-6 pt-5">
-            <Card className="rounded-[14px]">
-              <ListRow
-                icon="plus"
-                iconColor={C.amber}
-                label={t('receive.request')}
-                sub={t('receive.requestSub')}
-                trailing={<Icon name="chevron_r" size={14} color={C.text2} />}
-              />
-            </Card>
-          </View>
+          {/* Request-specific amounts land with the payment-request flow;
+              the row was a dead end, so it stays hidden until it works. */}
 
           {/* Warning */}
           <View className="px-6 pt-5">
@@ -156,5 +146,3 @@ export function ReceiveScreen({ onClose }: Sheet) {
     </Screen>
   );
 }
-
-/** Chain picker segment keys. */
